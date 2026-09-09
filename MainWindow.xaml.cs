@@ -13,7 +13,7 @@ namespace Sink;
 
 public partial class MainWindow : Window
 {
-    private readonly ObservableCollection<Track> _tracks = new(SeedLibrary.Create());
+    private readonly ObservableCollection<Track> _tracks = [];
     private readonly ObservableCollection<Playlist> _playlists = [];
     private LibraryCategory _category = LibraryCategory.Albums;
     private string? _drilldown;
@@ -35,8 +35,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        _playlists.Add(new Playlist { Name = "Favorites" });
-        foreach (var track in _tracks.Where((_, index) => index % 2 == 0).Take(3)) _playlists[0].TrackIds.Add(track.Id);
+        LoadLibrary();
         PlaylistList.ItemsSource = _playlists;
         _playbackTimer.Tick += PlaybackTimer_Tick;
         _mediaPlayer.MediaOpened += (_, _) => UpdatePlayerDuration();
@@ -47,6 +46,29 @@ public partial class MainWindow : Window
         _ipodPollTimer.Start();
         PollForIpod();
     }
+
+    private void LoadLibrary()
+    {
+        var data = LibraryStore.Load();
+        if (data is null || data.Tracks.Count == 0)
+        {
+            foreach (var track in SeedLibrary.Create()) _tracks.Add(track);
+            var favorites = new Playlist { Name = "Favorites" };
+            foreach (var track in _tracks.Where((_, index) => index % 2 == 0).Take(3)) favorites.TrackIds.Add(track.Id);
+            _playlists.Add(favorites);
+            SaveLibrary();
+            return;
+        }
+        foreach (var track in data.Tracks) _tracks.Add(track);
+        foreach (var playlist in data.Playlists)
+        {
+            var restored = new Playlist { Name = playlist.Name, Id = playlist.Id };
+            foreach (var id in playlist.TrackIds) restored.TrackIds.Add(id);
+            _playlists.Add(restored);
+        }
+    }
+
+    private void SaveLibrary() => LibraryStore.Save(_tracks, _playlists);
 
     private void PollForIpod()
     {
@@ -383,6 +405,7 @@ public partial class MainWindow : Window
             added++;
         }
         PlaylistList.Items.Refresh();
+        if (added > 0) SaveLibrary();
         PlaybackStatus.Text = added > 0 ? $"Added {added} track{(added == 1 ? "" : "s")} to {playlist.Name}" : $"Already in {playlist.Name}";
         e.Handled = true;
     }
@@ -403,6 +426,7 @@ public partial class MainWindow : Window
         }
         PlaylistList.Items.Refresh();
         RenderLibrary();
+        SaveLibrary();
         PlaybackStatus.Text = $"Removed {ids.Count} duplicate{(ids.Count == 1 ? "" : "s")}";
     }
 
@@ -430,6 +454,7 @@ public partial class MainWindow : Window
         var imported = MusicImporter.Import(paths);
         foreach (var track in imported) _tracks.Add(track);
         RenderLibrary();
+        if (imported.Count > 0) SaveLibrary();
         PlaybackStatus.Text = imported.Count > 0 ? $"Imported {imported.Count} track{(imported.Count == 1 ? "" : "s")}" : "No supported audio files found";
         e.Handled = true;
     }
@@ -445,6 +470,7 @@ public partial class MainWindow : Window
         _playlists.Add(playlist);
         PlaylistList.Items.Refresh();
         PlaylistList.SelectedItem = playlist;
+        SaveLibrary();
     }
 
     private void PlaylistList_SelectionChanged(object sender, SelectionChangedEventArgs e)
