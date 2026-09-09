@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     private bool _updatingProgress;
     private bool _ipodConnected;
     private bool _ipodSyncing;
+    private bool _recordSpinning;
     private Point _trackDragStart;
     private const string TrackDragFormat = "Sink.TrackIds";
 
@@ -145,6 +146,7 @@ public partial class MainWindow : Window
         PlayPauseButton.Content = "Ⅱ";
         UpdatePlayerDuration();
         _playbackTimer.Start();
+        UpdateRecordSpin();
     }
 
     private void PlaybackTimer_Tick(object? sender, EventArgs e)
@@ -187,6 +189,7 @@ public partial class MainWindow : Window
         _isPlaying = !_isPlaying;
         if (_isPlaying) _mediaPlayer.Play(); else _mediaPlayer.Pause();
         PlayPauseButton.Content = _isPlaying ? "Ⅱ" : "▶";
+        UpdateRecordSpin();
     }
 
     private void Previous_Click(object sender, RoutedEventArgs e) => Skip(-1);
@@ -216,11 +219,49 @@ public partial class MainWindow : Window
     private void IpodButton_Click(object sender, RoutedEventArgs e)
     {
         if (_ipodConnected) return;
-        _ipodConnected = true;
-        IpodButton.Opacity = 1;
-        RecordLabel.Fill = new SolidColorBrush(Color.FromRgb(40, 91, 184));
-        IpodStateText.Text = "IPOD";
-        IpodButton.ToolTip = "River's iPod · 160 GB · 84 GB free";
+        SetIpodConnected(true);
+    }
+
+    private void SetIpodConnected(bool connected)
+    {
+        _ipodConnected = connected;
+        if (connected)
+        {
+            RecordLabel.Fill = new SolidColorBrush(Color.FromRgb(40, 91, 184));
+            IpodStateText.Text = "IPOD";
+            IpodStateText.Foreground = new SolidColorBrush(Color.FromRgb(139, 124, 255));
+            IpodButton.ToolTip = "River's iPod · 160 GB · 84 GB free";
+            IpodMenuHeader.Header = "River's iPod · 160 GB";
+        }
+        else
+        {
+            RecordRotation.BeginAnimation(RotateTransform.AngleProperty, null);
+            _ipodSyncing = false;
+            _recordSpinning = false;
+            RecordLabel.Fill = new SolidColorBrush(Color.FromRgb(58, 64, 75));
+            IpodStateText.Text = "OFFLINE";
+            IpodStateText.Foreground = new SolidColorBrush(Color.FromRgb(154, 161, 175));
+            IpodButton.ToolTip = "No iPod connected · Click to simulate connection";
+            IpodMenuHeader.Header = "No iPod connected";
+        }
+        UpdateRecordSpin();
+    }
+
+    private void UpdateRecordSpin()
+    {
+        if (_ipodSyncing) return;
+        var shouldSpin = _isPlaying && _nowPlaying is not null;
+        if (shouldSpin == _recordSpinning) return;
+        _recordSpinning = shouldSpin;
+        if (shouldSpin)
+        {
+            var spin = new DoubleAnimation(0, 360, TimeSpan.FromSeconds(2.6)) { RepeatBehavior = RepeatBehavior.Forever };
+            RecordRotation.BeginAnimation(RotateTransform.AngleProperty, spin);
+        }
+        else
+        {
+            RecordRotation.BeginAnimation(RotateTransform.AngleProperty, null);
+        }
     }
 
     private void IpodMenu_Opened(object sender, RoutedEventArgs e)
@@ -228,10 +269,13 @@ public partial class MainWindow : Window
         foreach (var item in IpodMenu.Items.OfType<MenuItem>().Skip(1)) item.IsEnabled = _ipodConnected;
     }
 
-    private void SyncIpod_Click(object sender, RoutedEventArgs e)
+    private void SyncIpod_Click(object sender, RoutedEventArgs e) => StartIpodSync();
+
+    private void StartIpodSync()
     {
         if (!_ipodConnected || _ipodSyncing) return;
         _ipodSyncing = true;
+        _recordSpinning = false;
         IpodStateText.Text = "SYNCING";
         var spin = new DoubleAnimation(0, 360, TimeSpan.FromSeconds(1.1)) { RepeatBehavior = RepeatBehavior.Forever };
         RecordRotation.BeginAnimation(RotateTransform.AngleProperty, spin);
@@ -242,19 +286,38 @@ public partial class MainWindow : Window
             RecordRotation.BeginAnimation(RotateTransform.AngleProperty, null);
             _ipodSyncing = false;
             IpodStateText.Text = "IPOD";
+            UpdateRecordSpin();
         };
         stopTimer.Start();
     }
 
-    private void EjectIpod_Click(object sender, RoutedEventArgs e)
+    private void EjectIpod_Click(object sender, RoutedEventArgs e) => SetIpodConnected(false);
+
+    private void IpodButton_DragOver(object sender, DragEventArgs e)
     {
-        RecordRotation.BeginAnimation(RotateTransform.AngleProperty, null);
-        _ipodConnected = false;
-        _ipodSyncing = false;
-        IpodButton.Opacity = 0.55;
-        RecordLabel.Fill = new SolidColorBrush(Color.FromRgb(58, 64, 75));
-        IpodStateText.Text = "OFFLINE";
-        IpodButton.ToolTip = "No iPod connected · Click to simulate connection";
+        var canSync = _ipodConnected && e.Data.GetDataPresent(TrackDragFormat);
+        e.Effects = canSync ? DragDropEffects.Copy : DragDropEffects.None;
+        if (canSync) RecordLabel.Fill = new SolidColorBrush(Color.FromRgb(92, 89, 206));
+        e.Handled = true;
+    }
+
+    private void IpodButton_DragLeave(object sender, DragEventArgs e)
+    {
+        if (_ipodConnected && !_ipodSyncing) RecordLabel.Fill = new SolidColorBrush(Color.FromRgb(40, 91, 184));
+    }
+
+    private void IpodButton_Drop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(TrackDragFormat) is not Guid[] trackIds) return;
+        e.Handled = true;
+        if (!_ipodConnected)
+        {
+            PlaybackStatus.Text = "Connect an iPod before syncing";
+            return;
+        }
+        var count = _tracks.Count(track => trackIds.Contains(track.Id) && !track.ExcludedFromShuffle);
+        PlaybackStatus.Text = count > 0 ? $"Syncing {count} track{(count == 1 ? "" : "s")} to iPod" : "Nothing to sync";
+        if (count > 0) StartIpodSync();
     }
 
     private void TracksGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) => _trackDragStart = e.GetPosition(TracksGrid);
@@ -313,6 +376,7 @@ public partial class MainWindow : Window
         {
             _mediaPlayer.Stop(); _mediaPlayer.Close(); _nowPlaying = null; _isPlaying = false; _playbackTimer.Stop();
             PlayerTitle.Text = "Choose something to play"; PlayerArtist.Text = "Your library is ready"; PlayerArtInitial.Text = "♫"; PlayPauseButton.Content = "▶";
+            UpdateRecordSpin();
         }
         PlaylistList.Items.Refresh();
         RenderLibrary();

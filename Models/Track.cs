@@ -13,4 +13,5 @@ public sealed class Track
     public int Year { get; init; }
     public TimeSpan Duration { get; init; }
     public string DurationText => Duration.ToString(@"m\:ss");
+    public bool ExcludedFromShuffle { get; set; }
 }

@@ -39,6 +39,19 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="IpodButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <ContentPresenter/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="PrimaryButtonStyle" TargetType="Button">
             <Setter Property="Foreground" Value="White"/><Setter Property="Background" Value="#6559CE"/><Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="14,9"/><Setter Property="Cursor" Value="Hand"/>

@@ -51,7 +51,7 @@
             </ScrollViewer>
             <Border x:Name="TracksBorder" Grid.Row="1" Margin="0,28,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#12151C" Visibility="Collapsed">
                 <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                <Border x:Name="SelectionBar" Visibility="Collapsed" Background="#252143" Padding="15,9"><DockPanel><Button Content="Clear" DockPanel.Dock="Right" Click="ClearSelection_Click" Background="Transparent" Foreground="#BEB6FF" BorderThickness="0"/><TextBlock x:Name="SelectionText" Foreground="#D8D3FF" FontSize="11" VerticalAlignment="Center"/></DockPanel></Border>
+                <Border x:Name="SelectionBar" Visibility="Collapsed" Background="Transparent" BorderBrush="#262C38" BorderThickness="0,0,0,1" Padding="15,9"><DockPanel><Button Content="Clear" DockPanel.Dock="Right" Click="ClearSelection_Click" Background="Transparent" Foreground="#9D91FF" BorderThickness="0"/><TextBlock x:Name="SelectionText" Foreground="#7D8493" FontSize="11" VerticalAlignment="Center"/></DockPanel></Border>
                 <DataGrid x:Name="TracksGrid" Grid.Row="1" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="None" Background="Transparent" BorderThickness="0" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow" SelectionChanged="TracksGrid_SelectionChanged" MouseDoubleClick="TracksGrid_MouseDoubleClick" PreviewMouseLeftButtonDown="TracksGrid_PreviewMouseLeftButtonDown" PreviewMouseMove="TracksGrid_PreviewMouseMove">
                     <DataGrid.Columns><DataGridTextColumn Header="#" Binding="{Binding TrackNumber}" Width="48"/><DataGridTextColumn Header="TITLE" Binding="{Binding Title}" Width="2*"/><DataGridTextColumn Header="ARTIST" Binding="{Binding Artist}" Width="*"/><DataGridTextColumn Header="ALBUM" Binding="{Binding Album}" Width="*"/><DataGridTextColumn Header="GENRE" Binding="{Binding Genre}" Width="110"/><DataGridTextColumn Header="TIME" Binding="{Binding DurationText}" Width="70"/></DataGrid.Columns>
                 </DataGrid>
@@ -79,11 +79,11 @@
                 <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"><TextBlock Text="VOL" Foreground="#6E7584" FontSize="9" VerticalAlignment="Center" Margin="0,0,8,0"/><Slider x:Name="VolumeSlider" Width="95" Minimum="0" Maximum="1" Value="0.7" ValueChanged="VolumeSlider_ValueChanged"/></StackPanel>
             </Grid>
         </Border>
-        <Canvas Grid.RowSpan="2" Grid.Column="1" Panel.ZIndex="12" IsHitTestVisible="True" ClipToBounds="True">
-            <Button x:Name="IpodButton" Width="290" Height="290" Canvas.Right="-135" Canvas.Bottom="-135" Click="IpodButton_Click" ToolTip="No iPod connected · Click to simulate connection" Background="Transparent" BorderThickness="0" Opacity="0.55">
+        <Canvas Grid.Row="0" Grid.Column="1" Panel.ZIndex="12" IsHitTestVisible="True" ClipToBounds="True">
+            <Button x:Name="IpodButton" Style="{StaticResource IpodButtonStyle}" Width="300" Height="300" Canvas.Right="-150" Canvas.Bottom="-150" Click="IpodButton_Click" AllowDrop="True" DragOver="IpodButton_DragOver" DragLeave="IpodButton_DragLeave" Drop="IpodButton_Drop" ToolTip="No iPod connected · Click to simulate connection">
                 <Button.ContextMenu>
                     <ContextMenu x:Name="IpodMenu" Background="#1D222C" Foreground="#F4F6FA" BorderBrush="#363D4B" Opened="IpodMenu_Opened">
-                        <MenuItem Header="River's iPod · 160 GB" IsEnabled="False" FontWeight="SemiBold"/>
+                        <MenuItem x:Name="IpodMenuHeader" Header="No iPod connected" IsEnabled="False" FontWeight="SemiBold"/>
                         <Separator/>
                         <MenuItem Header="Sync all" Click="SyncIpod_Click"/>
                         <MenuItem Header="Sync music" Click="SyncIpod_Click"/>
@@ -94,17 +94,36 @@
                     </ContextMenu>
                 </Button.ContextMenu>
                 <Grid>
-                    <Ellipse x:Name="RecordDisc" Fill="#171A20" Stroke="#343B48" StrokeThickness="2" RenderTransformOrigin="0.5,0.5">
-                        <Ellipse.RenderTransform><RotateTransform x:Name="RecordRotation"/></Ellipse.RenderTransform>
-                    </Ellipse>
-                    <Ellipse Margin="18" Stroke="#303641" StrokeThickness="1"/>
-                    <Ellipse Margin="48" Stroke="#272D37" StrokeThickness="18"/>
-                    <Ellipse x:Name="RecordLabel" Width="112" Height="112" Fill="#3A404B"/>
+                    <Grid x:Name="RecordSpinGroup" RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform><RotateTransform x:Name="RecordRotation"/></Grid.RenderTransform>
+                        <Ellipse x:Name="RecordDisc" Fill="#0B0B0E" Stroke="#000000" StrokeThickness="1"/>
+                        <Ellipse Margin="14" Stroke="#171719" StrokeThickness="1"/>
+                        <Ellipse Margin="22" Stroke="#202024" StrokeThickness="1"/>
+                        <Ellipse Margin="32" Stroke="#171719" StrokeThickness="1"/>
+                        <Ellipse Margin="44" Stroke="#202024" StrokeThickness="1"/>
+                        <Ellipse Margin="58" Stroke="#171719" StrokeThickness="1"/>
+                        <Ellipse Margin="74" Stroke="#202024" StrokeThickness="1"/>
+                        <Ellipse Margin="92" Stroke="#171719" StrokeThickness="1"/>
+                        <Ellipse>
+                            <Ellipse.Fill>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#22FFFFFF" Offset="0"/>
+                                    <GradientStop Color="#00FFFFFF" Offset="0.42"/>
+                                    <GradientStop Color="#00FFFFFF" Offset="0.58"/>
+                                    <GradientStop Color="#18FFFFFF" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Ellipse.Fill>
+                        </Ellipse>
+                        <Ellipse x:Name="RecordLabel" Width="108" Height="108" Fill="#3A404B"/>
+                        <Ellipse Width="34" Height="34" Fill="#0B0B0E"/>
+                        <Ellipse Width="8" Height="8" Fill="#000000"/>
+                    </Grid>
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Border Width="36" Height="52" CornerRadius="5" Background="#D5DAE2" BorderBrush="#FFFFFF" BorderThickness="2" Padding="4">
-                            <Grid><Grid.RowDefinitions><RowDefinition Height="18"/><RowDefinition/></Grid.RowDefinitions><Border Background="#8EA6B2"><TextBlock Text="SINK" Foreground="#354252" FontSize="6" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><Grid Grid.Row="1"><Ellipse Width="19" Height="19" Fill="#F7F8FA" Stroke="#A0A8B2"/><TextBlock Text="●" Foreground="#7C8490" FontSize="5" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid></Grid>
+                        <StackPanel.RenderTransform><TranslateTransform X="-74" Y="-74"/></StackPanel.RenderTransform>
+                        <Border Width="34" Height="50" CornerRadius="5" Background="#D5DAE2" BorderBrush="#FFFFFF" BorderThickness="2" Padding="4">
+                            <Grid><Grid.RowDefinitions><RowDefinition Height="16"/><RowDefinition/></Grid.RowDefinitions><Border Background="#8EA6B2"><TextBlock Text="SINK" Foreground="#354252" FontSize="6" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><Grid Grid.Row="1"><Ellipse Width="18" Height="18" Fill="#F7F8FA" Stroke="#A0A8B2"/><TextBlock Text="●" Foreground="#7C8490" FontSize="5" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid></Grid>
                         </Border>
-                        <TextBlock x:Name="IpodStateText" Text="OFFLINE" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                        <TextBlock x:Name="IpodStateText" Text="OFFLINE" FontSize="9" FontWeight="Bold" Foreground="#9AA1AF" HorizontalAlignment="Center" Margin="0,6,0,0"/>
                     </StackPanel>
                 </Grid>
             </Button>
