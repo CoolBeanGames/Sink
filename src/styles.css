@@ -44,8 +44,10 @@ h1 { font-size: 34px; line-height: 1.1; margin: 4px 0 7px; letter-spacing: -1px;
 .track-table { border: 1px solid #262c38; border-radius: 12px; overflow: hidden; background: #12151c; }
 .track-row { width: 100%; border: 0; border-top: 1px solid #20252f; background: transparent; display: grid; grid-template-columns: 42px minmax(250px, 1.5fr) minmax(150px, 1fr) minmax(110px,.6fr) 60px; align-items: center; min-height: 57px; padding: 0 16px; text-align: left; color: #aeb4c1; cursor: default; }
 button.track-row:hover, button.track-row:focus { background: #1a1e27; outline: none; }
+button.track-row.selected { background: #282548; color: #dcd8ff; box-shadow: inset 3px 0 #8b7cff; } button.track-row.selected:focus { background: #312d57; box-shadow: inset 3px 0 #9e92ff, inset 0 0 0 1px #564d91; }
 button.track-row[draggable="true"] { cursor: grab; } button.track-row[draggable="true"]:active { cursor: grabbing; }
 .table-heading { min-height: 37px; border-top: 0; color: #727989; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+.selection-bar { min-height: 40px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; color: #c9c3ff; background: #211e3b; font-size: 11px; }.selection-bar button { border: 0; padding: 6px 9px; border-radius: 6px; color: #aca3f3; background: transparent; cursor: pointer; }.selection-bar button:hover { color: #fff; background: #373160; }
 .track-number { color: #686f7d; }
 .track-title { display: flex; align-items: center; gap: 11px; color: #edf0f5; }
 .track-title > span { display: flex; flex-direction: column; gap: 3px; }

@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react';
 import type { LibraryView, Playlist, Track } from '../types';
 
 type LibraryProps = {
@@ -16,6 +17,9 @@ const unique = (items: string[]) => [...new Set(items)].sort((a, b) => a.localeC
 const formatTime = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
 export function Library({ view, tracks, playlists, activePlaylistId, drilldown, onDrilldown, onPlay, onBack, onOpenDuplicates }: LibraryProps) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const selectionAnchor = useRef<number | null>(null);
+  const rowRefs = useRef(new Map<string, HTMLButtonElement>());
   const playlist = playlists.find((item) => item.id === activePlaylistId);
   const title = view === 'playlist' ? playlist?.name ?? 'Playlist' : `${view[0].toUpperCase()}${view.slice(1)}`;
   let visibleTracks = tracks;
@@ -27,6 +31,35 @@ export function Library({ view, tracks, playlists, activePlaylistId, drilldown, 
   const groupValues = view === 'albums' ? unique(tracks.map((track) => track.album))
     : view === 'artists' ? unique(tracks.map((track) => track.artist))
     : view === 'genres' ? unique(tracks.map((track) => track.genre)) : [];
+
+  const selectRange = (from: number, to: number) => new Set(visibleTracks.slice(Math.min(from, to), Math.max(from, to) + 1).map((track) => track.id));
+  const selectTrack = (index: number, event: React.MouseEvent) => {
+    const id = visibleTracks[index].id;
+    if (event.shiftKey && selectionAnchor.current !== null) {
+      setSelectedIds(selectRange(selectionAnchor.current, index));
+    } else if (event.ctrlKey || event.metaKey) {
+      setSelectedIds((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+      selectionAnchor.current = index;
+    } else {
+      setSelectedIds(new Set([id]));
+      selectionAnchor.current = index;
+    }
+  };
+
+  const keyboardSelect = (index: number, event: React.KeyboardEvent) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    event.preventDefault();
+    const nextIndex = Math.max(0, Math.min(visibleTracks.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)));
+    if (event.shiftKey) {
+      const anchor = selectionAnchor.current ?? index;
+      selectionAnchor.current = anchor;
+      setSelectedIds(selectRange(anchor, nextIndex));
+    } else {
+      selectionAnchor.current = nextIndex;
+      setSelectedIds(new Set([visibleTracks[nextIndex].id]));
+    }
+    rowRefs.current.get(visibleTracks[nextIndex].id)?.focus();
+  };
 
   return (
     <main className="library">
@@ -55,9 +88,10 @@ export function Library({ view, tracks, playlists, activePlaylistId, drilldown, 
         </section>
       ) : (
         <section className="track-table" aria-label={`${title} tracks`}>
+          {selectedIds.size > 0 && <div className="selection-bar" role="status"><span>{selectedIds.size} track{selectedIds.size === 1 ? '' : 's'} selected</span><button onClick={() => setSelectedIds(new Set())}>Clear</button></div>}
           <div className="track-row table-heading"><span>#</span><span>Title</span><span>Album</span><span>Genre</span><span>Time</span></div>
           {visibleTracks.map((track, index) => (
-            <button className="track-row" key={track.id} draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('application/x-sink-track', track.id); }} onDoubleClick={() => onPlay(track)} title="Double-click to play · Drag to add to a playlist">
+            <button ref={(element) => { if (element) rowRefs.current.set(track.id, element); else rowRefs.current.delete(track.id); }} className={`track-row ${selectedIds.has(track.id) ? 'selected' : ''}`} aria-pressed={selectedIds.has(track.id)} key={track.id} draggable onClick={(event) => selectTrack(index, event)} onKeyDown={(event) => keyboardSelect(index, event)} onDragStart={(event) => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('application/x-sink-track', track.id); }} onDoubleClick={() => onPlay(track)} title="Double-click to play · Drag to add to a playlist">
               <span className="track-number">{index + 1}</span>
               <span className="track-title"><i className={`mini-cover cover-${index % 4}`} /><span><strong>{track.title}</strong><small>{track.artist}</small></span></span>
               <span>{track.album}</span><span>{track.genre}</span><span>{formatTime(track.duration)}</span>
