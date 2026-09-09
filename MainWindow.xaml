@@ -52,9 +52,12 @@
                 </ItemsControl>
             </ScrollViewer>
             <Border x:Name="TracksBorder" Grid.Row="1" Margin="0,28,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#12151C" Visibility="Collapsed">
-                <DataGrid x:Name="TracksGrid" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="None" Background="Transparent" BorderThickness="0" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow" MouseDoubleClick="TracksGrid_MouseDoubleClick" PreviewMouseLeftButtonDown="TracksGrid_PreviewMouseLeftButtonDown" PreviewMouseMove="TracksGrid_PreviewMouseMove">
+                <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <Border x:Name="SelectionBar" Visibility="Collapsed" Background="#252143" Padding="15,9"><DockPanel><Button Content="Clear" DockPanel.Dock="Right" Click="ClearSelection_Click" Background="Transparent" Foreground="#BEB6FF" BorderThickness="0"/><TextBlock x:Name="SelectionText" Foreground="#D8D3FF" FontSize="11" VerticalAlignment="Center"/></DockPanel></Border>
+                <DataGrid x:Name="TracksGrid" Grid.Row="1" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="None" Background="Transparent" BorderThickness="0" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow" SelectionChanged="TracksGrid_SelectionChanged" MouseDoubleClick="TracksGrid_MouseDoubleClick" PreviewMouseLeftButtonDown="TracksGrid_PreviewMouseLeftButtonDown" PreviewMouseMove="TracksGrid_PreviewMouseMove">
                     <DataGrid.Columns><DataGridTextColumn Header="#" Binding="{Binding TrackNumber}" Width="48"/><DataGridTextColumn Header="TITLE" Binding="{Binding Title}" Width="2*"/><DataGridTextColumn Header="ARTIST" Binding="{Binding Artist}" Width="*"/><DataGridTextColumn Header="ALBUM" Binding="{Binding Album}" Width="*"/><DataGridTextColumn Header="GENRE" Binding="{Binding Genre}" Width="110"/><DataGridTextColumn Header="TIME" Binding="{Binding DurationText}" Width="70"/></DataGrid.Columns>
                 </DataGrid>
+                </Grid>
             </Border>
         </Grid>
         <Border Grid.Row="1" Grid.Column="1" Background="#161A22" BorderBrush="#2A303C" BorderThickness="0,1,0,0" Padding="24,10">

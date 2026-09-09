@@ -116,6 +116,15 @@ public partial class MainWindow : Window
         if (TracksGrid.SelectedItem is Track track) PlayTrack(track);
     }
 
+    private void TracksGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var count = TracksGrid.SelectedItems.Count;
+        SelectionBar.Visibility = count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        SelectionText.Text = $"{count} track{(count == 1 ? "" : "s")} selected";
+    }
+
+    private void ClearSelection_Click(object sender, RoutedEventArgs e) => TracksGrid.UnselectAll();
+
     private void PlayTrack(Track track)
     {
         _mediaPlayer.Stop();
