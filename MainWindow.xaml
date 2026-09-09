@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:models="clr-namespace:Sink.Models"
-        Title="Sink" Width="1260" Height="800" MinWidth="940" MinHeight="620" WindowStartupLocation="CenterScreen" Background="#0B0D12">
+        Title="Sink" Width="1260" Height="800" MinWidth="940" MinHeight="620" WindowStartupLocation="CenterScreen" Background="#0B0D12" AllowDrop="True" DragEnter="Window_DragEnter" DragOver="Window_DragOver" DragLeave="Window_DragLeave" Drop="Window_Drop">
     <Window.Resources>
         <Style x:Key="EyebrowStyle" TargetType="TextBlock"><Setter Property="Foreground" Value="#7D8493"/><Setter Property="FontSize" Value="10"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
         <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#12151C"/><Setter Property="Foreground" Value="#747B8A"/><Setter Property="BorderBrush" Value="#262C38"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="Padding" Value="12,10"/><Setter Property="FontSize" Value="10"/></Style>
@@ -109,5 +109,8 @@
                 </Grid>
             </Button>
         </Canvas>
+        <Border x:Name="ImportOverlay" Grid.RowSpan="2" Grid.ColumnSpan="2" Panel.ZIndex="50" Visibility="Collapsed" Margin="14" BorderBrush="#8B7CFF" BorderThickness="2" CornerRadius="18" Background="#EE11141B" IsHitTestVisible="False">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><Border Width="66" Height="66" CornerRadius="33" Background="#6559CE"><TextBlock Text="↓" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock Text="Drop music to import" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,18,0,0"/><TextBlock Text="Audio files and nested folders are welcome" Foreground="#8C93A2" FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0"/></StackPanel>
+        </Border>
     </Grid>
 </Window>

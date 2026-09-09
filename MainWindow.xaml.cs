@@ -319,6 +319,34 @@ public partial class MainWindow : Window
         PlaybackStatus.Text = $"Removed {ids.Count} duplicate{(ids.Count == 1 ? "" : "s")}";
     }
 
+    private static bool HasFileDrop(DragEventArgs e) => e.Data.GetDataPresent(DataFormats.FileDrop);
+
+    private void Window_DragEnter(object sender, DragEventArgs e)
+    {
+        ImportOverlay.Visibility = HasFileDrop(e) ? Visibility.Visible : Visibility.Collapsed;
+        e.Effects = HasFileDrop(e) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void Window_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = HasFileDrop(e) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void Window_DragLeave(object sender, DragEventArgs e) => ImportOverlay.Visibility = Visibility.Collapsed;
+
+    private void Window_Drop(object sender, DragEventArgs e)
+    {
+        ImportOverlay.Visibility = Visibility.Collapsed;
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths) return;
+        var imported = MusicImporter.Import(paths);
+        foreach (var track in imported) _tracks.Add(track);
+        RenderLibrary();
+        PlaybackStatus.Text = imported.Count > 0 ? $"Imported {imported.Count} track{(imported.Count == 1 ? "" : "s")}" : "No supported audio files found";
+        e.Handled = true;
+    }
+
     private void BackButton_Click(object sender, RoutedEventArgs e) { _drilldown = null; RenderLibrary(); }
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) { if (IsLoaded) RenderLibrary(); }
 
