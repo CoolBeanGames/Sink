@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Sink.Models;
 using Sink.Services;
@@ -23,6 +24,10 @@ public partial class MainWindow : Window
     private TimeSpan _simulatedPosition;
     private bool _isPlaying;
     private bool _updatingProgress;
+    private bool _ipodConnected;
+    private bool _ipodSyncing;
+    private Point _trackDragStart;
+    private const string TrackDragFormat = "Sink.TrackIds";
 
     public MainWindow()
     {
@@ -197,6 +202,94 @@ public partial class MainWindow : Window
     private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_mediaPlayer is not null) _mediaPlayer.Volume = e.NewValue;
+    }
+
+    private void IpodButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_ipodConnected) return;
+        _ipodConnected = true;
+        IpodButton.Opacity = 1;
+        RecordLabel.Fill = new SolidColorBrush(Color.FromRgb(40, 91, 184));
+        IpodStateText.Text = "IPOD";
+        IpodButton.ToolTip = "River's iPod · 160 GB · 84 GB free";
+    }
+
+    private void IpodMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        foreach (var item in IpodMenu.Items.OfType<MenuItem>().Skip(1)) item.IsEnabled = _ipodConnected;
+    }
+
+    private void SyncIpod_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_ipodConnected || _ipodSyncing) return;
+        _ipodSyncing = true;
+        IpodStateText.Text = "SYNCING";
+        var spin = new DoubleAnimation(0, 360, TimeSpan.FromSeconds(1.1)) { RepeatBehavior = RepeatBehavior.Forever };
+        RecordRotation.BeginAnimation(RotateTransform.AngleProperty, spin);
+        var stopTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3.2) };
+        stopTimer.Tick += (_, _) =>
+        {
+            stopTimer.Stop();
+            RecordRotation.BeginAnimation(RotateTransform.AngleProperty, null);
+            _ipodSyncing = false;
+            IpodStateText.Text = "IPOD";
+        };
+        stopTimer.Start();
+    }
+
+    private void EjectIpod_Click(object sender, RoutedEventArgs e)
+    {
+        RecordRotation.BeginAnimation(RotateTransform.AngleProperty, null);
+        _ipodConnected = false;
+        _ipodSyncing = false;
+        IpodButton.Opacity = 0.55;
+        RecordLabel.Fill = new SolidColorBrush(Color.FromRgb(58, 64, 75));
+        IpodStateText.Text = "OFFLINE";
+        IpodButton.ToolTip = "No iPod connected · Click to simulate connection";
+    }
+
+    private void TracksGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) => _trackDragStart = e.GetPosition(TracksGrid);
+
+    private void TracksGrid_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+        var position = e.GetPosition(TracksGrid);
+        if (Math.Abs(position.X - _trackDragStart.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(position.Y - _trackDragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        var selected = TracksGrid.SelectedItems.Cast<Track>().Select(track => track.Id).ToArray();
+        if (selected.Length == 0 && TracksGrid.SelectedItem is Track track) selected = [track.Id];
+        if (selected.Length == 0) return;
+        var data = new DataObject();
+        data.SetData(TrackDragFormat, selected);
+        DragDrop.DoDragDrop(TracksGrid, data, DragDropEffects.Copy);
+    }
+
+    private void PlaylistItem_DragOver(object sender, DragEventArgs e)
+    {
+        if (sender is not ListBoxItem item || !e.Data.GetDataPresent(TrackDragFormat)) { e.Effects = DragDropEffects.None; return; }
+        item.Tag = "DragOver";
+        e.Effects = DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    private void PlaylistItem_DragLeave(object sender, DragEventArgs e)
+    {
+        if (sender is ListBoxItem item) item.Tag = null;
+    }
+
+    private void PlaylistItem_Drop(object sender, DragEventArgs e)
+    {
+        if (sender is not ListBoxItem { DataContext: Playlist playlist } item || e.Data.GetData(TrackDragFormat) is not Guid[] trackIds) return;
+        item.Tag = null;
+        var added = 0;
+        foreach (var trackId in trackIds)
+        {
+            if (playlist.TrackIds.Contains(trackId)) continue;
+            playlist.TrackIds.Add(trackId);
+            added++;
+        }
+        PlaylistList.Items.Refresh();
+        PlaybackStatus.Text = added > 0 ? $"Added {added} track{(added == 1 ? "" : "s")} to {playlist.Name}" : $"Already in {playlist.Name}";
+        e.Handled = true;
     }
 
     private void BackButton_Click(object sender, RoutedEventArgs e) { _drilldown = null; RenderLibrary(); }
