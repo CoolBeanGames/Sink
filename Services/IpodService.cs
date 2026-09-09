@@ -34,8 +34,8 @@ public static class IpodService
         {
             try
             {
+                if (drive.DriveType != DriveType.Removable) continue;
                 if (!drive.IsReady) continue;
-                if (drive.DriveType is not (DriveType.Removable or DriveType.Fixed)) continue;
                 var control = Path.Combine(drive.RootDirectory.FullName, "iPod_Control");
                 if (!Directory.Exists(control)) continue;
                 var name = string.IsNullOrWhiteSpace(drive.VolumeLabel) ? "iPod" : drive.VolumeLabel;

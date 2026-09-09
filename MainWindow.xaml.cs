@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using Sink.Dialogs;
 using Sink.Models;
 using Sink.Services;
 
@@ -44,7 +45,6 @@ public partial class MainWindow : Window
         RenderLibrary();
         _ipodPollTimer.Tick += (_, _) => PollForIpod();
         _ipodPollTimer.Start();
-        PollForIpod();
     }
 
     private void LoadLibrary()
@@ -70,9 +70,15 @@ public partial class MainWindow : Window
 
     private void SaveLibrary() => LibraryStore.Save(_tracks, _playlists);
 
-    private void PollForIpod()
+    private bool _ipodPolling;
+
+    private async void PollForIpod()
     {
-        var device = IpodService.Detect();
+        if (_ipodPolling) return;
+        _ipodPolling = true;
+        IpodDevice? device;
+        try { device = await Task.Run(IpodService.Detect); }
+        finally { _ipodPolling = false; }
         if (device is not null)
         {
             if (!_ipodConnected || _ipodDevice?.RootPath != device.RootPath)
@@ -380,6 +386,25 @@ public partial class MainWindow : Window
         DragDrop.DoDragDrop(TracksGrid, data, DragDropEffects.Copy);
     }
 
+    private void GroupCard_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) => _trackDragStart = e.GetPosition(this);
+
+    private void GroupCard_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || sender is not Button { DataContext: GroupCard card }) return;
+        var position = e.GetPosition(this);
+        if (Math.Abs(position.X - _trackDragStart.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(position.Y - _trackDragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        var ids = (_category switch
+        {
+            LibraryCategory.Artists => _tracks.Where(t => t.Artist == card.Name),
+            LibraryCategory.Genres => _tracks.Where(t => t.Genre == card.Name),
+            _ => _tracks.Where(t => t.Album == card.Name)
+        }).Select(t => t.Id).ToArray();
+        if (ids.Length == 0) return;
+        var data = new DataObject();
+        data.SetData(TrackDragFormat, ids);
+        DragDrop.DoDragDrop((DependencyObject)sender, data, DragDropEffects.Copy);
+    }
+
     private void PlaylistItem_DragOver(object sender, DragEventArgs e)
     {
         if (sender is not ListBoxItem item || !e.Data.GetDataPresent(TrackDragFormat)) { e.Effects = DragDropEffects.None; return; }
@@ -477,6 +502,166 @@ public partial class MainWindow : Window
     {
         if (PlaylistList.SelectedItem is not Playlist playlist) return;
         _activePlaylist = playlist; _category = LibraryCategory.Playlist; _drilldown = null; SetActiveNavigation(null); RenderLibrary();
+    }
+
+    // ---- Contextual right-click menus ------------------------------------
+
+    private void TracksGrid_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        var tracks = TracksGrid.SelectedItems.OfType<Track>().ToList();
+        if (tracks.Count == 0 && TracksGrid.SelectedItem is Track single) tracks.Add(single);
+        if (tracks.Count == 0) { e.Handled = true; return; }
+
+        var menu = TracksGrid.ContextMenu!;
+        menu.Items.Clear();
+        var label = tracks.Count == 1 ? tracks[0].Title : $"{tracks.Count} tracks";
+        menu.Items.Add(Header(label));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Play", () => PlayTracks(tracks)));
+        menu.Items.Add(Item("Edit metadata…", () => EditMetadata(tracks)));
+        menu.Items.Add(AddToPlaylistMenu(tracks));
+        menu.Items.Add(Item("Sync to iPod", () => SyncTracksToIpod(tracks)));
+        menu.Items.Add(ExcludeFromShuffleItem(tracks));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item($"Delete from library", () => DeleteTracks(tracks)));
+    }
+
+    private void GroupCard_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (sender is not Button { DataContext: GroupCard card, ContextMenu: { } menu }) { e.Handled = true; return; }
+        var kind = _category;
+        var members = kind switch
+        {
+            LibraryCategory.Artists => _tracks.Where(t => t.Artist == card.Name),
+            LibraryCategory.Genres => _tracks.Where(t => t.Genre == card.Name),
+            _ => _tracks.Where(t => t.Album == card.Name)
+        };
+        var tracks = members.ToList();
+        if (tracks.Count == 0) { e.Handled = true; return; }
+
+        menu.Items.Clear();
+        menu.Items.Add(Header(card.Name));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Play", () => PlayTracks(tracks)));
+        if (kind == LibraryCategory.Genres)
+            menu.Items.Add(Item("Rename…", () => RenameGenre(card.Name)));
+        else
+            menu.Items.Add(Item("Edit metadata…", () => EditMetadata(tracks)));
+        menu.Items.Add(AddToPlaylistMenu(tracks));
+        menu.Items.Add(Item("Sync to iPod", () => SyncTracksToIpod(tracks)));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Delete from library", () => DeleteTracks(tracks)));
+    }
+
+    private static MenuItem Header(string text) => new() { Header = text, IsEnabled = false, FontWeight = FontWeights.SemiBold };
+
+    private static MenuItem Item(string text, Action action)
+    {
+        var item = new MenuItem { Header = text };
+        item.Click += (_, _) => action();
+        return item;
+    }
+
+    private MenuItem AddToPlaylistMenu(IReadOnlyList<Track> tracks)
+    {
+        var parent = new MenuItem { Header = "Add to playlist" };
+        if (_playlists.Count == 0)
+        {
+            parent.Items.Add(new MenuItem { Header = "No playlists", IsEnabled = false });
+            return parent;
+        }
+        foreach (var playlist in _playlists)
+        {
+            var target = playlist;
+            parent.Items.Add(Item(playlist.Name, () => AddTracksToPlaylist(target, tracks)));
+        }
+        return parent;
+    }
+
+    private MenuItem ExcludeFromShuffleItem(IReadOnlyList<Track> tracks)
+    {
+        var allExcluded = tracks.All(t => t.ExcludedFromShuffle);
+        var item = new MenuItem { Header = "Exclude from iPod shuffle", IsCheckable = true, IsChecked = allExcluded };
+        item.Click += (_, _) =>
+        {
+            var exclude = !allExcluded;
+            foreach (var track in tracks) track.ExcludedFromShuffle = exclude;
+            SaveLibrary();
+            PlaybackStatus.Text = exclude
+                ? $"Excluded {tracks.Count} track{(tracks.Count == 1 ? "" : "s")} from shuffle"
+                : $"Included {tracks.Count} track{(tracks.Count == 1 ? "" : "s")} in shuffle";
+        };
+        return item;
+    }
+
+    private void PlayTracks(IReadOnlyList<Track> tracks)
+    {
+        if (tracks.Count > 0) PlayTrack(tracks[0]);
+    }
+
+    private void AddTracksToPlaylist(Playlist playlist, IReadOnlyList<Track> tracks)
+    {
+        var added = 0;
+        foreach (var track in tracks)
+        {
+            if (playlist.TrackIds.Contains(track.Id)) continue;
+            playlist.TrackIds.Add(track.Id);
+            added++;
+        }
+        PlaylistList.Items.Refresh();
+        if (added > 0) SaveLibrary();
+        PlaybackStatus.Text = added > 0 ? $"Added {added} track{(added == 1 ? "" : "s")} to {playlist.Name}" : $"Already in {playlist.Name}";
+    }
+
+    private void SyncTracksToIpod(IReadOnlyList<Track> tracks)
+    {
+        if (!_ipodConnected) { PlaybackStatus.Text = "Connect an iPod before syncing"; return; }
+        var count = tracks.Count(t => !t.ExcludedFromShuffle);
+        PlaybackStatus.Text = count > 0 ? $"Syncing {count} track{(count == 1 ? "" : "s")} to iPod" : "Nothing to sync";
+        if (count > 0) StartIpodSync();
+    }
+
+    private void EditMetadata(IReadOnlyList<Track> tracks)
+    {
+        var dialog = new MetadataWindow(tracks) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+        SaveLibrary();
+        RenderLibrary();
+        PlaybackStatus.Text = $"Updated {tracks.Count} track{(tracks.Count == 1 ? "" : "s")}";
+    }
+
+    private void RenameGenre(string genre)
+    {
+        var dialog = new TextPromptWindow { Owner = this };
+        if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.Answer)) return;
+        var count = 0;
+        foreach (var track in _tracks.Where(t => t.Genre == genre))
+        {
+            track.Genre = dialog.Answer;
+            count++;
+        }
+        SaveLibrary();
+        RenderLibrary();
+        PlaybackStatus.Text = $"Renamed genre on {count} track{(count == 1 ? "" : "s")}";
+    }
+
+    private void DeleteTracks(IReadOnlyList<Track> tracks)
+    {
+        var ids = tracks.Select(t => t.Id).ToHashSet();
+        foreach (var track in _tracks.Where(t => ids.Contains(t.Id)).ToList()) _tracks.Remove(track);
+        foreach (var playlist in _playlists)
+            foreach (var id in playlist.TrackIds.Where(ids.Contains).ToList())
+                playlist.TrackIds.Remove(id);
+        if (_nowPlaying is not null && ids.Contains(_nowPlaying.Id))
+        {
+            _mediaPlayer.Stop(); _mediaPlayer.Close(); _nowPlaying = null; _isPlaying = false; _playbackTimer.Stop();
+            PlayerTitle.Text = "Choose something to play"; PlayerArtist.Text = "Your library is ready"; PlayerArtInitial.Text = "♫"; PlayPauseButton.Content = "▶";
+            UpdateRecordSpin();
+        }
+        PlaylistList.Items.Refresh();
+        SaveLibrary();
+        RenderLibrary();
+        PlaybackStatus.Text = $"Deleted {tracks.Count} track{(tracks.Count == 1 ? "" : "s")}";
     }
 
     private sealed record GroupCard(string Name, string Detail, string Initial, Brush Color);

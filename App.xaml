@@ -39,6 +39,30 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <Style TargetType="ContextMenu">
+            <Setter Property="Background" Value="#1D222C"/>
+            <Setter Property="Foreground" Value="#F4F6FA"/>
+            <Setter Property="BorderBrush" Value="#363D4B"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="4"/>
+        </Style>
+        <Style TargetType="MenuItem">
+            <Setter Property="Foreground" Value="#E4E7EE"/>
+            <Setter Property="Padding" Value="9,5"/>
+            <Style.Triggers>
+                <Trigger Property="IsHighlighted" Value="True"><Setter Property="Background" Value="#302B57"/></Trigger>
+                <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="#6B7280"/></Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="DialogTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="Foreground" Value="#F4F6FA"/>
+            <Setter Property="Background" Value="#0F1218"/>
+            <Setter Property="BorderBrush" Value="#353C49"/>
+            <Setter Property="CaretBrush" Value="#F4F6FA"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
         <Style x:Key="IpodButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
