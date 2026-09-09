@@ -27,6 +27,8 @@ public partial class MainWindow : Window
     private bool _ipodConnected;
     private bool _ipodSyncing;
     private bool _recordSpinning;
+    private IpodDevice? _ipodDevice;
+    private readonly DispatcherTimer _ipodPollTimer = new() { Interval = TimeSpan.FromSeconds(2.5) };
     private Point _trackDragStart;
     private const string TrackDragFormat = "Sink.TrackIds";
 
@@ -41,6 +43,24 @@ public partial class MainWindow : Window
         _mediaPlayer.MediaEnded += (_, _) => NextTrack();
         _mediaPlayer.Volume = 0.7;
         RenderLibrary();
+        _ipodPollTimer.Tick += (_, _) => PollForIpod();
+        _ipodPollTimer.Start();
+        PollForIpod();
+    }
+
+    private void PollForIpod()
+    {
+        var device = IpodService.Detect();
+        if (device is not null)
+        {
+            if (!_ipodConnected || _ipodDevice?.RootPath != device.RootPath)
+            {
+                _ipodDevice = device;
+                SetIpodConnected(true);
+            }
+            return;
+        }
+        if (_ipodConnected && _ipodDevice is not null) SetIpodConnected(false);
     }
 
     private void Category_Click(object sender, RoutedEventArgs e)
@@ -227,14 +247,17 @@ public partial class MainWindow : Window
         _ipodConnected = connected;
         if (connected)
         {
+            var summary = _ipodDevice?.Summary ?? "Simulated iPod · 160 GB · 84 GB free";
+            var header = _ipodDevice is null ? "Simulated iPod · 160 GB" : $"{_ipodDevice.Name} · {_ipodDevice.CapacityText}";
             RecordLabel.Fill = new SolidColorBrush(Color.FromRgb(40, 91, 184));
             IpodStateText.Text = "IPOD";
             IpodStateText.Foreground = new SolidColorBrush(Color.FromRgb(139, 124, 255));
-            IpodButton.ToolTip = "River's iPod · 160 GB · 84 GB free";
-            IpodMenuHeader.Header = "River's iPod · 160 GB";
+            IpodButton.ToolTip = summary;
+            IpodMenuHeader.Header = header;
         }
         else
         {
+            _ipodDevice = null;
             RecordRotation.BeginAnimation(RotateTransform.AngleProperty, null);
             _ipodSyncing = false;
             _recordSpinning = false;
