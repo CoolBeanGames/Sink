@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Sink.Models;
 using Sink.Services;
 
@@ -15,6 +17,12 @@ public partial class MainWindow : Window
     private LibraryCategory _category = LibraryCategory.Albums;
     private string? _drilldown;
     private Playlist? _activePlaylist;
+    private readonly MediaPlayer _mediaPlayer = new();
+    private readonly DispatcherTimer _playbackTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
+    private Track? _nowPlaying;
+    private TimeSpan _simulatedPosition;
+    private bool _isPlaying;
+    private bool _updatingProgress;
 
     public MainWindow()
     {
@@ -22,6 +30,10 @@ public partial class MainWindow : Window
         _playlists.Add(new Playlist { Name = "Favorites" });
         foreach (var track in _tracks.Where((_, index) => index % 2 == 0).Take(3)) _playlists[0].TrackIds.Add(track.Id);
         PlaylistList.ItemsSource = _playlists;
+        _playbackTimer.Tick += PlaybackTimer_Tick;
+        _mediaPlayer.MediaOpened += (_, _) => UpdatePlayerDuration();
+        _mediaPlayer.MediaEnded += (_, _) => NextTrack();
+        _mediaPlayer.Volume = 0.7;
         RenderLibrary();
     }
 
@@ -99,7 +111,93 @@ public partial class MainWindow : Window
         if (TracksGrid.SelectedItem is Track track) PlayTrack(track);
     }
 
-    private void PlayTrack(Track track) => PlaybackStatus.Text = $"▶  Playing {track.Title} — {track.Artist}";
+    private void PlayTrack(Track track)
+    {
+        _mediaPlayer.Stop();
+        _mediaPlayer.Close();
+        _nowPlaying = track;
+        _simulatedPosition = TimeSpan.Zero;
+        _isPlaying = true;
+        var filePath = track.FilePath;
+        if (!string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
+        {
+            _mediaPlayer.Open(new Uri(filePath));
+            _mediaPlayer.Play();
+        }
+        PlayerTitle.Text = track.Title;
+        PlayerArtist.Text = track.Artist;
+        PlayerArtInitial.Text = track.Album[..1].ToUpperInvariant();
+        PlaybackStatus.Text = $"▶  Playing {track.Title} — {track.Artist}";
+        PlayPauseButton.Content = "Ⅱ";
+        UpdatePlayerDuration();
+        _playbackTimer.Start();
+    }
+
+    private void PlaybackTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_nowPlaying is null || !_isPlaying) return;
+        if (!string.IsNullOrWhiteSpace(_nowPlaying.FilePath) && _mediaPlayer.NaturalDuration.HasTimeSpan)
+            _simulatedPosition = _mediaPlayer.Position;
+        else
+        {
+            _simulatedPosition += _playbackTimer.Interval;
+            if (_simulatedPosition >= _nowPlaying.Duration) NextTrack();
+        }
+        UpdatePlayerProgress();
+    }
+
+    private void UpdatePlayerDuration()
+    {
+        if (_nowPlaying is null) return;
+        var duration = _mediaPlayer.NaturalDuration.HasTimeSpan ? _mediaPlayer.NaturalDuration.TimeSpan : _nowPlaying.Duration;
+        ProgressSlider.Maximum = Math.Max(1, duration.TotalSeconds);
+        UpdatePlayerProgress();
+    }
+
+    private void UpdatePlayerProgress()
+    {
+        if (_nowPlaying is null) return;
+        var duration = TimeSpan.FromSeconds(ProgressSlider.Maximum);
+        _updatingProgress = true;
+        ProgressSlider.Value = Math.Min(ProgressSlider.Maximum, _simulatedPosition.TotalSeconds);
+        _updatingProgress = false;
+        ElapsedText.Text = FormatTime(_simulatedPosition);
+        RemainingText.Text = $"-{FormatTime(duration - _simulatedPosition)}";
+    }
+
+    private static string FormatTime(TimeSpan time) => $"{Math.Max(0, (int)time.TotalMinutes)}:{Math.Max(0, time.Seconds):00}";
+
+    private void PlayPause_Click(object sender, RoutedEventArgs e)
+    {
+        if (_nowPlaying is null) return;
+        _isPlaying = !_isPlaying;
+        if (_isPlaying) _mediaPlayer.Play(); else _mediaPlayer.Pause();
+        PlayPauseButton.Content = _isPlaying ? "Ⅱ" : "▶";
+    }
+
+    private void Previous_Click(object sender, RoutedEventArgs e) => Skip(-1);
+    private void Next_Click(object sender, RoutedEventArgs e) => NextTrack();
+    private void NextTrack() => Skip(1);
+
+    private void Skip(int direction)
+    {
+        if (_nowPlaying is null || _tracks.Count == 0) return;
+        var index = _tracks.IndexOf(_nowPlaying);
+        PlayTrack(_tracks[(index + direction + _tracks.Count) % _tracks.Count]);
+    }
+
+    private void ProgressSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_updatingProgress || _nowPlaying is null) return;
+        _simulatedPosition = TimeSpan.FromSeconds(e.NewValue);
+        if (!string.IsNullOrWhiteSpace(_nowPlaying.FilePath)) _mediaPlayer.Position = _simulatedPosition;
+        UpdatePlayerProgress();
+    }
+
+    private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_mediaPlayer is not null) _mediaPlayer.Volume = e.NewValue;
+    }
 
     private void BackButton_Click(object sender, RoutedEventArgs e) { _drilldown = null; RenderLibrary(); }
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) { if (IsLoaded) RenderLibrary(); }

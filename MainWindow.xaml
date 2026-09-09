@@ -10,8 +10,9 @@
         <Style TargetType="DataGridRow"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="#20252F"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="MinHeight" Value="48"/><Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#1B1F28"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#2B2850"/><Setter Property="Foreground" Value="#F4F6FA"/></Trigger></Style.Triggers></Style>
     </Window.Resources>
     <Grid>
+        <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="82"/></Grid.RowDefinitions>
         <Grid.ColumnDefinitions><ColumnDefinition Width="238"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-        <Border Background="#12151C" BorderBrush="#262C38" BorderThickness="0,0,1,0" Padding="16,24">
+        <Border Grid.RowSpan="2" Background="#12151C" BorderBrush="#262C38" BorderThickness="0,0,1,0" Padding="16,24">
             <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <StackPanel Orientation="Horizontal" Margin="8,0,0,28"><Border Width="32" Height="32" CornerRadius="10" Background="#7568E5"><TextBlock Text="S" FontSize="17" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock Text="Sink" FontSize="20" FontWeight="Bold" Margin="11,3,0,0"/></StackPanel>
                 <StackPanel Grid.Row="1">
@@ -56,5 +57,26 @@
                 </DataGrid>
             </Border>
         </Grid>
+        <Border Grid.Row="1" Grid.Column="1" Background="#161A22" BorderBrush="#2A303C" BorderThickness="0,1,0,0" Padding="24,10">
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" MinWidth="220"/><ColumnDefinition Width="1.4*" MinWidth="380"/><ColumnDefinition Width="*" MinWidth="140"/></Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="50" Height="50" CornerRadius="8" Background="#3F3A75"><TextBlock x:Name="PlayerArtInitial" Text="♫" FontSize="20" Foreground="#DED9FF" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <StackPanel Margin="12,6,0,0"><TextBlock x:Name="PlayerTitle" Text="Choose something to play" FontWeight="SemiBold" FontSize="13"/><TextBlock x:Name="PlayerArtist" Text="Your library is ready" Foreground="#7F8696" FontSize="11" Margin="0,4,0,0"/></StackPanel>
+                </StackPanel>
+                <Grid Grid.Column="1"><Grid.RowDefinitions><RowDefinition Height="36"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button Content="◀│" Click="Previous_Click" Background="Transparent" Foreground="#B8BEC9" BorderThickness="0" Width="45"/>
+                        <Button x:Name="PlayPauseButton" Content="▶" Click="PlayPause_Click" Background="#F4F6FA" Foreground="#11141A" BorderThickness="0" Width="34" Height="34" FontSize="12"/>
+                        <Button Content="│▶" Click="Next_Click" Background="Transparent" Foreground="#B8BEC9" BorderThickness="0" Width="45"/>
+                    </StackPanel>
+                    <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition Width="38"/><ColumnDefinition/><ColumnDefinition Width="44"/></Grid.ColumnDefinitions>
+                        <TextBlock x:Name="ElapsedText" Text="0:00" Foreground="#777E8D" FontSize="10" VerticalAlignment="Center"/>
+                        <Slider x:Name="ProgressSlider" Grid.Column="1" Minimum="0" Maximum="1" ValueChanged="ProgressSlider_ValueChanged" VerticalAlignment="Center" Foreground="#8B7CFF"/>
+                        <TextBlock x:Name="RemainingText" Grid.Column="2" Text="-0:00" Foreground="#777E8D" FontSize="10" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                    </Grid>
+                </Grid>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"><TextBlock Text="VOL" Foreground="#6E7584" FontSize="9" VerticalAlignment="Center" Margin="0,0,8,0"/><Slider x:Name="VolumeSlider" Width="95" Minimum="0" Maximum="1" Value="0.7" ValueChanged="VolumeSlider_ValueChanged"/></StackPanel>
+            </Grid>
+        </Border>
     </Grid>
 </Window>
