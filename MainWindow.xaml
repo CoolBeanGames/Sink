@@ -1,0 +1,60 @@
+<Window x:Class="Sink.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="clr-namespace:Sink.Models"
+        Title="Sink" Width="1260" Height="800" MinWidth="940" MinHeight="620" WindowStartupLocation="CenterScreen" Background="#0B0D12">
+    <Window.Resources>
+        <Style x:Key="EyebrowStyle" TargetType="TextBlock"><Setter Property="Foreground" Value="#7D8493"/><Setter Property="FontSize" Value="10"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+        <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#12151C"/><Setter Property="Foreground" Value="#747B8A"/><Setter Property="BorderBrush" Value="#262C38"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="Padding" Value="12,10"/><Setter Property="FontSize" Value="10"/></Style>
+        <Style TargetType="DataGridCell"><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="12,9"/><Setter Property="Foreground" Value="#BFC4CE"/><Setter Property="Background" Value="Transparent"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/></Style>
+        <Style TargetType="DataGridRow"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="#20252F"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="MinHeight" Value="48"/><Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#1B1F28"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#2B2850"/><Setter Property="Foreground" Value="#F4F6FA"/></Trigger></Style.Triggers></Style>
+    </Window.Resources>
+    <Grid>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="238"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <Border Background="#12151C" BorderBrush="#262C38" BorderThickness="0,0,1,0" Padding="16,24">
+            <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <StackPanel Orientation="Horizontal" Margin="8,0,0,28"><Border Width="32" Height="32" CornerRadius="10" Background="#7568E5"><TextBlock Text="S" FontSize="17" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock Text="Sink" FontSize="20" FontWeight="Bold" Margin="11,3,0,0"/></StackPanel>
+                <StackPanel Grid.Row="1">
+                    <TextBlock Text="LIBRARY" Style="{StaticResource EyebrowStyle}" Margin="10,0,0,7"/>
+                    <Button x:Name="ArtistsButton" Content="●    Artists" Tag="Artists" Click="Category_Click" Style="{StaticResource NavButtonStyle}"/>
+                    <Button x:Name="AlbumsButton" Content="▣    Albums" Tag="Active" Click="Category_Click" Style="{StaticResource NavButtonStyle}"/>
+                    <Button x:Name="GenresButton" Content="◇    Genres" Tag="Genres" Click="Category_Click" Style="{StaticResource NavButtonStyle}"/>
+                    <Button x:Name="SongsButton" Content="♫    Songs" Tag="Songs" Click="Category_Click" Style="{StaticResource NavButtonStyle}"/>
+                </StackPanel>
+                <Grid Grid.Row="2" Margin="10,24,4,8"><TextBlock Text="PLAYLISTS" Style="{StaticResource EyebrowStyle}"/><Button Content="＋" HorizontalAlignment="Right" Margin="0,-8,0,0" Foreground="#8B7CFF" Background="Transparent" BorderThickness="0" FontSize="20" Click="NewPlaylist_Click"/></Grid>
+                <ListBox x:Name="PlaylistList" Grid.Row="3" Background="Transparent" BorderThickness="0" SelectionChanged="PlaylistList_SelectionChanged">
+                    <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="Padding" Value="10,8"/><Setter Property="Margin" Value="0,2"/><Setter Property="Foreground" Value="#B6BCC8"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><Border x:Name="ItemBorder" CornerRadius="8" Padding="{TemplateBinding Padding}" Background="Transparent"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ItemBorder" Property="Background" Value="#1D222C"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemBorder" Property="Background" Value="#302B57"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style></ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate><DataTemplate DataType="{x:Type models:Playlist}"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Name}"/><TextBlock Grid.Column="1" Text="{Binding TrackIds.Count}" Foreground="#737A89" FontSize="10"/></Grid></DataTemplate></ListBox.ItemTemplate>
+                </ListBox>
+                <Button Grid.Row="4" Content="＋  New playlist" Click="NewPlaylist_Click" Style="{StaticResource PrimaryButtonStyle}" Background="#272243" Foreground="#CBC5FF"/>
+            </Grid>
+        </Border>
+        <Grid Grid.Column="1" Margin="38,32,38,30">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <Grid>
+                <StackPanel>
+                    <Button x:Name="BackButton" Content="← Back" Visibility="Collapsed" Click="BackButton_Click" HorizontalAlignment="Left" Foreground="#9D91FF" Background="Transparent" BorderThickness="0" Padding="0,0,0,8"/>
+                    <TextBlock Text="MUSIC COLLECTION" Style="{StaticResource EyebrowStyle}"/>
+                    <TextBlock x:Name="ViewTitle" Text="Albums" FontSize="34" FontWeight="SemiBold" Margin="0,4,0,2"/>
+                    <TextBlock x:Name="ViewSubtitle" Foreground="#7D8493" FontSize="12"/>
+                    <TextBlock x:Name="PlaybackStatus" Foreground="#A79DFF" FontSize="11" Margin="0,5,0,0"/>
+                </StackPanel>
+                <Border HorizontalAlignment="Right" VerticalAlignment="Top" Width="260" Height="39" Background="#12151C" BorderBrush="#262C38" BorderThickness="1" CornerRadius="10" Padding="12,7">
+                    <DockPanel><TextBlock Text="⌕" Foreground="#747B8B" Margin="0,0,8,0"/><TextBox x:Name="SearchBox" TextChanged="SearchBox_TextChanged" Background="Transparent" BorderThickness="0" Foreground="#F4F6FA" CaretBrush="#F4F6FA"/></DockPanel>
+                </Border>
+            </Grid>
+            <ScrollViewer x:Name="GroupsScroller" Grid.Row="1" Margin="0,28,0,0" VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="GroupsView"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate><DataTemplate><Button Tag="{Binding Name}" Click="GroupCard_Click" MouseDoubleClick="GroupCard_MouseDoubleClick" Width="184" Margin="0,0,18,18" Padding="0" BorderThickness="0" Background="Transparent" HorizontalContentAlignment="Stretch">
+                        <StackPanel><Border Height="145" CornerRadius="12" Background="{Binding Color}" BorderBrush="#303744" BorderThickness="1"><Grid><Ellipse Width="92" Height="92" Stroke="#FFFFFF" StrokeThickness="1" Opacity="0.13"/><Ellipse Width="30" Height="30" Fill="#0B0D12" Opacity="0.35"/><TextBlock Text="{Binding Initial}" FontSize="36" Foreground="#DAD7FF" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid></Border><TextBlock Text="{Binding Name}" Foreground="#F4F6FA" FontWeight="SemiBold" Margin="3,10,3,0" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Detail}" Foreground="#7D8493" FontSize="11" Margin="3,3,3,0"/></StackPanel>
+                    </Button></DataTemplate></ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <Border x:Name="TracksBorder" Grid.Row="1" Margin="0,28,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#12151C" Visibility="Collapsed">
+                <DataGrid x:Name="TracksGrid" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="None" Background="Transparent" BorderThickness="0" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow" MouseDoubleClick="TracksGrid_MouseDoubleClick">
+                    <DataGrid.Columns><DataGridTextColumn Header="#" Binding="{Binding TrackNumber}" Width="48"/><DataGridTextColumn Header="TITLE" Binding="{Binding Title}" Width="2*"/><DataGridTextColumn Header="ARTIST" Binding="{Binding Artist}" Width="*"/><DataGridTextColumn Header="ALBUM" Binding="{Binding Album}" Width="*"/><DataGridTextColumn Header="GENRE" Binding="{Binding Genre}" Width="110"/><DataGridTextColumn Header="TIME" Binding="{Binding DurationText}" Width="70"/></DataGrid.Columns>
+                </DataGrid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>
