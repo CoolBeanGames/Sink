@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Library } from './components/Library';
 import { IpodDock } from './components/IpodDock';
+import { DuplicateDialog } from './components/DuplicateDialog';
 import { Player } from './components/Player';
 import { Sidebar } from './components/Sidebar';
 import { seedTracks } from './data';
@@ -19,6 +20,7 @@ export default function App() {
   const [position, setPosition] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [showDuplicates, setShowDuplicates] = useState(false);
 
   useEffect(() => {
     if (!isPlaying || !nowPlaying) return;
@@ -39,8 +41,7 @@ export default function App() {
   const importDrop = async (event: React.DragEvent) => {
     event.preventDefault(); setIsDragging(false);
     const files = await filesFromDrop(event.dataTransfer);
-    const existing = new Set(tracks.map((track) => track.fileName.toLocaleLowerCase()));
-    const imported = files.filter((file) => !existing.has(file.name.toLocaleLowerCase())).map(trackFromFile);
+    const imported = files.map(trackFromFile);
     if (imported.length) setTracks((current) => [...current, ...imported]);
     setImportMessage(imported.length ? `Imported ${imported.length} track${imported.length === 1 ? '' : 's'}` : 'No new audio files found');
     window.setTimeout(() => setImportMessage(null), 3200);
@@ -69,11 +70,12 @@ export default function App() {
   return (
     <div className="app-shell" onDragEnter={(event) => { event.preventDefault(); setIsDragging(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (event.currentTarget === event.target) setIsDragging(false); }} onDrop={importDrop}>
       <Sidebar view={view} activePlaylistId={activePlaylistId} playlists={playlists} onNavigate={navigate} onCreatePlaylist={createPlaylist} onAddToPlaylist={addToPlaylist} />
-      <Library view={view} tracks={tracks} playlists={playlists} activePlaylistId={activePlaylistId} drilldown={drilldown} onDrilldown={setDrilldown} onBack={() => setDrilldown(null)} onPlay={playTrack} />
+      <Library view={view} tracks={tracks} playlists={playlists} activePlaylistId={activePlaylistId} drilldown={drilldown} onDrilldown={setDrilldown} onBack={() => setDrilldown(null)} onPlay={playTrack} onOpenDuplicates={() => setShowDuplicates(true)} />
       <IpodDock />
       <Player track={nowPlaying} isPlaying={isPlaying} position={position} onToggle={() => nowPlaying && setIsPlaying((value) => !value)} onSeek={setPosition} onPrevious={() => skip(-1)} onNext={() => skip(1)} />
       {isDragging && <div className="drop-overlay"><div><span>↓</span><h2>Drop music to import</h2><p>Files and nested folders are welcome</p></div></div>}
       {importMessage && <div className="import-toast" role="status">✓ {importMessage}</div>}
+      {showDuplicates && <DuplicateDialog tracks={tracks} onClose={() => setShowDuplicates(false)} onRemove={(ids) => { setTracks((current) => current.filter((track) => !ids.has(track.id))); setPlaylists((current) => current.map((playlist) => ({ ...playlist, trackIds: playlist.trackIds.filter((id) => !ids.has(id)) }))); if (nowPlaying && ids.has(nowPlaying.id)) { setNowPlaying(null); setIsPlaying(false); setPosition(0); } setShowDuplicates(false); setImportMessage(`Removed ${ids.size} duplicate${ids.size === 1 ? '' : 's'}`); }} />}
     </div>
   );
 }

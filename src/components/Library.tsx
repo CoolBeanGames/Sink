@@ -9,12 +9,13 @@ type LibraryProps = {
   onDrilldown: (value: string) => void;
   onPlay: (track: Track) => void;
   onBack: () => void;
+  onOpenDuplicates: () => void;
 };
 
 const unique = (items: string[]) => [...new Set(items)].sort((a, b) => a.localeCompare(b));
 const formatTime = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
-export function Library({ view, tracks, playlists, activePlaylistId, drilldown, onDrilldown, onPlay, onBack }: LibraryProps) {
+export function Library({ view, tracks, playlists, activePlaylistId, drilldown, onDrilldown, onPlay, onBack, onOpenDuplicates }: LibraryProps) {
   const playlist = playlists.find((item) => item.id === activePlaylistId);
   const title = view === 'playlist' ? playlist?.name ?? 'Playlist' : `${view[0].toUpperCase()}${view.slice(1)}`;
   let visibleTracks = tracks;
@@ -36,7 +37,7 @@ export function Library({ view, tracks, playlists, activePlaylistId, drilldown, 
           <h1>{drilldown ?? title}</h1>
           <p className="subtitle">{drilldown || view === 'songs' || view === 'playlist' ? `${visibleTracks.length} tracks` : `${groupValues.length} ${title.toLowerCase()}`}</p>
         </div>
-        <label className="search"><span>⌕</span><input aria-label="Search library" placeholder="Search your library" /></label>
+        <div className="header-actions"><button className="tool-button" onClick={onOpenDuplicates}>⊙ Duplicates</button><label className="search"><span>⌕</span><input aria-label="Search library" placeholder="Search your library" /></label></div>
       </header>
 
       {!drilldown && ['albums', 'artists', 'genres'].includes(view) ? (
