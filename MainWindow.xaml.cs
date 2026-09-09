@@ -301,6 +301,24 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private void Duplicates_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new DuplicateWindow(_tracks) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.SelectedIds.Count == 0) return;
+        var ids = dialog.SelectedIds;
+        foreach (var track in _tracks.Where(track => ids.Contains(track.Id)).ToList()) _tracks.Remove(track);
+        foreach (var playlist in _playlists)
+            foreach (var id in playlist.TrackIds.Where(ids.Contains).ToList()) playlist.TrackIds.Remove(id);
+        if (_nowPlaying is not null && ids.Contains(_nowPlaying.Id))
+        {
+            _mediaPlayer.Stop(); _mediaPlayer.Close(); _nowPlaying = null; _isPlaying = false; _playbackTimer.Stop();
+            PlayerTitle.Text = "Choose something to play"; PlayerArtist.Text = "Your library is ready"; PlayerArtInitial.Text = "♫"; PlayPauseButton.Content = "▶";
+        }
+        PlaylistList.Items.Refresh();
+        RenderLibrary();
+        PlaybackStatus.Text = $"Removed {ids.Count} duplicate{(ids.Count == 1 ? "" : "s")}";
+    }
+
     private void BackButton_Click(object sender, RoutedEventArgs e) { _drilldown = null; RenderLibrary(); }
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) { if (IsLoaded) RenderLibrary(); }
 

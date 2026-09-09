@@ -40,9 +40,7 @@
                     <TextBlock x:Name="ViewSubtitle" Foreground="#7D8493" FontSize="12"/>
                     <TextBlock x:Name="PlaybackStatus" Foreground="#A79DFF" FontSize="11" Margin="0,5,0,0"/>
                 </StackPanel>
-                <Border HorizontalAlignment="Right" VerticalAlignment="Top" Width="260" Height="39" Background="#12151C" BorderBrush="#262C38" BorderThickness="1" CornerRadius="10" Padding="12,7">
-                    <DockPanel><TextBlock Text="⌕" Foreground="#747B8B" Margin="0,0,8,0"/><TextBox x:Name="SearchBox" TextChanged="SearchBox_TextChanged" Background="Transparent" BorderThickness="0" Foreground="#F4F6FA" CaretBrush="#F4F6FA"/></DockPanel>
-                </Border>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"><Button Content="⊙  Duplicates" Click="Duplicates_Click" Margin="0,0,9,0" Padding="13,8" Background="#161A22" Foreground="#BCC2CD" BorderBrush="#303744"/><Border Width="260" Height="39" Background="#12151C" BorderBrush="#262C38" BorderThickness="1" CornerRadius="10" Padding="12,7"><DockPanel><TextBlock Text="⌕" Foreground="#747B8B" Margin="0,0,8,0"/><TextBox x:Name="SearchBox" TextChanged="SearchBox_TextChanged" Background="Transparent" BorderThickness="0" Foreground="#F4F6FA" CaretBrush="#F4F6FA"/></DockPanel></Border></StackPanel>
             </Grid>
             <ScrollViewer x:Name="GroupsScroller" Grid.Row="1" Margin="0,28,0,0" VerticalScrollBarVisibility="Auto">
                 <ItemsControl x:Name="GroupsView"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
