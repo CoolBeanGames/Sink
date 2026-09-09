@@ -46,6 +46,14 @@ export default function App() {
     window.setTimeout(() => setImportMessage(null), 3200);
   };
 
+  const addToPlaylist = (playlistId: string, trackId: string) => {
+    const playlist = playlists.find((item) => item.id === playlistId);
+    const added = Boolean(playlist && !playlist.trackIds.includes(trackId));
+    if (added) setPlaylists((current) => current.map((item) => item.id === playlistId ? { ...item, trackIds: [...item.trackIds, trackId] } : item));
+    setImportMessage(added ? `Added to ${playlist?.name ?? 'playlist'}` : `Already in ${playlist?.name ?? 'playlist'}`);
+    window.setTimeout(() => setImportMessage(null), 2400);
+  };
+
   const navigate = (nextView: LibraryView, playlistId?: string) => {
     setView(nextView); setDrilldown(null); setActivePlaylistId(playlistId ?? null);
   };
@@ -60,7 +68,7 @@ export default function App() {
 
   return (
     <div className="app-shell" onDragEnter={(event) => { event.preventDefault(); setIsDragging(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (event.currentTarget === event.target) setIsDragging(false); }} onDrop={importDrop}>
-      <Sidebar view={view} activePlaylistId={activePlaylistId} playlists={playlists} onNavigate={navigate} onCreatePlaylist={createPlaylist} />
+      <Sidebar view={view} activePlaylistId={activePlaylistId} playlists={playlists} onNavigate={navigate} onCreatePlaylist={createPlaylist} onAddToPlaylist={addToPlaylist} />
       <Library view={view} tracks={tracks} playlists={playlists} activePlaylistId={activePlaylistId} drilldown={drilldown} onDrilldown={setDrilldown} onBack={() => setDrilldown(null)} onPlay={playTrack} />
       <IpodDock />
       <Player track={nowPlaying} isPlaying={isPlaying} position={position} onToggle={() => nowPlaying && setIsPlaying((value) => !value)} onSeek={setPosition} onPrevious={() => skip(-1)} onNext={() => skip(1)} />

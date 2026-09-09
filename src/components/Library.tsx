@@ -56,7 +56,7 @@ export function Library({ view, tracks, playlists, activePlaylistId, drilldown, 
         <section className="track-table" aria-label={`${title} tracks`}>
           <div className="track-row table-heading"><span>#</span><span>Title</span><span>Album</span><span>Genre</span><span>Time</span></div>
           {visibleTracks.map((track, index) => (
-            <button className="track-row" key={track.id} onDoubleClick={() => onPlay(track)} title="Double-click to play">
+            <button className="track-row" key={track.id} draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('application/x-sink-track', track.id); }} onDoubleClick={() => onPlay(track)} title="Double-click to play · Drag to add to a playlist">
               <span className="track-number">{index + 1}</span>
               <span className="track-title"><i className={`mini-cover cover-${index % 4}`} /><span><strong>{track.title}</strong><small>{track.artist}</small></span></span>
               <span>{track.album}</span><span>{track.genre}</span><span>{formatTime(track.duration)}</span>

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { LibraryView, Playlist } from '../types';
 
 const categories: { id: Exclude<LibraryView, 'playlist'>; label: string; icon: string }[] = [
@@ -13,9 +14,11 @@ type SidebarProps = {
   playlists: Playlist[];
   onNavigate: (view: LibraryView, playlistId?: string) => void;
   onCreatePlaylist: () => void;
+  onAddToPlaylist: (playlistId: string, trackId: string) => void;
 };
 
-export function Sidebar({ view, activePlaylistId, playlists, onNavigate, onCreatePlaylist }: SidebarProps) {
+export function Sidebar({ view, activePlaylistId, playlists, onNavigate, onCreatePlaylist, onAddToPlaylist }: SidebarProps) {
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   return (
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark">S</span><span>Sink</span></div>
@@ -33,7 +36,7 @@ export function Sidebar({ view, activePlaylistId, playlists, onNavigate, onCreat
       </div>
       <div className="playlist-list">
         {playlists.map((playlist) => (
-          <button key={playlist.id} className={`nav-item ${view === 'playlist' && activePlaylistId === playlist.id ? 'active' : ''}`} onClick={() => onNavigate('playlist', playlist.id)}>
+          <button key={playlist.id} className={`nav-item playlist-target ${view === 'playlist' && activePlaylistId === playlist.id ? 'active' : ''} ${dropTarget === playlist.id ? 'drag-over' : ''}`} onClick={() => onNavigate('playlist', playlist.id)} onDragOver={(event) => { if (event.dataTransfer.types.includes('application/x-sink-track')) { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'copy'; setDropTarget(playlist.id); } }} onDragLeave={() => setDropTarget(null)} onDrop={(event) => { event.preventDefault(); event.stopPropagation(); const trackId = event.dataTransfer.getData('application/x-sink-track'); if (trackId) onAddToPlaylist(playlist.id, trackId); setDropTarget(null); }}>
             <span aria-hidden="true">≡</span>{playlist.name}<small>{playlist.trackIds.length}</small>
           </button>
         ))}

@@ -13,6 +13,7 @@ button { color: inherit; }
 .nav-item.active { background: #2b2850; color: #e9e5ff; }
 .nav-item > span { width: 18px; text-align: center; color: #8b7cff; }
 .nav-item small { margin-left: auto; color: #73798a; }
+.playlist-target.drag-over { color: #fff; background: #403878; box-shadow: inset 0 0 0 1px #8b7cff; transform: translateX(3px); }
 .playlist-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: -14px; }
 .playlist-heading .eyebrow { margin-bottom: 0; }
 .icon-button { border: 0; background: transparent; color: #8b7cff; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: 20px; }
@@ -42,6 +43,7 @@ h1 { font-size: 34px; line-height: 1.1; margin: 4px 0 7px; letter-spacing: -1px;
 .track-table { border: 1px solid #262c38; border-radius: 12px; overflow: hidden; background: #12151c; }
 .track-row { width: 100%; border: 0; border-top: 1px solid #20252f; background: transparent; display: grid; grid-template-columns: 42px minmax(250px, 1.5fr) minmax(150px, 1fr) minmax(110px,.6fr) 60px; align-items: center; min-height: 57px; padding: 0 16px; text-align: left; color: #aeb4c1; cursor: default; }
 button.track-row:hover, button.track-row:focus { background: #1a1e27; outline: none; }
+button.track-row[draggable="true"] { cursor: grab; } button.track-row[draggable="true"]:active { cursor: grabbing; }
 .table-heading { min-height: 37px; border-top: 0; color: #727989; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
 .track-number { color: #686f7d; }
 .track-title { display: flex; align-items: center; gap: 11px; color: #edf0f5; }
