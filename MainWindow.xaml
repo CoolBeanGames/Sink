@@ -5,6 +5,27 @@
         Title="Sink" Icon="Assets/sink.ico" Width="1260" Height="800" MinWidth="940" MinHeight="620" WindowStartupLocation="CenterScreen" Background="#0B0D12" AllowDrop="True" DragEnter="Window_DragEnter" DragOver="Window_DragOver" DragLeave="Window_DragLeave" Drop="Window_Drop">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="B2V"/>
+        <Style x:Key="EpisodeIconButton" TargetType="Button">
+            <Setter Property="Background" Value="#242A34"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="8"/>
+            <Setter Property="Margin" Value="4,0"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="C" Background="{TemplateBinding Background}" CornerRadius="7" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="C" Property="Background" Value="#2E3543"/></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="C" Property="Background" Value="#1C212B"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="EyebrowStyle" TargetType="TextBlock"><Setter Property="Foreground" Value="#7D8493"/><Setter Property="FontSize" Value="10"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
         <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#12151C"/><Setter Property="Foreground" Value="#747B8A"/><Setter Property="BorderBrush" Value="#262C38"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="Padding" Value="12,10"/><Setter Property="FontSize" Value="10"/></Style>
         <Style TargetType="DataGridCell"><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="12,9"/><Setter Property="Foreground" Value="#BFC4CE"/><Setter Property="Background" Value="Transparent"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/></Style>
@@ -273,6 +294,11 @@
                     </ComboBox>
                     <CheckBox x:Name="EpisodeUnplayedOnly" Content="Unplayed only" Foreground="#C7CCD6" VerticalAlignment="Center" Click="EpisodeFilter_Changed"/>
                 </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <Button Content="Download all" Click="DownloadAllEpisodes_Click" Background="#1E2A20" Foreground="#8FD69A" BorderThickness="0" Padding="12,7" Margin="0,0,8,0" Cursor="Hand"/>
+                    <Button Content="Mark all played" Click="MarkAllPlayed_Click" Background="#242A34" Foreground="#CBD0DA" BorderThickness="0" Padding="12,7" Margin="0,0,8,0" Cursor="Hand"/>
+                    <Button Content="Delete all downloads" Click="DeleteAllDownloads_Click" Background="#2E2022" Foreground="#E0918C" BorderThickness="0" Padding="12,7" Cursor="Hand"/>
+                </StackPanel>
             </StackPanel>
 
             <ScrollViewer Grid.Row="2" Margin="0,22,0,0" VerticalScrollBarVisibility="Auto">
@@ -333,10 +359,21 @@
                                 <Grid>
                                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                                     <DockPanel>
-                                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
                                             <Button Content="▶" Click="EpisodePlay_Click" ToolTip="Play" Style="{StaticResource PlayButtonStyle}" Width="30" Height="30" Margin="4,0"/>
-                                            <Button x:Name="EpDownloadBtn" Content="⭳" Click="EpisodeDownload_Click" ToolTip="Download / delete download" Background="#242A34" Foreground="#CBD0DA" BorderThickness="0" Padding="9,5" Margin="4,0"/>
-                                            <Button Content="✓" Click="EpisodeMarkPlayed_Click" ToolTip="Mark played / unplayed" Background="#242A34" Foreground="#CBD0DA" BorderThickness="0" Padding="9,5" Margin="4,0"/>
+                                            <Button x:Name="DlBtn" Click="EpisodeDownload_Click" ToolTip="Download" Style="{StaticResource EpisodeIconButton}">
+                                                <Grid Width="14" Height="14">
+                                                    <Path x:Name="DlArrow" Data="M7,1 L7,9 M3.5,6 L7,9.5 L10.5,6 M2,12.5 L12,12.5" Stroke="#5FC46B" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                                    <Path x:Name="DlX" Data="M2,2 L12,12 M12,2 L2,12" Stroke="#E56A63" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Visibility="Collapsed"/>
+                                                </Grid>
+                                            </Button>
+                                            <Button x:Name="EyeBtn" Click="EpisodeMarkPlayed_Click" ToolTip="Mark played / unplayed" Style="{StaticResource EpisodeIconButton}" Padding="7,9">
+                                                <Grid Width="18" Height="12">
+                                                    <Path x:Name="EyeOpen" Data="M1,6 C4,1 14,1 17,6 C14,11 4,11 1,6 Z" Stroke="#CBD0DA" StrokeThickness="1.2" Fill="Transparent"/>
+                                                    <Ellipse x:Name="EyePupil" Width="4.5" Height="4.5" Fill="#CBD0DA"/>
+                                                    <Path x:Name="EyeClosed" Data="M1,5 C4,10 14,10 17,5 M3,8 L2.2,9.6 M9,9.6 L9,11.4 M15,8 L15.8,9.6" Stroke="#8B7CFF" StrokeThickness="1.4" StrokeStartLineCap="Round" Visibility="Collapsed"/>
+                                                </Grid>
+                                            </Button>
                                         </StackPanel>
                                         <StackPanel>
                                             <StackPanel Orientation="Horizontal">
@@ -352,6 +389,18 @@
                                     <ProgressBar Grid.Row="1" Height="4" Margin="0,8,0,0" Minimum="0" Maximum="1" Value="{Binding Progress, Mode=OneWay}" Background="#1B1F28" BorderThickness="0" Foreground="#8B7CFF"/>
                                 </Grid>
                             </Border>
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding IsDownloaded}" Value="True">
+                                    <Setter TargetName="DlArrow" Property="Visibility" Value="Collapsed"/>
+                                    <Setter TargetName="DlX" Property="Visibility" Value="Visible"/>
+                                    <Setter TargetName="DlBtn" Property="ToolTip" Value="Delete download"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsPlayed}" Value="True">
+                                    <Setter TargetName="EyeOpen" Property="Visibility" Value="Collapsed"/>
+                                    <Setter TargetName="EyePupil" Property="Visibility" Value="Collapsed"/>
+                                    <Setter TargetName="EyeClosed" Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
                         </DataTemplate></ItemsControl.ItemTemplate>
                     </ItemsControl>
 
