@@ -176,7 +176,7 @@
                                       Background="Transparent" BorderThickness="0" MaxHeight="420" RowHeight="30" CanUserAddRows="False" CanUserDeleteRows="False"
                                       SelectionUnit="FullRow" SelectionMode="Extended" CellEditEnding="LinksGrid_CellEditEnding"
                                       SelectionChanged="LinksGrid_SelectionChanged" ContextMenuOpening="LinksGrid_ContextMenuOpening" VerticalScrollBarVisibility="Auto"
-                                      RowDetailsVisibilityMode="Collapsed">
+                                      RowDetailsVisibilityMode="Collapsed" LoadingRow="LinksGrid_LoadingRow">
                                 <DataGrid.ContextMenu><ContextMenu/></DataGrid.ContextMenu>
                                 <DataGrid.RowDetailsTemplate>
                                     <DataTemplate>
@@ -201,7 +201,6 @@
                                         <Setter Property="BorderBrush" Value="#20252F"/>
                                         <Setter Property="BorderThickness" Value="0,0,0,1"/>
                                         <Setter Property="MinHeight" Value="0"/>
-                                        <Setter Property="DetailsVisibility" Value="{Binding IsExpanded, Converter={StaticResource B2V}}"/>
                                         <Style.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#1B1F28"/></Trigger>
                                             <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#2B2850"/><Setter Property="Foreground" Value="#F4F6FA"/></Trigger>
@@ -222,6 +221,7 @@
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
                                                 <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                              Click="LinkExpand_Click"
                                                               Visibility="{Binding HasTrackList, Converter={StaticResource B2V}}"
                                                               VerticalAlignment="Center" FontSize="10" Cursor="Hand"
                                                               Background="Transparent" BorderThickness="0" Foreground="#8A93A3" Content="▸">

@@ -34,6 +34,30 @@ public static partial class DownloadService
     /// </summary>
     public static async Task<ScannedInfo> ScanAsync(string url, CancellationToken token = default)
     {
+        var info = await ScanRawAsync(url, token).ConfigureAwait(false);
+        if (info.Albums is { Count: > 0 }) return info;
+
+        // A YouTube Music artist handle (music.youtube.com/@name) resolves to the
+        // artist's *Videos* tab by default, so it looks like a 39-track "album".
+        // Re-scan through the canonical channel URL, which lists the discography.
+        if (ArtistUrl().IsMatch(url) && info.IsPlaylist)
+        {
+            var channelUrl = await ResolveChannelUrlAsync(url, token).ConfigureAwait(false);
+            if (channelUrl is not null && !string.Equals(channelUrl, url, StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var retry = await ScanRawAsync(channelUrl, token).ConfigureAwait(false);
+                    if (retry.Albums is { Count: > 0 }) return retry;
+                }
+                catch (Exception e) when (e is InvalidOperationException) { }
+            }
+        }
+        return info;
+    }
+
+    private static async Task<ScannedInfo> ScanRawAsync(string url, CancellationToken token)
+    {
         // No --no-playlist: let yt-dlp decide. --flat-playlist keeps it fast by
         // not resolving every entry of an album.
         var (exit, stdout, stderr) = await RunAsync(
@@ -54,9 +78,10 @@ public static partial class DownloadService
             var albums = entryList
                 .Where(en => IsPlaylistEntry(en))
                 .Select(en => new ScannedAlbum(Str(en, "url") ?? "", StripCollectionPrefix(Str(en, "title") ?? "Album")))
-                .Where(a => a.Url.Length > 0)
+                .Where(a => a.Url.Length > 0 && !IsChannelTabName(a.Title))
                 .ToList();
-            if (albums.Count > 0 && albums.Count == entryList.Count)
+            // Treat it as an artist page when (almost) every entry is a playlist.
+            if (albums.Count > 0 && albums.Count >= entryList.Count - 3)
             {
                 var who = CleanUploader(Str(root, "uploader") ?? Str(root, "channel") ?? Str(root, "title")) ?? "Unknown Artist";
                 return new ScannedInfo(who.Trim(), who.Trim(), "", "Unknown", IsPlaylist: false, TrackCount: 0, Albums: albums);
@@ -199,6 +224,33 @@ public static partial class DownloadService
         ".mp3", ".m4a", ".aac", ".opus", ".ogg", ".flac", ".wav"
     };
 
+    private static bool IsChannelTabName(string title) => title.Trim() is
+        "Videos" or "Shorts" or "Live" or "Podcasts" or "Playlists" or "Releases" or "Community" or "Home" or "Store";
+
+    /// <summary>
+    /// Asks yt-dlp for a channel/handle URL's canonical channel id (no entries
+    /// resolved) and returns the YouTube Music artist URL for it.
+    /// </summary>
+    private static async Task<string?> ResolveChannelUrlAsync(string url, CancellationToken token)
+    {
+        try
+        {
+            var (exit, stdout, _) = await RunAsync(
+                ["-J", "--flat-playlist", "--playlist-items", "0", "--no-warnings", url], null, token).ConfigureAwait(false);
+            if (exit != 0) return null;
+            using var doc = JsonDocument.Parse(stdout);
+            var id = Str(doc.RootElement, "channel_id") ?? Str(doc.RootElement, "uploader_id") ?? Str(doc.RootElement, "id");
+            if (string.IsNullOrWhiteSpace(id)) return null;
+            return id.StartsWith("UC", StringComparison.Ordinal)
+                ? $"https://music.youtube.com/channel/{id}"
+                : $"https://music.youtube.com/{id}";
+        }
+        catch (Exception e) when (e is InvalidOperationException or JsonException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>True when a flat-playlist entry points at another playlist / album rather than a single video.</summary>
     private static bool IsPlaylistEntry(JsonElement entry)
     {
@@ -304,4 +356,7 @@ public static partial class DownloadService
 
     [GeneratedRegex(@"^\s*(album|single|ep|playlist)\s*[-–—]\s*", RegexOptions.IgnoreCase)]
     private static partial Regex CollectionPrefix();
+
+    [GeneratedRegex(@"(youtube\.com|music\.youtube\.com)/(@|channel/|c/|user/|artist/)", RegexOptions.IgnoreCase)]
+    private static partial Regex ArtistUrl();
 }

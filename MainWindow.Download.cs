@@ -165,6 +165,22 @@ public partial class MainWindow
 
     private void LinksGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
 
+    // The DataGrid owns each row's DetailsVisibility, so a bound Setter loses to
+    // it — drive the row's track list open/closed from code instead.
+    private void LinkExpand_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Primitives.ToggleButton { DataContext: DownloadItem item } tb) return;
+        item.IsExpanded = tb.IsChecked == true;
+        if (LinksGrid.ItemContainerGenerator.ContainerFromItem(item) is DataGridRow row)
+            row.DetailsVisibility = item.IsExpanded ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void LinksGrid_LoadingRow(object sender, DataGridRowEventArgs e)
+    {
+        if (e.Row.Item is DownloadItem item)
+            e.Row.DetailsVisibility = item.IsExpanded ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private void LinksGrid_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         var items = SelectedDownloadItems();
