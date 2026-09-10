@@ -9,7 +9,7 @@
         <Style TargetType="DataGridCell"><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="12,9"/><Setter Property="Foreground" Value="#BFC4CE"/><Setter Property="Background" Value="Transparent"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/></Style>
         <Style TargetType="DataGridRow"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="#20252F"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="MinHeight" Value="48"/><Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#1B1F28"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#2B2850"/><Setter Property="Foreground" Value="#F4F6FA"/></Trigger></Style.Triggers></Style>
     </Window.Resources>
-    <Grid>
+    <Grid x:Name="RootGrid">
         <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="82"/></Grid.RowDefinitions>
         <Grid.ColumnDefinitions><ColumnDefinition Width="238"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
         <Border Grid.RowSpan="2" Background="#12151C" BorderBrush="#262C38" BorderThickness="0,0,1,0" Padding="16,24">
@@ -51,10 +51,18 @@
                         <Button x:Name="IpodSongsButton" Content="♫    Songs" Tag="Songs" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
                         <TextBlock x:Name="IpodNavHint" Text="Drag music onto IPOD to sync" Foreground="#6E7584" FontSize="10" Margin="12,7,0,2"/>
                     </StackPanel>
+                    <Button x:Name="DownloadHeaderButton" Click="ShowDownloadSource_Click" Style="{StaticResource SectionHeaderButtonStyle}" Margin="0,14,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="15" Height="17" Margin="0,0,7,0">
+                                <Path Data="M7,0 L7,9 M3,6 L7,10 L11,6 M1,14 L13,14" Stroke="#8B7CFF" StrokeThickness="1.6" StrokeEndLineCap="Round" StrokeStartLineCap="Round"/>
+                            </Border>
+                            <TextBlock Text="DOWNLOAD" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>
-        <Grid Grid.Column="1" Margin="38,32,38,30">
+        <Grid x:Name="MusicPage" Grid.Column="1" Margin="38,32,38,30">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <Grid>
                 <StackPanel>
@@ -83,6 +91,107 @@
                 </Grid>
             </Border>
         </Grid>
+        <Grid x:Name="DownloadPage" Grid.Column="1" Margin="38,32,38,24" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <StackPanel>
+                <TextBlock Text="GET MUSIC" Style="{StaticResource EyebrowStyle}"/>
+                <TextBlock Text="Download" FontSize="34" FontWeight="SemiBold" Margin="0,4,0,2"/>
+                <TextBlock x:Name="DownloadSubtitle" Foreground="#7D8493" FontSize="12" Text="Paste YouTube links, tidy the details, then download."/>
+            </StackPanel>
+
+            <Border Grid.Row="1" Margin="0,22,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#12151C">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <DockPanel Margin="15,11,12,11">
+                        <Button DockPanel.Dock="Right" Content="＋  Add link" Click="AddLink_Click" Style="{StaticResource PrimaryButtonStyle}" Background="#272243" Foreground="#CBC5FF" Padding="12,7"/>
+                        <TextBlock Text="LINKS" Style="{StaticResource EyebrowStyle}" VerticalAlignment="Center"/>
+                    </DockPanel>
+                    <Border Grid.Row="1" BorderBrush="#20252F" BorderThickness="0,1,0,0">
+                        <Grid>
+                            <TextBlock x:Name="DownloadEmptyHint" Text="No links yet — click Add link to paste one." Foreground="#6E7584" FontSize="12" Margin="16,18" HorizontalAlignment="Center"/>
+                            <DataGrid x:Name="LinksGrid" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="None"
+                                      Background="Transparent" BorderThickness="0" MaxHeight="260" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      SelectionUnit="Cell" SelectionMode="Single" CellEditEnding="LinksGrid_CellEditEnding">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="TITLE" Binding="{Binding Title}" Width="2*"/>
+                                    <DataGridTextColumn Header="ARTIST" Binding="{Binding Artist}" Width="*"/>
+                                    <DataGridTextColumn Header="ALBUM" Binding="{Binding Album}" Width="*"/>
+                                    <DataGridTextColumn Header="GENRE" Binding="{Binding Genre}" Width="120"/>
+                                    <DataGridTextColumn Header="LINK" Binding="{Binding Url}" Width="1.4*"/>
+                                    <DataGridTextColumn Header="STATUS" Binding="{Binding StatusText}" Width="150" IsReadOnly="True"/>
+                                    <DataGridTemplateColumn Width="44" IsReadOnly="True">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Button Content="✕" Click="DeleteLink_Click" Background="Transparent" Foreground="#8A93A3" BorderThickness="0" Cursor="Hand" ToolTip="Remove"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <Border x:Name="DownloadOptionsPanel" Grid.Row="2" VerticalAlignment="Top" Margin="0,16,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#12151C" Padding="16,14">
+                <StackPanel>
+                    <TextBlock Text="DOWNLOAD OPTIONS" Style="{StaticResource EyebrowStyle}" Margin="0,0,0,12"/>
+                    <WrapPanel>
+                        <CheckBox x:Name="OptMetadata" Content="Write metadata tags" IsChecked="True" Foreground="#C7CCD6" Margin="0,0,26,10"/>
+                        <CheckBox x:Name="OptAlbumArt" Content="Embed album art" IsChecked="True" Foreground="#C7CCD6" Margin="0,0,26,10"/>
+                        <CheckBox x:Name="OptMusicMeta" Content="Prefer YouTube Music details" IsChecked="True" Foreground="#C7CCD6" Margin="0,0,26,10"/>
+                    </WrapPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <StackPanel Margin="0,0,26,0">
+                            <TextBlock Text="FORMAT" Style="{StaticResource EyebrowStyle}" Margin="0,0,0,5"/>
+                            <ComboBox x:Name="OptFormat" Width="140" SelectedIndex="0">
+                                <ComboBoxItem Content="MP3"/>
+                                <ComboBoxItem Content="M4A (AAC)"/>
+                                <ComboBoxItem Content="Opus"/>
+                                <ComboBoxItem Content="FLAC (lossless)"/>
+                                <ComboBoxItem Content="WAV"/>
+                            </ComboBox>
+                        </StackPanel>
+                        <StackPanel>
+                            <TextBlock Text="QUALITY" Style="{StaticResource EyebrowStyle}" Margin="0,0,0,5"/>
+                            <ComboBox x:Name="OptQuality" Width="160" SelectedIndex="0">
+                                <ComboBoxItem Content="Best available" Tag="0"/>
+                                <ComboBoxItem Content="320 kbps" Tag="320"/>
+                                <ComboBoxItem Content="256 kbps" Tag="256"/>
+                                <ComboBoxItem Content="192 kbps" Tag="192"/>
+                                <ComboBoxItem Content="128 kbps" Tag="128"/>
+                            </ComboBox>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Grid Grid.Row="3" Margin="0,16,0,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <Grid>
+                        <TextBlock x:Name="DownloadProgressLabel" Text="0 of 0 downloaded" Foreground="#7D8493" FontSize="11"/>
+                    </Grid>
+                    <ProgressBar x:Name="DownloadProgressBar" Height="8" Minimum="0" Maximum="1" Value="0" Margin="0,6,16,0"
+                                 Background="#1B1F28" BorderThickness="0" Foreground="#8B7CFF"/>
+                </StackPanel>
+                <Button x:Name="DownloadButton" Grid.Column="1" Content="⭳  Download" Click="StartDownloads_Click" Style="{StaticResource PrimaryButtonStyle}" Padding="18,10" VerticalAlignment="Center"/>
+            </Grid>
+
+            <Border Grid.Row="5" Margin="0,16,0,0" Background="#161A22" BorderBrush="#2A303C" BorderThickness="1" CornerRadius="9" Padding="13,8">
+                <TextBlock x:Name="DownloadStatusBar" Text="Ready" Foreground="#9AA0AE" FontSize="11" TextTrimming="CharacterEllipsis"/>
+            </Border>
+        </Grid>
+
+        <Border x:Name="DownloadDim" Grid.RowSpan="2" Grid.ColumnSpan="2" Panel.ZIndex="40" Visibility="Collapsed" Background="#99090B10"/>
+
         <Border Grid.Row="1" Grid.Column="1" Background="#161A22" BorderBrush="#2A303C" BorderThickness="0,1,0,0" Padding="24,10">
             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" MinWidth="220"/><ColumnDefinition Width="1.4*" MinWidth="380"/><ColumnDefinition Width="*" MinWidth="140"/></Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -109,7 +218,7 @@
                 <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"><TextBlock Text="VOL" Foreground="#6E7584" FontSize="9" VerticalAlignment="Center" Margin="0,0,8,0"/><Slider x:Name="VolumeSlider" Width="95" Minimum="0" Maximum="1" Value="0.7" ValueChanged="VolumeSlider_ValueChanged"/></StackPanel>
             </Grid>
         </Border>
-        <Canvas Grid.Row="0" Grid.Column="1" Panel.ZIndex="12" IsHitTestVisible="True" ClipToBounds="True">
+        <Canvas x:Name="IpodCanvas" Grid.Row="0" Grid.Column="1" Panel.ZIndex="12" IsHitTestVisible="True" ClipToBounds="True">
             <Button x:Name="IpodButton" Style="{StaticResource IpodButtonStyle}" Width="300" Height="300" Canvas.Right="-150" Canvas.Bottom="-150" Click="IpodButton_Click" AllowDrop="True" DragOver="IpodButton_DragOver" DragLeave="IpodButton_DragLeave" Drop="IpodButton_Drop" ToolTip="No iPod connected · Click to simulate connection">
                 <Button.ContextMenu>
                     <ContextMenu x:Name="IpodMenu" Background="#1D222C" Foreground="#F4F6FA" BorderBrush="#363D4B" Opened="IpodMenu_Opened">
