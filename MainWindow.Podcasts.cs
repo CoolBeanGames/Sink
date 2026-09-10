@@ -24,7 +24,6 @@ public partial class MainWindow
     private Podcast? _currentShow;
     private PodcastMode _podcastMode = PodcastMode.Library;
     private bool _podcastViewActive;
-    private CancellationTokenSource? _podcastCts;
 
     private readonly MediaPlayer _podcastPlayer = new();
     private readonly DispatcherTimer _podcastTimer = new() { Interval = TimeSpan.FromSeconds(1) };
