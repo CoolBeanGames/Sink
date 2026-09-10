@@ -6,7 +6,12 @@ using System.Text.RegularExpressions;
 
 namespace Sink.Services.Download;
 
-public sealed record ScannedInfo(string Title, string Artist, string Album, string Genre, bool IsPlaylist, int TrackCount);
+public sealed record ScannedInfo(
+    string Title, string Artist, string Album, string Genre, bool IsPlaylist, int TrackCount,
+    IReadOnlyList<ScannedAlbum>? Albums = null);
+
+/// <summary>One album found on a YouTube Music artist page.</summary>
+public sealed record ScannedAlbum(string Url, string Title);
 
 /// <summary>
 /// Drives yt-dlp: a metadata-only scan of a link, and the actual audio
@@ -41,7 +46,23 @@ public static partial class DownloadService
 
         if (root.TryGetProperty("entries", out var entries) && entries.ValueKind == JsonValueKind.Array && entries.GetArrayLength() > 0)
         {
-            var count = entries.GetArrayLength();
+            var entryList = entries.EnumerateArray().ToList();
+
+            // A YouTube Music artist / channel page flattens to a list whose
+            // entries are themselves playlists (albums), not videos. Hand those
+            // album links back so the caller can scan each one on its own.
+            var albums = entryList
+                .Where(en => IsPlaylistEntry(en))
+                .Select(en => new ScannedAlbum(Str(en, "url") ?? "", StripCollectionPrefix(Str(en, "title") ?? "Album")))
+                .Where(a => a.Url.Length > 0)
+                .ToList();
+            if (albums.Count > 0 && albums.Count == entryList.Count)
+            {
+                var who = CleanUploader(Str(root, "uploader") ?? Str(root, "channel") ?? Str(root, "title")) ?? "Unknown Artist";
+                return new ScannedInfo(who.Trim(), who.Trim(), "", "Unknown", IsPlaylist: false, TrackCount: 0, Albums: albums);
+            }
+
+            var count = entryList.Count;
             var album = StripCollectionPrefix(Str(root, "title") ?? Str(root, "playlist_title") ?? "Unknown Album");
             var artist = CleanUploader(Str(root, "uploader") ?? Str(root, "channel") ?? Str(entries[0], "uploader") ?? Str(entries[0], "channel")) ?? "Unknown Artist";
             return new ScannedInfo(album.Trim(), artist.Trim(), album.Trim(), "Unknown", IsPlaylist: true, TrackCount: count);
@@ -159,6 +180,20 @@ public static partial class DownloadService
     {
         ".mp3", ".m4a", ".aac", ".opus", ".ogg", ".flac", ".wav"
     };
+
+    /// <summary>True when a flat-playlist entry points at another playlist / album rather than a single video.</summary>
+    private static bool IsPlaylistEntry(JsonElement entry)
+    {
+        var url = Str(entry, "url") ?? "";
+        if (url.Contains("watch", StringComparison.OrdinalIgnoreCase) || url.Contains("/watch?", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (url.Contains("playlist?", StringComparison.OrdinalIgnoreCase) || url.Contains("/browse/", StringComparison.OrdinalIgnoreCase))
+            return true;
+        var kind = Str(entry, "_type");
+        if (string.Equals(kind, "playlist", StringComparison.OrdinalIgnoreCase)) return true;
+        var ieKey = Str(entry, "ie_key") ?? "";
+        return ieKey.Contains("Tab", StringComparison.OrdinalIgnoreCase) || ieKey.Contains("Playlist", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string? Str(JsonElement e, string name) =>
         e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String && v.GetString() is { Length: > 0 } s ? s : null;

@@ -99,6 +99,30 @@ public partial class MainWindow
         try
         {
             var info = await Task.Run(() => DownloadService.ScanAsync(item.Url));
+
+            // An artist / channel link resolves to a set of albums — replace the
+            // single row with one row per album and scan each of those.
+            if (info.Albums is { Count: > 0 })
+            {
+                var at = Math.Max(0, _downloadItems.IndexOf(item));
+                _downloadItems.Remove(item);
+                SetDownloadStatus($"{info.Artist}: found {info.Albums.Count} album{(info.Albums.Count == 1 ? "" : "s")}");
+                foreach (var album in info.Albums)
+                {
+                    var albumItem = new DownloadItem
+                    {
+                        Url = album.Url,
+                        Artist = info.Artist,
+                        Album = album.Title,
+                        State = DownloadState.Pending,
+                        StatusText = "Scanning…",
+                    };
+                    _downloadItems.Insert(Math.Min(at++, _downloadItems.Count), albumItem);
+                    await ScanItemAsync(albumItem);
+                }
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(item.Title)) item.Title = info.Title;
             if (string.IsNullOrWhiteSpace(item.Artist)) item.Artist = info.Artist;
             if (string.IsNullOrWhiteSpace(item.Album)) item.Album = info.Album;
