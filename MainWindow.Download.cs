@@ -319,6 +319,15 @@ public partial class MainWindow
         SetDownloadStatus($"Updated metadata for “{node.Name}”");
     }
 
+    /// <summary>Sets every track's number to its position in the list (task 109).</summary>
+    private void NumberTracksByOrder(DownloadNode node)
+    {
+        var tracks = node.SelfAndDescendants().Where(c => c.Kind == DownloadKind.Track).ToList();
+        foreach (var track in tracks)
+            if (track.Index > 0) track.TrackNumber = track.Index;
+        SetDownloadStatus($"Numbered {tracks.Count} track{(tracks.Count == 1 ? "" : "s")} by list order");
+    }
+
     private void TrimTrackTitles(DownloadNode album)
     {
         var tracks = album.Children.Where(c => c.Kind == DownloadKind.Track).ToList();
@@ -490,6 +499,9 @@ public partial class MainWindow
             menu.Items.Add(Item("Clear cover art", () => { node.ArtworkOverride = null; RefreshDownloadNodeStatus(node); }));
         if (node.Kind == DownloadKind.Album && node.Children.Any(c => c.Kind == DownloadKind.Track))
             menu.Items.Add(Item("Trim track titles…", () => TrimTrackTitles(node)));
+        if (node.Kind is DownloadKind.Album or DownloadKind.Artist
+            && node.SelfAndDescendants().Any(c => c.Kind == DownloadKind.Track))
+            menu.Items.Add(Item("Number tracks by list order", () => NumberTracksByOrder(node)));
         if (node.Kind == DownloadKind.Album)
             menu.Items.Add(Item("Rescan tracks", () => { node.Scanned = false; node.IsExpanded = true; _ = ScanAlbumTracksAsync(node); }));
         menu.Items.Add(Item("Copy link", () =>
@@ -518,6 +530,7 @@ public partial class MainWindow
         WriteMetadata = OptMetadata.IsChecked == true,
         EmbedAlbumArt = OptAlbumArt.IsChecked == true,
         PreferMusicMetadata = OptMusicMeta.IsChecked == true,
+        NumberTracks = OptNumberTracks.IsChecked == true,
         Format = OptFormat.SelectedIndex switch
         {
             1 => AudioFormat.M4a,

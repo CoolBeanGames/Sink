@@ -257,7 +257,9 @@ public static partial class DownloadService
             // keeps yt-dlp's own title (see archived task 49).
             var title = !isPlaylist ? node.Title
                 : (trackNode.TitleEdited ? trackNode.Title.Trim() : null);
-            ApplyTags(finalPath, artist, album, genre, title, trackNode.TrackNumber, artBytes);
+            var trackNo = trackNode.TrackNumber > 0 ? trackNode.TrackNumber
+                : (options.NumberTracks && isPlaylist && trackNode.Index > 0 ? trackNode.Index : 0);
+            ApplyTags(finalPath, artist, album, genre, title, trackNo, artBytes);
             if (trackNode.Kind == DownloadKind.Track) trackNode.State = DownloadState.Done;
             finished.Add(finalPath);
         }

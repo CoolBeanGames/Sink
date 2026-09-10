@@ -236,6 +236,9 @@ public sealed class DownloadOptions
     public bool WriteMetadata { get; set; } = true;
     public bool EmbedAlbumArt { get; set; } = true;
     public bool PreferMusicMetadata { get; set; } = true;
+
+    /// <summary>Write each album track's playlist position as its track number when it has none of its own.</summary>
+    public bool NumberTracks { get; set; }
     public AudioFormat Format { get; set; } = AudioFormat.Mp3;
 
     /// <summary>Audio bitrate in kbps, or 0 for "best available".</summary>
