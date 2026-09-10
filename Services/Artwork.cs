@@ -1,6 +1,8 @@
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
 
 namespace Sink.Services;
 
@@ -13,6 +15,9 @@ public static class Artwork
 {
     public static string Directory { get; } = Path.Combine(LibraryStore.Directory, "artwork");
 
+    /// <summary>Every imported cover is normalised to this square size, centre-cropped.</summary>
+    public const int Size = 300;
+
     /// <summary>Saves the picture bytes for an album key and returns the file path, or null.</summary>
     public static string? Save(string key, byte[]? data, string? mimeType)
     {
@@ -20,13 +25,24 @@ public static class Artwork
         try
         {
             System.IO.Directory.CreateDirectory(Directory);
-            var ext = mimeType?.Contains("png", StringComparison.OrdinalIgnoreCase) == true ? ".png" : ".jpg";
-            var name = Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(key)))[..16] + ext;
+            // All cover art, regardless of source, is centre-cropped to a square
+            // and resized to Size x Size so the UI and the iPod get uniform tiles.
+            var name = Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(key)))[..16] + ".jpg";
             var path = Path.Combine(Directory, name);
-            if (!File.Exists(path)) File.WriteAllBytes(path, data);
+            if (!File.Exists(path))
+            {
+                using var image = Image.Load(data);
+                image.Mutate(ctx => ctx.Resize(new ResizeOptions
+                {
+                    Size = new SixLabors.ImageSharp.Size(Size, Size),
+                    Mode = ResizeMode.Crop,
+                    Position = AnchorPositionMode.Center
+                }));
+                image.SaveAsJpeg(path);
+            }
             return path;
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException or ImageFormatException or InvalidImageContentException)
         {
             return null;
         }
