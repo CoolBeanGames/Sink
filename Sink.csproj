@@ -8,7 +8,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>Sink</AssemblyName>
     <RootNamespace>Sink</RootNamespace>
-    <Version>0.5.0</Version>
+    <Version>0.6.0</Version>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Clickwheel" Version="0.1.1" />
