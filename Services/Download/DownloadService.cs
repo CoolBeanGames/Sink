@@ -189,18 +189,41 @@ public static partial class DownloadService
         var current = 0;
         var source = isPlaylist ? album : node.Title;
         status?.Report(isPlaylist ? $"Downloading track 1/{total} from {source}" : $"Downloading {source}");
+        // Light up each track as yt-dlp reaches it (task 114). yt-dlp works
+        // through an album in list order, so when it announces "item n" the
+        // ones before it are done and this one is now downloading.
+        void MarkTrackProgress(int itemIndex1Based)
+        {
+            if (!isPlaylist || titleOrder.Count == 0) return;
+            for (var i = 0; i < titleOrder.Count && i < itemIndex1Based - 1; i++)
+                if (titleOrder[i].State is DownloadState.Downloading or DownloadState.Pending or DownloadState.Ready)
+                    titleOrder[i].State = DownloadState.Done;
+            if (itemIndex1Based - 1 < titleOrder.Count)
+            {
+                var node2 = titleOrder[itemIndex1Based - 1];
+                node2.State = DownloadState.Downloading;
+                node2.StatusText = "Downloading…";
+            }
+        }
+
+        if (isPlaylist && titleOrder.Count > 0) MarkTrackProgress(1);
         var (exit, _, stderr) = await RunAsync(args, line =>
         {
             var itemMatch = PlaylistItemLine().Match(line);
             if (itemMatch.Success && int.TryParse(itemMatch.Groups[1].Value, out var n))
             {
                 current = n - 1;
+                MarkTrackProgress(n);
                 status?.Report(isPlaylist ? $"Downloading track {n}/{total} from {source}" : $"Downloading {source}");
             }
 
             var pctMatch = ProgressLine().Match(line);
             if (pctMatch.Success && double.TryParse(pctMatch.Groups[1].Value, out var pct))
+            {
                 progress.Report(Math.Clamp((current + pct / 100.0) / total, 0, 1));
+                if (isPlaylist && current >= 0 && current < titleOrder.Count)
+                    titleOrder[current].Progress = pct / 100.0;
+            }
         }, token).ConfigureAwait(false);
 
         var produced = System.IO.Directory.EnumerateFiles(workDir)
@@ -312,6 +335,7 @@ public static partial class DownloadService
             "--audio-format", options.FormatExtension,
             "--audio-quality", "5",
             "--no-warnings", "--newline", "--no-overwrites",
+            "--embed-thumbnail", "--convert-thumbnails", "jpg",
             "--ffmpeg-location", ToolManager.Directory,
             "-o", Path.Combine(workDir, "%(title)s.%(ext)s"),
         };

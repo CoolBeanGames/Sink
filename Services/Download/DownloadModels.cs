@@ -119,7 +119,11 @@ public sealed class DownloadNode : INotifyPropertyChanged
     }
 
     /// <summary>Track number written on import (Track and Single nodes).</summary>
-    public int TrackNumber { get => _trackNumber; set => Set(ref _trackNumber, value); }
+    public int TrackNumber
+    {
+        get => _trackNumber;
+        set { if (Set(ref _trackNumber, value)) OnPropertyChanged(nameof(TrackNumberText)); }
+    }
 
     /// <summary>Bound to the little number box; empty string clears it.</summary>
     public string TrackNumberText

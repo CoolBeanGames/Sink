@@ -291,7 +291,7 @@ public partial class MainWindow
 
         var changed = 0;
         var failed = 0;
-        using var throttle = new SemaphoreSlim(4);
+        using var throttle = new SemaphoreSlim(2);
         await Task.WhenAll(targets.Select(async target =>
         {
             await throttle.WaitAsync();
@@ -645,6 +645,16 @@ public partial class MainWindow
             SetNowPlayingArt(null);
             PlayPauseButton.Content = "Ⅱ";
             SetDownloadStatus($"Previewing “{node.Name}”");
+
+            // Pull the cover out of the just-downloaded preview file (task 119).
+            var artKey = "preview:" + node.Url + ":" + node.Index;
+            var artPath = await Task.Run(() => Artwork.ExtractAndCrop(file, artKey));
+            if (artPath is not null && ReferenceEquals(_previewNode, node))
+            {
+                SetNowPlayingArt(artPath);
+                PlayerArtInitial.Text = node.Name is { Length: > 0 } name
+                    ? name[..1].ToUpperInvariant() : "▶";
+            }
         }
         catch (OperationCanceledException)
         {
