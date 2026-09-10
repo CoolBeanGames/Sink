@@ -56,6 +56,61 @@ public partial class MainWindow : Window
         _ipodPollTimer.Tick += (_, _) => PollForIpod();
         _ipodPollTimer.Start();
         Loaded += (_, _) => PollForIpod();
+
+        PreviewMouseDown += MiddleDragPan_Down;
+        PreviewMouseMove += MiddleDragPan_Move;
+        PreviewMouseUp += MiddleDragPan_Up;
+        LostMouseCapture += (_, _) => _panScrollViewer = null;
+    }
+
+    // ---- Middle-mouse drag to scroll (task 98) -------------------------
+
+    private ScrollViewer? _panScrollViewer;
+    private Point _panOrigin;
+    private double _panOffsetV, _panOffsetH;
+
+    private void MiddleDragPan_Down(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Middle) return;
+        var sv = FindScrollViewer(e.OriginalSource as DependencyObject);
+        if (sv is null || (sv.ScrollableHeight == 0 && sv.ScrollableWidth == 0)) return;
+        _panScrollViewer = sv;
+        _panOrigin = e.GetPosition(this);
+        _panOffsetV = sv.VerticalOffset;
+        _panOffsetH = sv.HorizontalOffset;
+        Mouse.Capture(this);
+        Cursor = Cursors.ScrollAll;
+        e.Handled = true;
+    }
+
+    private void MiddleDragPan_Move(object sender, MouseEventArgs e)
+    {
+        if (_panScrollViewer is null) return;
+        var p = e.GetPosition(this);
+        _panScrollViewer.ScrollToVerticalOffset(_panOffsetV + (p.Y - _panOrigin.Y) * 1.6);
+        if (_panScrollViewer.ScrollableWidth > 0)
+            _panScrollViewer.ScrollToHorizontalOffset(_panOffsetH + (p.X - _panOrigin.X) * 1.6);
+    }
+
+    private void MiddleDragPan_Up(object sender, MouseButtonEventArgs e)
+    {
+        if (_panScrollViewer is null || e.ChangedButton != MouseButton.Middle) return;
+        _panScrollViewer = null;
+        Mouse.Capture(null);
+        Cursor = Cursors.Arrow;
+        e.Handled = true;
+    }
+
+    private static ScrollViewer? FindScrollViewer(DependencyObject? node)
+    {
+        while (node is not null)
+        {
+            if (node is ScrollViewer sv) return sv;
+            node = node is Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(node)
+                : LogicalTreeHelper.GetParent(node);
+        }
+        return null;
     }
 
     private void LoadLibrary()
