@@ -267,6 +267,47 @@ public partial class MainWindow
         SetDownloadStatus($"Cover art set for “{node.Name}”");
     }
 
+    /// <summary>
+    /// Right-click → translate: rewrites the node's title (and, for an album or
+    /// artist, its children's titles) to English. Text that is already English
+    /// is left alone. Runs off the UI thread via <see cref="Translation"/>'s
+    /// async HTTP call.
+    /// </summary>
+    private async Task TranslateNodeAsync(DownloadNode node)
+    {
+        var targets = new List<DownloadNode> { node };
+        if (node.Kind is DownloadKind.Album or DownloadKind.Artist)
+            targets.AddRange(node.Children);
+        if (node.Kind == DownloadKind.Artist)
+            targets.AddRange(node.Children.SelectMany(c => c.Children));
+
+        SetDownloadStatus(targets.Count > 1 ? $"Translating {targets.Count} titles…" : "Translating…");
+        var changed = 0;
+        try
+        {
+            foreach (var target in targets)
+            {
+                var original = target.Name;
+                if (string.IsNullOrWhiteSpace(original)) continue;
+                var english = await Translation.ToEnglishAsync(original);
+                if (!string.Equals(english, original, StringComparison.Ordinal))
+                {
+                    target.Name = english;
+                    changed++;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Translate titles failed", ex);
+            SetDownloadStatus($"Translation failed: {ex.Message}");
+            return;
+        }
+        SetDownloadStatus(changed == 0
+            ? "Nothing to translate — titles are already English"
+            : $"Translated {changed} title{(changed == 1 ? "" : "s")} to English");
+    }
+
     private void EditNodeMetadata(DownloadNode node)
     {
         var dialog = new DownloadMetadataWindow(node) { Owner = this };
@@ -433,6 +474,11 @@ public partial class MainWindow
         if (node.Kind is DownloadKind.Track or DownloadKind.Single)
             menu.Items.Add(Item("Preview", () => _ = PreviewNodeAsync(node)));
         menu.Items.Add(Item("Edit metadata…", () => EditNodeMetadata(node)));
+        menu.Items.Add(Item(
+            node.Kind == DownloadKind.Artist ? "Translate names to English"
+            : node.CanHaveChildren ? "Translate titles to English"
+            : "Translate title to English",
+            () => _ = TranslateNodeAsync(node)));
         if (node.CanHaveChildren)
         {
             menu.Items.Add(Item("Select all", () => node.Enabled = true));
