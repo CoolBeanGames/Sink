@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace Sink.Dialogs;
@@ -26,6 +27,39 @@ public abstract class SinkDialog : Window
     }
 
     protected sealed record FooterButton(string Label, bool Primary, RoutedEventHandler OnClick);
+
+    /// <summary>
+    /// Lets the arrow keys walk a stack of edit fields: Up / Down move between
+    /// them, Left / Right do too once the caret has reached the end of the text.
+    /// Matches the inline metadata grid on the download page (task 104).
+    /// </summary>
+    protected static void EnableArrowFieldNavigation(params Control[] fields)
+    {
+        for (var i = 0; i < fields.Length; i++)
+        {
+            var index = i;
+            fields[i].PreviewKeyDown += (sender, e) =>
+            {
+                if (e.Handled) return; // e.g. an autocomplete popup ate the arrow
+                var target = index;
+                switch (e.Key)
+                {
+                    case Key.Down: target = index + 1; break;
+                    case Key.Up: target = index - 1; break;
+                    case Key.Right when AtEnd(sender): target = index + 1; break;
+                    case Key.Left when AtStart(sender): target = index - 1; break;
+                    default: return;
+                }
+                if (target < 0 || target >= fields.Length || target == index) return;
+                fields[target].Focus();
+                if (fields[target] is TextBox box) box.SelectAll();
+                e.Handled = true;
+            };
+        }
+
+        static bool AtEnd(object s) => s is TextBox t && t.SelectionLength == 0 && t.CaretIndex >= t.Text.Length;
+        static bool AtStart(object s) => s is TextBox t && t.SelectionLength == 0 && t.CaretIndex == 0;
+    }
 
     /// <summary>Builds and installs the standard shell around <paramref name="body"/>.</summary>
     protected void Compose(string eyebrow, string heading, string? subtitle, UIElement body, params FooterButton[] footer)

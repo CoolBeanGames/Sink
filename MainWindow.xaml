@@ -205,6 +205,7 @@
                                         <Setter Property="VerticalAlignment" Value="Center"/>
                                         <Setter Property="VerticalContentAlignment" Value="Center"/>
                                         <Setter Property="Margin" Value="0,0,8,0"/>
+                                        <EventSetter Event="PreviewKeyDown" Handler="NodeField_PreviewKeyDown"/>
                                         <Style.Triggers>
                                             <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderBrush" Value="#8B7CFF"/></Trigger>
                                         </Style.Triggers>
@@ -249,17 +250,17 @@
                                                            Visibility="{Binding IsTrack, Converter={StaticResource B2V}}"/>
                                                 <Button DockPanel.Dock="Right" Content="✕" Click="RemoveNode_Click" Background="Transparent" Foreground="#8A93A3" BorderThickness="0" Padding="6,0" FontSize="11" Cursor="Hand" ToolTip="Remove" VerticalAlignment="Center"/>
                                                 <TextBlock DockPanel.Dock="Right" Text="{Binding StatusText}" ToolTip="{Binding StatusText}" VerticalAlignment="Center" Foreground="#8A93A3" FontSize="11" Margin="14,0,6,0" MaxWidth="260" TextTrimming="CharacterEllipsis"/>
-                                                <TextBox DockPanel.Dock="Left" Width="300" Text="{Binding Name, UpdateSourceTrigger=LostFocus}"
+                                                <TextBox DockPanel.Dock="Left" Width="300" Tag="Name" Text="{Binding Name, UpdateSourceTrigger=LostFocus}"
                                                          Style="{StaticResource NodeField}" PreviewMouseLeftButtonDown="NodeName_PreviewMouseDown"
-                                                         ToolTip="Double-click a track or single to preview it"/>
-                                                <TextBox DockPanel.Dock="Left" Width="44" Text="{Binding TrackNumberText, UpdateSourceTrigger=LostFocus}"
+                                                         ToolTip="Double-click a track or single to preview it · arrow keys move between fields"/>
+                                                <TextBox DockPanel.Dock="Left" Width="44" Tag="Track" Text="{Binding TrackNumberText, UpdateSourceTrigger=LostFocus}"
                                                          Style="{StaticResource NodeField}" Visibility="{Binding ShowTrackNumber, Converter={StaticResource B2V}}"
                                                          ToolTip="Track number"/>
-                                                <ctrl:AutoCompleteTextBox DockPanel.Dock="Left" Width="150" SuggestionField="Artist" Text="{Binding Artist, UpdateSourceTrigger=LostFocus}"
+                                                <ctrl:AutoCompleteTextBox DockPanel.Dock="Left" Width="150" Tag="Artist" SuggestionField="Artist" Text="{Binding Artist, UpdateSourceTrigger=LostFocus}"
                                                          Style="{StaticResource NodeField}" Visibility="{Binding ShowArtist, Converter={StaticResource B2V}}"/>
-                                                <ctrl:AutoCompleteTextBox DockPanel.Dock="Left" Width="150" SuggestionField="Album" Text="{Binding Album, UpdateSourceTrigger=LostFocus}"
+                                                <ctrl:AutoCompleteTextBox DockPanel.Dock="Left" Width="150" Tag="Album" SuggestionField="Album" Text="{Binding Album, UpdateSourceTrigger=LostFocus}"
                                                          Style="{StaticResource NodeField}" Visibility="{Binding ShowAlbum, Converter={StaticResource B2V}}"/>
-                                                <ctrl:AutoCompleteTextBox DockPanel.Dock="Left" Width="120" SuggestionField="Genre" Text="{Binding Genre, UpdateSourceTrigger=LostFocus}"
+                                                <ctrl:AutoCompleteTextBox DockPanel.Dock="Left" Width="120" Tag="Genre" SuggestionField="Genre" Text="{Binding Genre, UpdateSourceTrigger=LostFocus}"
                                                          Style="{StaticResource NodeField}" Visibility="{Binding ShowGenre, Converter={StaticResource B2V}}"/>
                                             </DockPanel>
                                         </Border>

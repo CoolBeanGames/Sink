@@ -60,6 +60,9 @@ public sealed class MetadataWindow : SinkDialog
         Compose("Metadata", "Edit details", subtitle, grid,
             new FooterButton("Cancel", false, (_, _) => Close()),
             new FooterButton("Save", true, Save_Click));
+
+        EnableArrowFieldNavigation(_title, _artist, _album, _genre, _year);
+        Loaded += (_, _) => { _title.Focus(); _title.SelectAll(); };
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)

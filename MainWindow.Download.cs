@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
+using System.Windows.Threading;
 using Sink.Dialogs;
 using Sink.Services;
 using Sink.Services.Download;
@@ -266,6 +267,17 @@ public partial class MainWindow
         SetDownloadStatus($"Cover art set for “{node.Name}”");
     }
 
+    private void EditNodeMetadata(DownloadNode node)
+    {
+        var dialog = new DownloadMetadataWindow(node) { Owner = this };
+        BlurBehind(true);
+        var ok = dialog.ShowDialog() == true;
+        BlurBehind(false);
+        if (!ok) return;
+        RefreshDownloadNodeStatus(node);
+        SetDownloadStatus($"Updated metadata for “{node.Name}”");
+    }
+
     private void TrimTrackTitles(DownloadNode album)
     {
         var tracks = album.Children.Where(c => c.Kind == DownloadKind.Track).ToList();
@@ -286,6 +298,128 @@ public partial class MainWindow
             StopPreview("removed");
     }
 
+    // ---- Arrow-key navigation between the inline metadata fields (task 104) ----
+    //
+    // Down / Up move to the same column of the next / previous visible row;
+    // Right / Left step to the next / previous field on the same row, but only
+    // once the caret has reached that edge of the text. A column that a row
+    // doesn't have (an expanded album's Genre → its first track) lands on that
+    // row's name field, so the progression flows straight down the tree.
+
+    private static readonly string[] FieldColumns = ["Name", "Track", "Artist", "Album", "Genre"];
+
+    private void NodeField_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Handled) return; // an open autocomplete popup already used the arrow
+        if (sender is not TextBox box || box.DataContext is not DownloadNode node) return;
+        if (e.Key is not (Key.Down or Key.Up or Key.Left or Key.Right)) return;
+        var column = box.Tag as string ?? "Name";
+
+        if (e.Key is Key.Left or Key.Right && box.SelectionLength > 0) return;
+        if (e.Key == Key.Right && box.CaretIndex < box.Text.Length) return;
+        if (e.Key == Key.Left && box.CaretIndex > 0) return;
+
+        var visible = VisibleNodes().ToList();
+        var row = visible.IndexOf(node);
+        if (row < 0) return;
+
+        DownloadNode? targetNode = null;
+        string targetColumn = column;
+        switch (e.Key)
+        {
+            case Key.Down when row + 1 < visible.Count: targetNode = visible[row + 1]; break;
+            case Key.Up when row > 0: targetNode = visible[row - 1]; break;
+            case Key.Right:
+                targetColumn = NextColumn(node, column, 1) ?? column;
+                if (targetColumn != column) targetNode = node;
+                else if (row + 1 < visible.Count) { targetNode = visible[row + 1]; targetColumn = "Name"; }
+                break;
+            case Key.Left:
+                targetColumn = NextColumn(node, column, -1) ?? column;
+                if (targetColumn != column) targetNode = node;
+                else if (row > 0) { targetNode = visible[row - 1]; targetColumn = LastColumn(visible[row - 1]); }
+                break;
+        }
+        if (targetNode is null) return;
+        if (!ColumnVisible(targetNode, targetColumn)) targetColumn = "Name";
+
+        e.Handled = true;
+        FocusNodeField(targetNode, targetColumn);
+    }
+
+    private IEnumerable<DownloadNode> VisibleNodes()
+    {
+        IEnumerable<DownloadNode> Walk(DownloadNode n)
+        {
+            yield return n;
+            if (!n.IsExpanded) yield break;
+            foreach (var child in n.Children)
+                foreach (var d in Walk(child))
+                    yield return d;
+        }
+        return _rootNodes.SelectMany(Walk);
+    }
+
+    private static bool ColumnVisible(DownloadNode node, string column) => column switch
+    {
+        "Name" => true,
+        "Track" => node.ShowTrackNumber,
+        "Artist" => node.ShowArtist,
+        "Album" => node.ShowAlbum,
+        "Genre" => node.ShowGenre,
+        _ => false,
+    };
+
+    private static string? NextColumn(DownloadNode node, string from, int direction)
+    {
+        var order = FieldColumns.Where(c => ColumnVisible(node, c)).ToList();
+        var i = order.IndexOf(from);
+        if (i < 0) return null;
+        var j = i + direction;
+        return j >= 0 && j < order.Count ? order[j] : null;
+    }
+
+    private static string LastColumn(DownloadNode node) =>
+        FieldColumns.Where(c => ColumnVisible(node, c)).LastOrDefault() ?? "Name";
+
+    private void FocusNodeField(DownloadNode node, string column)
+    {
+        var container = ContainerFromNode(LinksTree, node);
+        if (container is null) return;
+        container.BringIntoView();
+        Dispatcher.BeginInvoke(() =>
+        {
+            var field = FindField(container, column) ?? FindField(container, "Name");
+            if (field is null) return;
+            field.Focus();
+            field.SelectAll();
+        }, DispatcherPriority.Input);
+    }
+
+    private static TreeViewItem? ContainerFromNode(ItemsControl parent, DownloadNode node)
+    {
+        for (var i = 0; i < parent.Items.Count; i++)
+        {
+            if (parent.ItemContainerGenerator.ContainerFromIndex(i) is not TreeViewItem item) continue;
+            if (ReferenceEquals(parent.Items[i], node)) return item;
+            if (ContainerFromNode(item, node) is { } nested) return nested;
+        }
+        return null;
+    }
+
+    private static TextBox? FindField(DependencyObject root, string column)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is TreeViewItem) continue; // stay within this row
+            if (child is TextBox box && box.Tag as string == column) return box;
+            if (FindField(child, column) is { } found) return found;
+        }
+        return null;
+    }
+
     // ---- Right-click menu ----------------------------------------------
 
     private void LinksTree_ContextMenuOpening(object sender, ContextMenuEventArgs e)
@@ -298,6 +432,7 @@ public partial class MainWindow
         menu.Items.Add(new Separator());
         if (node.Kind is DownloadKind.Track or DownloadKind.Single)
             menu.Items.Add(Item("Preview", () => _ = PreviewNodeAsync(node)));
+        menu.Items.Add(Item("Edit metadata…", () => EditNodeMetadata(node)));
         if (node.CanHaveChildren)
         {
             menu.Items.Add(Item("Select all", () => node.Enabled = true));
