@@ -59,8 +59,10 @@ public partial class MainWindow : Window
     private void LoadLibrary()
     {
         var data = LibraryStore.Load();
-        if (data is null || data.Tracks.Count == 0)
+        if (data is null)
         {
+            // First run only. Once a library.json exists we honour it even when
+            // empty — the user may have deleted every seeded placeholder track.
             foreach (var track in SeedLibrary.Create()) _tracks.Add(track);
             var favorites = new Playlist { Name = "Favorites" };
             foreach (var track in _tracks.Where((_, index) => index % 2 == 0).Take(3)) favorites.TrackIds.Add(track.Id);
