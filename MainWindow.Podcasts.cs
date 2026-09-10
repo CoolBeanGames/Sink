@@ -329,6 +329,8 @@ public partial class MainWindow
         var uri = episode.IsDownloaded ? new Uri(episode.LocalPath!) : SafeUri(episode.AudioUrl);
         if (uri is null) { PodcastStatus.Text = "That episode has no playable audio"; return; }
 
+        StopPreview("started a podcast");
+
         // Take over from music playback.
         _mediaPlayer.Stop();
         _mediaPlayer.Close();

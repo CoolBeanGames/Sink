@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Threading;
 using Sink.Services;
+using Sink.Services.Download;
 
 namespace Sink;
 
@@ -33,6 +34,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         Log.Info($"─── Sink exiting (code {e.ApplicationExitCode}) ───");
+        DownloadService.ClearPreviews();
         base.OnExit(e);
     }
 }

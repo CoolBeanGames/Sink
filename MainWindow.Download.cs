@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Media.Effects;
 using Sink.Dialogs;
 using Sink.Services;
@@ -10,12 +12,13 @@ using Sink.Services.Download;
 namespace Sink;
 
 /// <summary>
-/// The Download page: paste YouTube links, scan them for metadata, tweak the
-/// details, then hand them to yt-dlp one by one and import the results.
+/// The Download page: paste YouTube links, scan them into an artist → album →
+/// track tree, tick what you want, then hand it to yt-dlp and import the results.
+/// Double-clicking a track title previews it without saving anything.
 /// </summary>
 public partial class MainWindow
 {
-    private readonly ObservableCollection<DownloadItem> _downloadItems = [];
+    private readonly ObservableCollection<DownloadNode> _rootNodes = [];
     private bool _downloadViewActive;
     private bool _toolsChecked;
     private bool _downloading;
@@ -23,8 +26,9 @@ public partial class MainWindow
 
     private void InitDownloadPage()
     {
-        LinksGrid.ItemsSource = _downloadItems;
-        _downloadItems.CollectionChanged += (_, _) => RefreshDownloadChrome();
+        LinksTree.ItemsSource = _rootNodes;
+        _rootNodes.CollectionChanged += (_, _) => RefreshDownloadChrome();
+        _previewPlayer.MediaEnded += (_, _) => StopPreview("finished");
         RefreshDownloadChrome();
     }
 
@@ -51,6 +55,7 @@ public partial class MainWindow
     {
         if (!_downloadViewActive) return;
         _downloadViewActive = false;
+        StopPreview("left the page");
         DownloadPage.Visibility = Visibility.Collapsed;
         MusicPage.Visibility = Visibility.Visible;
         IpodCanvas.Visibility = Visibility.Visible;
@@ -77,7 +82,7 @@ public partial class MainWindow
         UpdateDownloadButtonState();
     }
 
-    // ---- Link list -------------------------------------------------------
+    // ---- Adding + scanning links ---------------------------------------
 
     private async void AddLink_Click(object sender, RoutedEventArgs e)
     {
@@ -86,149 +91,195 @@ public partial class MainWindow
         var ok = dialog.ShowDialog() == true;
         BlurBehind(false);
         if (!ok) return;
-
-        var item = new DownloadItem { Url = dialog.Link, State = DownloadState.Pending, StatusText = "Scanning…" };
-        _downloadItems.Add(item);
-        await ScanItemAsync(item);
+        await ScanAndAddAsync(dialog.Link);
     }
 
-    private async Task ScanItemAsync(DownloadItem item)
+    private async Task ScanAndAddAsync(string url)
     {
-        item.State = DownloadState.Scanning;
-        item.StatusText = "Scanning…";
+        var probe = new DownloadNode(DownloadKind.Single)
+        {
+            Url = url,
+            Title = url,
+            State = DownloadState.Scanning,
+            StatusText = "Scanning…",
+        };
+        _rootNodes.Add(probe);
+
         try
         {
-            var info = await Task.Run(() => DownloadService.ScanAsync(item.Url));
+            var info = await Task.Run(() => DownloadService.ScanAsync(url));
+            var at = Math.Max(0, _rootNodes.IndexOf(probe));
+            _rootNodes.Remove(probe);
 
-            // An artist / channel link resolves to a set of albums — replace the
-            // single row with one row per album and scan each of those.
-            if (info.Albums is { Count: > 0 })
+            var node = BuildNode(url, info);
+            _rootNodes.Insert(Math.Min(at, _rootNodes.Count), node);
+
+            if (node.Kind == DownloadKind.Artist)
             {
-                var at = Math.Max(0, _downloadItems.IndexOf(item));
-                _downloadItems.Remove(item);
-                SetDownloadStatus($"{info.Artist}: found {info.Albums.Count} album{(info.Albums.Count == 1 ? "" : "s")}");
-                foreach (var album in info.Albums)
-                {
-                    var albumItem = new DownloadItem
-                    {
-                        Url = album.Url,
-                        Artist = info.Artist,
-                        Album = album.Title,
-                        State = DownloadState.Pending,
-                        StatusText = "Scanning…",
-                    };
-                    _downloadItems.Insert(Math.Min(at++, _downloadItems.Count), albumItem);
-                    await ScanItemAsync(albumItem);
-                }
-                return;
+                SetDownloadStatus($"{node.Artist}: {node.Children.Count} albums — expand one to load its tracks");
             }
-
-            if (string.IsNullOrWhiteSpace(item.Title)) item.Title = info.Title;
-            if (string.IsNullOrWhiteSpace(item.Artist)) item.Artist = info.Artist;
-            if (string.IsNullOrWhiteSpace(item.Album)) item.Album = info.Album;
-            if (string.IsNullOrWhiteSpace(item.Genre)) item.Genre = info.Genre;
-            item.IsPlaylist = info.IsPlaylist;
-            item.TrackCount = info.TrackCount;
-
-            item.Tracks.Clear();
-            if (info.TrackTitles is { Count: > 0 })
-                for (var i = 0; i < info.TrackTitles.Count; i++)
-                    item.Tracks.Add(new TrackChoice(i + 1, info.TrackTitles[i]));
-
-            item.State = DownloadState.Ready;
-            item.StatusText = info.IsPlaylist ? $"Album · {info.TrackCount} tracks" : "Ready";
+            else if (node.Kind == DownloadKind.Album)
+            {
+                node.StatusText = $"Album · {node.Children.Count} tracks";
+                node.Scanned = true;
+            }
+            else
+            {
+                node.StatusText = "Ready";
+            }
         }
         catch (Exception ex)
         {
-            item.State = DownloadState.Failed;
-            item.StatusText = "Couldn't scan";
-            Log.Error($"yt-dlp scan failed for {item.Url}", ex);
-            SetDownloadStatus($"Scan failed for {item.Url}: {ex.Message}");
+            probe.State = DownloadState.Failed;
+            probe.StatusText = "Couldn't scan";
+            Log.Error($"yt-dlp scan failed for {url}", ex);
+            SetDownloadStatus($"Scan failed for {url}: {ex.Message}");
         }
         UpdateDownloadButtonState();
     }
 
-    private void DeleteLink_Click(object sender, RoutedEventArgs e)
+    private static DownloadNode BuildNode(string url, ScannedInfo info)
     {
-        if ((sender as FrameworkElement)?.DataContext is DownloadItem item)
-            _downloadItems.Remove(item);
+        if (info.Albums is { Count: > 0 })
+        {
+            var artist = new DownloadNode(DownloadKind.Artist)
+            {
+                Url = url,
+                Artist = info.Artist,
+                Genre = "Unknown",
+                State = DownloadState.Ready,
+                StatusText = $"{info.Albums.Count} albums",
+            };
+            foreach (var album in info.Albums)
+            {
+                artist.Children.Add(new DownloadNode(DownloadKind.Album)
+                {
+                    Url = album.Url,
+                    Album = album.Title,
+                    Artist = info.Artist,
+                    Genre = "Unknown",
+                    State = DownloadState.Ready,
+                    StatusText = "Expand to load tracks",
+                });
+            }
+            return artist;
+        }
+
+        if (info.IsPlaylist)
+        {
+            var node = new DownloadNode(DownloadKind.Album)
+            {
+                Url = url,
+                Album = info.Album,
+                Artist = info.Artist,
+                Genre = info.Genre,
+                State = DownloadState.Ready,
+            };
+            FillTracks(node, info);
+            return node;
+        }
+
+        return new DownloadNode(DownloadKind.Single)
+        {
+            Url = url,
+            Title = info.Title,
+            Artist = info.Artist,
+            Album = info.Album,
+            Genre = info.Genre,
+            State = DownloadState.Ready,
+        };
     }
 
-    // ---- Selection + right-click menu -----------------------------------
-
-    private List<DownloadItem> SelectedDownloadItems()
+    private static void FillTracks(DownloadNode album, ScannedInfo info)
     {
-        var items = LinksGrid.SelectedItems.OfType<DownloadItem>().ToList();
-        if (items.Count == 0 && LinksGrid.SelectedItem is DownloadItem one) items.Add(one);
-        return items;
+        album.Children.Clear();
+        if (info.TrackTitles is not { Count: > 0 }) return;
+        for (var i = 0; i < info.TrackTitles.Count; i++)
+        {
+            var title = info.TrackTitles[i];
+            album.Children.Add(new DownloadNode(DownloadKind.Track)
+            {
+                Index = i + 1,
+                Title = title,
+                ScannedTitle = title,
+                State = DownloadState.Ready,
+                StatusText = "",
+            });
+        }
     }
 
-    private void LinksGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
-
-    // The DataGrid owns each row's DetailsVisibility, so a bound Setter loses to
-    // it — drive the row's track list open/closed from code instead.
-    private void LinkExpand_Click(object sender, RoutedEventArgs e)
+    /// <summary>Loads an album's track list the first time it is expanded.</summary>
+    private async void LinksTree_ItemExpanded(object sender, RoutedEventArgs e)
     {
-        if (sender is not System.Windows.Controls.Primitives.ToggleButton { DataContext: DownloadItem item } tb) return;
-        item.IsExpanded = tb.IsChecked == true;
-        if (LinksGrid.ItemContainerGenerator.ContainerFromItem(item) is DataGridRow row)
-            row.DetailsVisibility = item.IsExpanded ? Visibility.Visible : Visibility.Collapsed;
+        if (e.OriginalSource is not TreeViewItem { DataContext: DownloadNode node }) return;
+        if (node.Kind != DownloadKind.Album || node.Scanned || node.State == DownloadState.Scanning) return;
+
+        node.State = DownloadState.Scanning;
+        node.StatusText = "Loading tracks…";
+        try
+        {
+            var info = await Task.Run(() => DownloadService.ScanAsync(node.Url));
+            FillTracks(node, info);
+            if (!string.IsNullOrWhiteSpace(info.Artist) && node.Artist is "" or "Unknown Artist")
+                node.Artist = info.Artist;
+            node.Scanned = true;
+            node.State = DownloadState.Ready;
+            node.StatusText = $"{node.Children.Count} tracks";
+        }
+        catch (Exception ex)
+        {
+            node.State = DownloadState.Failed;
+            node.StatusText = "Couldn't load tracks";
+            Log.Error($"track scan failed for {node.Url}", ex);
+        }
+        UpdateDownloadButtonState();
     }
 
-    private void LinksGrid_LoadingRow(object sender, DataGridRowEventArgs e)
+    private void RemoveNode_Click(object sender, RoutedEventArgs e)
     {
-        if (e.Row.Item is DownloadItem item)
-            e.Row.DetailsVisibility = item.IsExpanded ? Visibility.Visible : Visibility.Collapsed;
+        if ((sender as FrameworkElement)?.DataContext is not DownloadNode node) return;
+        if (node.Parent is null) _rootNodes.Remove(node);
+        else node.Parent.Children.Remove(node);
+        if (_previewNode is not null && !_rootNodes.SelectMany(n => n.SelfAndDescendants()).Contains(_previewNode))
+            StopPreview("removed");
     }
 
-    private void LinksGrid_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    // ---- Right-click menu ----------------------------------------------
+
+    private void LinksTree_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
-        var items = SelectedDownloadItems();
-        var menu = LinksGrid.ContextMenu!;
+        var menu = LinksTree.ContextMenu!;
         menu.Items.Clear();
-        if (items.Count == 0) { e.Handled = true; return; }
+        if (LinksTree.SelectedItem is not DownloadNode node) { e.Handled = true; return; }
 
-        var label = items.Count == 1
-            ? (string.IsNullOrWhiteSpace(items[0].Title) ? items[0].Url : items[0].Title)
-            : $"{items.Count} links";
-        menu.Items.Add(Header(label));
+        menu.Items.Add(Header(string.IsNullOrWhiteSpace(node.Name) ? node.Url : node.Name));
         menu.Items.Add(new Separator());
-        menu.Items.Add(Item("Edit details…", () => EditLinkMetadata(items)));
-        menu.Items.Add(Item("Rescan", () => { foreach (var it in items) _ = ScanItemAsync(it); }));
+        if (node.Kind is DownloadKind.Track or DownloadKind.Single)
+            menu.Items.Add(Item("Preview", () => _ = PreviewNodeAsync(node)));
+        if (node.CanHaveChildren)
+        {
+            menu.Items.Add(Item("Select all", () => node.Enabled = true));
+            menu.Items.Add(Item("Select none", () => node.Enabled = false));
+        }
+        if (node.Kind == DownloadKind.Album)
+            menu.Items.Add(Item("Rescan tracks", () => { node.Scanned = false; node.IsExpanded = true; LinksTree_ItemExpanded(this, new RoutedEventArgs()); }));
         menu.Items.Add(Item("Copy link", () =>
         {
-            try { Clipboard.SetText(string.Join(Environment.NewLine, items.Select(i => i.Url))); }
+            try { Clipboard.SetText(node.Url); }
             catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or OutOfMemoryException) { }
         }));
         menu.Items.Add(new Separator());
-        menu.Items.Add(Item(items.Count == 1 ? "Remove" : $"Remove {items.Count} links", () =>
+        menu.Items.Add(Item("Remove", () =>
         {
-            foreach (var it in items.ToList()) _downloadItems.Remove(it);
+            if (node.Parent is null) _rootNodes.Remove(node);
+            else node.Parent.Children.Remove(node);
         }));
     }
 
-    private void EditLinkMetadata(IReadOnlyList<DownloadItem> items)
+    private void LinksTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
-        if (items.Count == 0) return;
-        var dialog = new LinkMetadataWindow(items) { Owner = this };
-        BlurBehind(true);
-        var ok = dialog.ShowDialog() == true;
-        BlurBehind(false);
-        if (!ok) return;
-        LinksGrid.Items.Refresh();
-        SetDownloadStatus($"Updated {items.Count} link{(items.Count == 1 ? "" : "s")}");
-    }
-
-    private void LinksGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
-    {
-        // The edited value is already pushed to the item by the binding; just
-        // make sure a hand-edited row is no longer treated as failed.
-        if (e.Row.Item is DownloadItem { State: DownloadState.Failed } item && !string.IsNullOrWhiteSpace(item.Url))
-        {
-            item.State = DownloadState.Ready;
-            item.StatusText = "Ready";
-            UpdateDownloadButtonState();
-        }
+        if (_previewNode is not null && !ReferenceEquals(e.NewValue, _previewNode))
+            StopPreview("changed selection");
     }
 
     // ---- Options --------------------------------------------------------
@@ -249,7 +300,159 @@ public partial class MainWindow
         Quality = (OptQuality.SelectedItem as ComboBoxItem)?.Tag is string tag && int.TryParse(tag, out var q) ? q : 0,
     };
 
+    // ---- Preview (double-click a track) -------------------------------
+
+    private readonly MediaPlayer _previewPlayer = new();
+    private DownloadNode? _previewNode;
+    private string? _previewFile;
+    private CancellationTokenSource? _previewCts;
+
+    private void NodeName_PreviewDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not DownloadNode node) return;
+        if (node.Kind is not (DownloadKind.Track or DownloadKind.Single)) return;
+        e.Handled = true;
+        _ = PreviewNodeAsync(node);
+    }
+
+    private async Task PreviewNodeAsync(DownloadNode node)
+    {
+        StopPreview("new preview");
+        if (!ToolManager.ToolsPresent) { SetDownloadStatus("Still setting up yt-dlp…"); EnsureToolsReady(); return; }
+
+        _previewNode = node;
+        _previewCts = new CancellationTokenSource();
+        var token = _previewCts.Token;
+        var (sourceUrl, index) = node.Kind == DownloadKind.Track
+            ? (node.Parent?.Url ?? node.Url, node.Index)
+            : (node.Url, 0);
+
+        node.StatusText = "Loading preview…";
+        SetDownloadStatus($"Preview: fetching “{node.Name}”…");
+        try
+        {
+            var file = await DownloadService.PreviewTrackAsync(
+                sourceUrl, index, ReadOptions(), new Progress<string>(SetDownloadStatus), token);
+            if (token.IsCancellationRequested || !ReferenceEquals(_previewNode, node))
+            {
+                TryDelete(file);
+                return;
+            }
+
+            StopLibraryPlaybackForPreview();
+            _previewFile = file;
+            _previewPlayer.Open(new Uri(file));
+            _previewPlayer.Volume = VolumeSlider?.Value ?? 0.7;
+            _previewPlayer.Play();
+            _playbackTimer.Start();
+
+            node.StatusText = "Previewing…";
+            PlayerTitle.Text = node.Name;
+            PlayerArtist.Text = "Preview — not saved unless you download it";
+            PlayerArtInitial.Text = "▶";
+            SetNowPlayingArt(null);
+            PlayPauseButton.Content = "Ⅱ";
+            SetDownloadStatus($"Previewing “{node.Name}”");
+        }
+        catch (OperationCanceledException)
+        {
+            node.StatusText = node.Kind == DownloadKind.Track ? "" : "Ready";
+        }
+        catch (Exception ex)
+        {
+            node.StatusText = "Preview failed";
+            SetDownloadStatus($"Preview failed: {ex.Message}");
+            Log.Error("Preview failed", ex);
+        }
+    }
+
+    private void StopLibraryPlaybackForPreview()
+    {
+        if (_playingEpisode is not null) StopPodcast(markPlayed: false);
+        if (_nowPlaying is not null)
+        {
+            _mediaPlayer.Stop();
+            _isPlaying = false;
+            _nowPlaying = null;
+        }
+        UpdateRecordSpin();
+    }
+
+    private void StopPreview(string why)
+    {
+        var node = _previewNode;
+        if (node is null && _previewFile is null && _previewCts is null) return;
+
+        _previewCts?.Cancel();
+        _previewCts?.Dispose();
+        _previewCts = null;
+        _previewNode = null;
+
+        try { _previewPlayer.Stop(); _previewPlayer.Close(); } catch (Exception e) when (e is not OutOfMemoryException) { }
+        if (_previewFile is not null) { TryDelete(_previewFile); _previewFile = null; }
+        DownloadService.ClearPreviews();
+
+        if (node is not null && node.StatusText is "Previewing…" or "Loading preview…")
+            node.StatusText = node.Kind == DownloadKind.Track ? "" : "Ready";
+
+        if (_nowPlaying is null && _playingEpisode is null)
+        {
+            _playbackTimer.Stop();
+            PlayPauseButton.Content = "▶";
+            PlayerTitle.Text = "Choose something to play";
+            PlayerArtist.Text = "Your library is ready";
+            PlayerArtInitial.Text = "♫";
+            _updatingProgress = true;
+            ProgressSlider.Value = 0;
+            _updatingProgress = false;
+            ElapsedText.Text = "0:00";
+            RemainingText.Text = "-0:00";
+        }
+        UpdateRecordSpin();
+    }
+
+    private bool PreviewActive => _previewNode is not null && _previewFile is not null;
+
+    private void TogglePreviewPause()
+    {
+        if (_previewPlayer.NaturalDuration.HasTimeSpan && _previewPlayer.Position >= _previewPlayer.NaturalDuration.TimeSpan)
+            return;
+        if (PlayPauseButton.Content as string == "Ⅱ")
+        {
+            _previewPlayer.Pause();
+            PlayPauseButton.Content = "▶";
+        }
+        else
+        {
+            _previewPlayer.Play();
+            PlayPauseButton.Content = "Ⅱ";
+        }
+    }
+
+    private void UpdatePreviewProgress()
+    {
+        if (!_previewPlayer.NaturalDuration.HasTimeSpan) return;
+        var dur = _previewPlayer.NaturalDuration.TimeSpan;
+        _updatingProgress = true;
+        ProgressSlider.Maximum = Math.Max(1, dur.TotalSeconds);
+        ProgressSlider.Value = Math.Min(dur.TotalSeconds, _previewPlayer.Position.TotalSeconds);
+        _updatingProgress = false;
+        ElapsedText.Text = FormatTime(_previewPlayer.Position);
+        RemainingText.Text = $"-{FormatTime(dur - _previewPlayer.Position)}";
+    }
+
+    private static void TryDelete(string path)
+    {
+        try { if (File.Exists(path)) File.Delete(path); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+    }
+
     // ---- Download run ---------------------------------------------------
+
+    private List<DownloadNode> DownloadUnits() => _rootNodes
+        .SelectMany(n => n.SelfAndDescendants())
+        .Where(n => n.Kind is DownloadKind.Album or DownloadKind.Single)
+        .ToList();
 
     private async void StartDownloads_Click(object sender, RoutedEventArgs e)
     {
@@ -259,13 +462,16 @@ public partial class MainWindow
             return;
         }
 
-        var queue = _downloadItems
-            .Where(i => i.State is not DownloadState.Done && i.Enabled)
-            .Where(i => !i.HasTrackList || i.Tracks.Any(t => t.Enabled))
+        var queue = DownloadUnits()
+            .Where(n => n.State is not DownloadState.Done && n.Enabled != false)
+            .Where(n => n.Kind == DownloadKind.Single
+                        || n.Children.Count == 0
+                        || n.Children.Any(c => c.Enabled == true))
             .ToList();
-        if (queue.Count == 0) { SetDownloadStatus("Nothing selected to download"); return; }
+        if (queue.Count == 0) { SetDownloadStatus("Nothing ticked to download"); return; }
         if (!ToolManager.ToolsPresent) { SetDownloadStatus("Still setting up yt-dlp…"); EnsureToolsReady(); return; }
 
+        StopPreview("starting download");
         var options = ReadOptions();
         _downloading = true;
         _downloadCts = new CancellationTokenSource();
@@ -277,44 +483,44 @@ public partial class MainWindow
         {
             for (var index = 0; index < queue.Count && !token.IsCancellationRequested; index++)
             {
-                var item = queue[index];
-                item.State = DownloadState.Downloading;
-                item.Progress = 0;
-                item.StatusText = "Starting…";
-                var linkLabel = queue.Count > 1 ? $"  (link {index + 1}/{queue.Count})" : "";
+                var node = queue[index];
+                node.State = DownloadState.Downloading;
+                node.Progress = 0;
+                node.StatusText = "Starting…";
+                var linkLabel = queue.Count > 1 ? $"  (item {index + 1}/{queue.Count})" : "";
 
                 try
                 {
                     var progress = new Progress<double>(p =>
                     {
-                        item.Progress = p;
-                        item.StatusText = $"Downloading {p * 100:0}%";
+                        node.Progress = p;
+                        node.StatusText = $"Downloading {p * 100:0}%";
                         UpdateAggregateProgress(queue);
                     });
                     var status = new Progress<string>(s => SetDownloadStatus(s + linkLabel));
-                    var paths = await DownloadService.DownloadAsync(item, options, progress, status, token);
+                    var paths = await DownloadService.DownloadAsync(node, options, progress, status, token);
 
-                    item.State = DownloadState.Importing;
-                    item.StatusText = "Importing…";
+                    node.State = DownloadState.Importing;
+                    node.StatusText = "Importing…";
                     var tracks = await Task.Run(() => MusicImporter.Import(paths));
                     foreach (var track in tracks) _tracks.Add(track);
                     imported += tracks.Count;
 
-                    item.State = DownloadState.Done;
-                    item.Progress = 1;
-                    item.StatusText = tracks.Count > 1 ? $"Done · {tracks.Count} tracks" : "Done";
+                    node.State = DownloadState.Done;
+                    node.Progress = 1;
+                    node.StatusText = tracks.Count > 1 ? $"Done · {tracks.Count} tracks" : "Done";
                 }
                 catch (OperationCanceledException)
                 {
-                    item.State = DownloadState.Failed;
-                    item.StatusText = "Cancelled";
+                    node.State = DownloadState.Failed;
+                    node.StatusText = "Cancelled";
                     break;
                 }
                 catch (Exception ex)
                 {
-                    item.State = DownloadState.Failed;
-                    item.StatusText = "Failed";
-                    SetDownloadStatus($"{item.Title}: {ex.Message}");
+                    node.State = DownloadState.Failed;
+                    node.StatusText = "Failed";
+                    SetDownloadStatus($"{node.Name}: {ex.Message}");
                 }
                 UpdateAggregateProgress(queue);
             }
@@ -332,39 +538,43 @@ public partial class MainWindow
                 RenderLibrary();
             }
 
-            var done = _downloadItems.Count(i => i.State == DownloadState.Done);
-            var failed = _downloadItems.Count(i => i.State == DownloadState.Failed);
+            var done = DownloadUnits().Count(n => n.State == DownloadState.Done);
+            var failed = DownloadUnits().Count(n => n.State == DownloadState.Failed);
             SetDownloadStatus(failed == 0
                 ? $"Finished — imported {imported} track{(imported == 1 ? "" : "s")}"
                 : $"Finished — {done} done, {failed} failed, imported {imported} track{(imported == 1 ? "" : "s")}");
 
-            // Clear the list once everything that could finish has finished.
             if (done > 0 && failed == 0)
-            {
-                foreach (var item in _downloadItems.Where(i => i.State == DownloadState.Done).ToList())
-                    _downloadItems.Remove(item);
-            }
+                foreach (var root in _rootNodes.Where(IsFullyDone).ToList())
+                    _rootNodes.Remove(root);
             RefreshDownloadChrome();
         }
     }
 
+    private static bool IsFullyDone(DownloadNode node) => node.Kind switch
+    {
+        DownloadKind.Single or DownloadKind.Album => node.State == DownloadState.Done,
+        _ => node.Children.Count > 0 && node.Children.All(IsFullyDone),
+    };
+
     // ---- Progress + status chrome --------------------------------------
 
-    private void UpdateAggregateProgress(IReadOnlyList<DownloadItem> queue)
+    private void UpdateAggregateProgress(IReadOnlyList<DownloadNode> queue)
     {
         if (queue.Count == 0) { DownloadProgressBar.Value = 0; return; }
-        var completed = queue.Count(i => i.State is DownloadState.Done or DownloadState.Importing);
-        var partial = queue.Where(i => i.State == DownloadState.Downloading).Sum(i => i.Progress);
+        var completed = queue.Count(n => n.State is DownloadState.Done or DownloadState.Importing);
+        var partial = queue.Where(n => n.State == DownloadState.Downloading).Sum(n => n.Progress);
         DownloadProgressBar.Value = Math.Clamp((completed + partial) / queue.Count, 0, 1);
         DownloadProgressLabel.Text = $"{completed} of {queue.Count} downloaded";
     }
 
     private void RefreshDownloadChrome()
     {
-        var total = _downloadItems.Count;
-        var done = _downloadItems.Count(i => i.State == DownloadState.Done);
-        DownloadEmptyHint.Visibility = total == 0 ? Visibility.Visible : Visibility.Collapsed;
-        LinksGrid.Visibility = total == 0 ? Visibility.Collapsed : Visibility.Visible;
+        var units = DownloadUnits();
+        var total = units.Count;
+        var done = units.Count(n => n.State == DownloadState.Done);
+        DownloadEmptyHint.Visibility = _rootNodes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        LinksTree.Visibility = _rootNodes.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         DownloadProgressLabel.Text = $"{done} of {total} downloaded";
         if (!_downloading)
             DownloadProgressBar.Value = total == 0 ? 0 : (double)done / total;
@@ -373,7 +583,7 @@ public partial class MainWindow
 
     private void UpdateDownloadButtonState()
     {
-        var hasWork = _downloadItems.Any(i => i.State is not DownloadState.Done);
+        var hasWork = DownloadUnits().Any(n => n.State is not DownloadState.Done);
         DownloadButton.IsEnabled = _downloading || (hasWork && ToolManager.ToolsPresent);
     }
 

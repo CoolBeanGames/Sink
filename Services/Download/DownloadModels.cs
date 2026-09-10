@@ -4,96 +4,158 @@ using System.Runtime.CompilerServices;
 
 namespace Sink.Services.Download;
 
-/// <summary>
-/// One track inside an album / playlist download row: its (editable) title and
-/// whether it should be included in the download. <see cref="Index"/> is the
-/// 1-based position in the source playlist, used for <c>--playlist-items</c>.
-/// </summary>
-public sealed class TrackChoice : INotifyPropertyChanged
-{
-    private bool _enabled = true;
-    private string _title;
-
-    public TrackChoice(int index, string title)
-    {
-        Index = index;
-        ScannedTitle = title;
-        _title = title;
-    }
-
-    public int Index { get; }
-    public string ScannedTitle { get; }
-
-    public bool Enabled { get => _enabled; set => Set(ref _enabled, value); }
-    public string Title { get => _title; set => Set(ref _title, value); }
-
-    /// <summary>True when the user has changed the title away from what yt-dlp reported.</summary>
-    public bool TitleEdited =>
-        _title.Trim().Length > 0 && !string.Equals(_title.Trim(), ScannedTitle.Trim(), StringComparison.Ordinal);
-
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    private void Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
-    {
-        if (EqualityComparer<T>.Default.Equals(field, value)) return;
-        field = value;
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
-    }
-}
-
 public enum DownloadState { Pending, Scanning, Ready, Downloading, Importing, Done, Failed }
 
+/// <summary>Where a node sits in the download tree.</summary>
+public enum DownloadKind { Single, Album, Artist, Track }
+
 /// <summary>
-/// One row in the download list: the source link plus the metadata we scanned
-/// (or the user edited). Implements <see cref="INotifyPropertyChanged"/> so the
-/// grid updates live as scanning and downloading progress.
+/// One node in the download tree. An artist link becomes an <see cref="DownloadKind.Artist"/>
+/// node with <see cref="DownloadKind.Album"/> children, each of which expands to
+/// <see cref="DownloadKind.Track"/> children. A plain album link is a root Album
+/// node; a single video is a <see cref="DownloadKind.Single"/> node with no children.
+/// Every node carries an include toggle; a parent's toggle cascades to its children
+/// and reads back as indeterminate when they disagree.
 /// </summary>
-public sealed class DownloadItem : INotifyPropertyChanged
+public sealed class DownloadNode : INotifyPropertyChanged
 {
     private string _url = "";
     private string _title = "";
     private string _artist = "";
     private string _album = "";
     private string _genre = "";
+    private bool _enabled = true;
+    private bool _isExpanded;
+    private bool _scanned;
     private DownloadState _state = DownloadState.Pending;
     private double _progress;
     private string _statusText = "Waiting to scan";
-    private bool _isPlaylist;
-    private int _trackCount;
-    private bool _enabled = true;
-    private bool _isExpanded;
 
-    public DownloadItem()
+    public DownloadNode(DownloadKind kind)
     {
-        Tracks.CollectionChanged += (_, e) =>
+        Kind = kind;
+        Children.CollectionChanged += (_, e) =>
         {
-            foreach (var added in e.NewItems?.OfType<TrackChoice>() ?? [])
-                added.PropertyChanged += (_, _) => OnPropertyChanged(nameof(TrackSummary));
-            OnPropertyChanged(nameof(HasTrackList));
-            OnPropertyChanged(nameof(TrackSummary));
+            foreach (var added in e.NewItems?.OfType<DownloadNode>() ?? [])
+            {
+                added.Parent = this;
+                added.PropertyChanged += Child_PropertyChanged;
+            }
+            OnChildChanged();
+            OnPropertyChanged(nameof(HasChildren));
         };
     }
 
-    /// <summary>Child tracks for an album / playlist row; empty for a single track.</summary>
-    public ObservableCollection<TrackChoice> Tracks { get; } = [];
+    public DownloadKind Kind { get; }
+    public DownloadNode? Parent { get; private set; }
+    public ObservableCollection<DownloadNode> Children { get; } = [];
 
-    public bool HasTrackList => Tracks.Count > 0;
+    /// <summary>1-based position in the source playlist (Track nodes only).</summary>
+    public int Index { get; init; }
+    public string ScannedTitle { get; init; } = "";
 
-    public string TrackSummary => Tracks.Count == 0
-        ? ""
-        : $"{Tracks.Count(t => t.Enabled)}/{Tracks.Count} tracks";
-
-    /// <summary>Whether this row is part of the next download run.</summary>
-    public bool Enabled { get => _enabled; set => Set(ref _enabled, value); }
-
-    /// <summary>Whether the row's track list is shown.</summary>
-    public bool IsExpanded { get => _isExpanded; set => Set(ref _isExpanded, value); }
+    /// <summary>Whether this node's child list has been fetched yet.</summary>
+    public bool Scanned { get => _scanned; set => Set(ref _scanned, value); }
 
     public string Url { get => _url; set => Set(ref _url, value); }
-    public string Title { get => _title; set => Set(ref _title, value); }
-    public string Artist { get => _artist; set => Set(ref _artist, value); }
-    public string Album { get => _album; set => Set(ref _album, value); }
-    public string Genre { get => _genre; set => Set(ref _genre, value); }
+
+    public string Title
+    {
+        get => _title;
+        set { if (Set(ref _title, value)) { OnPropertyChanged(nameof(TitleEdited)); OnPropertyChanged(nameof(Name)); } }
+    }
+
+    public string Artist
+    {
+        get => _artist;
+        set
+        {
+            if (!Set(ref _artist, value)) return;
+            OnPropertyChanged(nameof(Name));
+            if (Kind == DownloadKind.Artist)
+                foreach (var c in Children) c.Artist = value;
+        }
+    }
+
+    public string Album
+    {
+        get => _album;
+        set { if (Set(ref _album, value)) OnPropertyChanged(nameof(Name)); }
+    }
+
+    public string Genre
+    {
+        get => _genre;
+        set
+        {
+            if (!Set(ref _genre, value)) return;
+            if (Kind == DownloadKind.Artist)
+                foreach (var c in Children) c.Genre = value;
+        }
+    }
+
+    /// <summary>The node's primary editable label — artist name, album name or track title depending on kind.</summary>
+    public string Name
+    {
+        get => Kind switch
+        {
+            DownloadKind.Artist => _artist,
+            DownloadKind.Album => _album,
+            _ => _title
+        };
+        set
+        {
+            switch (Kind)
+            {
+                case DownloadKind.Artist: Artist = value; break;
+                case DownloadKind.Album: Album = value; break;
+                default: Title = value; break;
+            }
+        }
+    }
+
+    // Which secondary fields this kind exposes.
+    public bool IsTrack => Kind == DownloadKind.Track;
+    public bool ShowArtist => Kind == DownloadKind.Single || (Kind == DownloadKind.Album && Parent is null);
+    public bool ShowAlbum => Kind == DownloadKind.Single;
+    public bool ShowGenre => Kind is DownloadKind.Single or DownloadKind.Artist
+                             || (Kind == DownloadKind.Album && Parent is null);
+
+    /// <summary>Include toggle. Null = children disagree.</summary>
+    public bool? Enabled
+    {
+        get
+        {
+            if (Children.Count == 0) return _enabled;
+            bool? acc = null;
+            foreach (var c in Children)
+            {
+                var v = c.Enabled;
+                if (acc is null) { acc = v; continue; }
+                if (acc != v) return null;
+            }
+            return acc;
+        }
+        set
+        {
+            var v = value ?? true;
+            if (Children.Count == 0)
+            {
+                if (_enabled == v) return;
+                _enabled = v;
+                OnPropertyChanged(nameof(Enabled));
+            }
+            else
+            {
+                foreach (var c in Children) c.Enabled = v;
+            }
+            Parent?.OnChildChanged();
+        }
+    }
+
+    public bool IsExpanded { get => _isExpanded; set => Set(ref _isExpanded, value); }
+    public bool HasChildren => Children.Count > 0;
+    public bool CanHaveChildren => Kind is DownloadKind.Artist or DownloadKind.Album;
 
     public DownloadState State
     {
@@ -101,18 +163,34 @@ public sealed class DownloadItem : INotifyPropertyChanged
         set { if (Set(ref _state, value)) OnPropertyChanged(nameof(IsFinished)); }
     }
 
-    /// <summary>0..1 download progress for this item.</summary>
     public double Progress { get => _progress; set => Set(ref _progress, value); }
-
     public string StatusText { get => _statusText; set => Set(ref _statusText, value); }
-
-    /// <summary>True when the link is a playlist / album — one row, many tracks.</summary>
-    public bool IsPlaylist { get => _isPlaylist; set => Set(ref _isPlaylist, value); }
-
-    /// <summary>Number of tracks the link resolves to (1 for a single video).</summary>
-    public int TrackCount { get => _trackCount; set => Set(ref _trackCount, value); }
-
     public bool IsFinished => _state is DownloadState.Done or DownloadState.Failed;
+
+    /// <summary>True when a Track's title was hand-edited away from what yt-dlp reported.</summary>
+    public bool TitleEdited => Kind == DownloadKind.Track
+        && _title.Trim().Length > 0
+        && !string.Equals(_title.Trim(), ScannedTitle.Trim(), StringComparison.Ordinal);
+
+    /// <summary>Enumerates this node and every descendant, depth-first.</summary>
+    public IEnumerable<DownloadNode> SelfAndDescendants()
+    {
+        yield return this;
+        foreach (var child in Children)
+            foreach (var node in child.SelfAndDescendants())
+                yield return node;
+    }
+
+    private void Child_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(Enabled)) OnChildChanged();
+    }
+
+    private void OnChildChanged()
+    {
+        OnPropertyChanged(nameof(Enabled));
+        Parent?.OnChildChanged();
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

@@ -426,6 +426,7 @@ public partial class MainWindow : Window
 
     private void PlayTrack(Track track)
     {
+        StopPreview("started a library track");
         if (_playingEpisode is not null) StopPodcast(markPlayed: false);
         _mediaPlayer.Stop();
         _mediaPlayer.Close();
@@ -451,6 +452,7 @@ public partial class MainWindow : Window
 
     private void PlaybackTimer_Tick(object? sender, EventArgs e)
     {
+        if (_previewNode is not null) { UpdatePreviewProgress(); return; }
         if (_nowPlaying is null || !_isPlaying) return;
         if (!string.IsNullOrWhiteSpace(_nowPlaying.FilePath) && _mediaPlayer.NaturalDuration.HasTimeSpan)
             _simulatedPosition = _mediaPlayer.Position;
@@ -485,6 +487,7 @@ public partial class MainWindow : Window
 
     private void PlayPause_Click(object sender, RoutedEventArgs e)
     {
+        if (_previewNode is not null) { TogglePreviewPause(); return; }
         if (_playingEpisode is not null) { TogglePodcastPause(); return; }
         if (_nowPlaying is null) return;
         _isPlaying = !_isPlaying;
@@ -495,12 +498,14 @@ public partial class MainWindow : Window
 
     private void Previous_Click(object sender, RoutedEventArgs e)
     {
+        if (_previewNode is not null) { StopPreview("skipped"); return; }
         if (_playingEpisode is not null) { SkipEpisode(-1); return; }
         Skip(-1);
     }
 
     private void Next_Click(object sender, RoutedEventArgs e)
     {
+        if (_previewNode is not null) { StopPreview("skipped"); return; }
         if (_playingEpisode is not null) { SkipEpisode(1); return; }
         NextTrack();
     }
@@ -517,6 +522,11 @@ public partial class MainWindow : Window
     private void ProgressSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_updatingProgress) return;
+        if (_previewNode is not null)
+        {
+            _previewPlayer.Position = TimeSpan.FromSeconds(e.NewValue);
+            return;
+        }
         if (_playingEpisode is not null)
         {
             _podcastPlayer.Position = TimeSpan.FromSeconds(e.NewValue);
@@ -532,6 +542,7 @@ public partial class MainWindow : Window
     {
         _mediaPlayer.Volume = e.NewValue;
         _podcastPlayer.Volume = e.NewValue;
+        _previewPlayer.Volume = e.NewValue;
     }
 
     private void IpodButton_Click(object sender, RoutedEventArgs e)
