@@ -127,10 +127,10 @@ public partial class MainWindow : Window
         }
         try
         {
-            var library = await Task.Run(() => Sink.Services.Ipod.ItunesDbReader.Read(root));
+            var library = await Task.Run(() => Sink.Services.Ipod.IpodReader.Read(root));
             if (_ipodLibraryRoot != root) return; // device changed while loading
             _ipodLibrary = library;
-            foreach (var t in library.Tracks) _ipodTracks.Add(AdaptIpodTrack(t, root));
+            foreach (var t in library.Tracks) _ipodTracks.Add(AdaptIpodTrack(t));
             var readableName = library.DeviceName ?? _ipodDevice?.Name ?? "iPod";
             PlaybackStatus.Text = $"Read {library.Tracks.Count} track{(library.Tracks.Count == 1 ? "" : "s")} from {readableName}";
             ApplyIpodLibraryChrome(library, readableName);
@@ -170,14 +170,14 @@ public partial class MainWindow : Window
         return $"{v:0.#} {units[u]}";
     }
 
-    private static Track AdaptIpodTrack(Sink.Services.Ipod.IpodDbTrack t, string root) => new()
+    private static Track AdaptIpodTrack(Sink.Services.Ipod.IpodDbTrack t) => new()
     {
         Title = t.Title,
         Artist = string.IsNullOrWhiteSpace(t.Artist) ? "Unknown Artist" : t.Artist,
         Album = string.IsNullOrWhiteSpace(t.Album) ? "Unknown Album" : t.Album,
         Genre = string.IsNullOrWhiteSpace(t.Genre) ? "Unknown" : t.Genre,
-        FileName = System.IO.Path.GetFileName(t.IpodPath.Replace(':', '/')),
-        FilePath = t.ResolvePath(root),
+        FileName = System.IO.Path.GetFileName(t.FilePath),
+        FilePath = t.FilePath,
         TrackNumber = t.TrackNumber,
         Year = t.Year,
         Duration = t.Duration,
@@ -287,8 +287,8 @@ public partial class MainWindow : Window
             var playlists = _ipodLibrary.Playlists.Count(p => !p.IsMaster);
             return $"{_ipodLibrary.Tracks.Count} tracks · {playlists} playlist{(playlists == 1 ? "" : "s")} on {who}";
         }
-        if (_ipodDevice?.RootPath is null && _ipodDevice is not null)
-            return "iPod is Mac-formatted — restore it on Windows to read its library";
+        if (_ipodDevice is { CanReadDatabase: false })
+            return "No iTunes database on this iPod yet — sync music to create one";
         return _syncedTrackIds.Count == 0 ? "Nothing synced to iPod yet — drag music onto IPOD" : null;
     }
 
