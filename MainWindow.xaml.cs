@@ -51,6 +51,7 @@ public partial class MainWindow : Window
         _mediaPlayer.MediaEnded += (_, _) => NextTrack();
         _mediaPlayer.Volume = 0.7;
         RenderLibrary();
+        InitDownloadPage();
         _ipodPollTimer.Tick += (_, _) => PollForIpod();
         _ipodPollTimer.Start();
         Loaded += (_, _) => PollForIpod();
@@ -221,6 +222,7 @@ public partial class MainWindow : Window
 
     private void ApplySourceChrome()
     {
+        ExitDownloadView();
         var music = _source == LibrarySource.Music;
         MusicNav.Visibility = music ? Visibility.Visible : Visibility.Collapsed;
         IpodNav.Visibility = music ? Visibility.Collapsed : Visibility.Visible;
