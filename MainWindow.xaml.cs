@@ -580,6 +580,23 @@ public partial class MainWindow : Window
         UpdateRecordSpin();
     }
 
+    /// <summary>Shows / hides a small spinning wheel next to a sidebar section button.</summary>
+    private static void SpinIndicator(FrameworkElement spinner, bool on)
+    {
+        if (spinner.RenderTransform is not RotateTransform rt) return;
+        if (on)
+        {
+            spinner.Visibility = Visibility.Visible;
+            rt.BeginAnimation(RotateTransform.AngleProperty,
+                new DoubleAnimation(0, 360, TimeSpan.FromSeconds(0.9)) { RepeatBehavior = RepeatBehavior.Forever });
+        }
+        else
+        {
+            rt.BeginAnimation(RotateTransform.AngleProperty, null);
+            spinner.Visibility = Visibility.Collapsed;
+        }
+    }
+
     private void UpdateRecordSpin()
     {
         if (_ipodSyncing) return;
@@ -753,6 +770,7 @@ public partial class MainWindow : Window
         if (!_ipodConnected || _ipodSyncing) return;
         _ipodSyncing = true;
         _recordSpinning = false;
+        SpinIndicator(IpodSpinner, true);
         IpodStateText.Text = "SYNCING";
         var spin = new DoubleAnimation(0, 360, TimeSpan.FromSeconds(1.1)) { RepeatBehavior = RepeatBehavior.Forever };
         RecordRotation.BeginAnimation(RotateTransform.AngleProperty, spin);
@@ -769,6 +787,7 @@ public partial class MainWindow : Window
     private void StopIpodSync()
     {
         RecordRotation.BeginAnimation(RotateTransform.AngleProperty, null);
+        SpinIndicator(IpodSpinner, false);
         _ipodSyncing = false;
         if (_ipodConnected) IpodStateText.Text = "IPOD";
         UpdateRecordSpin();

@@ -528,6 +528,7 @@ public partial class MainWindow
         _downloadCts = new CancellationTokenSource();
         var token = _downloadCts.Token;
         DownloadButton.Content = "Stop";
+        SpinIndicator(DownloadSpinner, true);
         var imported = 0;
 
         try
@@ -603,6 +604,7 @@ public partial class MainWindow
             _downloadCts?.Dispose();
             _downloadCts = null;
             DownloadButton.Content = "⭳  Download";
+            SpinIndicator(DownloadSpinner, false);
 
             if (imported > 0)
             {

@@ -223,10 +223,13 @@ public partial class MainWindow
         RenderPodcasts();
     }
 
+    private int _podcastDownloads;
+
     private async Task DownloadEpisodeAsync(Podcast podcast, PodcastEpisode episode)
     {
         var dir = Path.Combine(PodcastFolder(), Sanitize(podcast.Title));
         PodcastStatus.Text = $"Downloading {episode.Title}…";
+        if (_podcastDownloads++ == 0) SpinIndicator(PodcastSpinner, true);
         try
         {
             var progress = new Progress<double>(p => PodcastStatus.Text = $"Downloading {episode.Title} — {p * 100:0}%");
@@ -240,6 +243,10 @@ public partial class MainWindow
         {
             Log.Error($"Podcast episode download failed: {episode.Title}", ex);
             PodcastStatus.Text = $"Download failed: {ex.Message}";
+        }
+        finally
+        {
+            if (--_podcastDownloads <= 0) { _podcastDownloads = 0; SpinIndicator(PodcastSpinner, false); }
         }
     }
 

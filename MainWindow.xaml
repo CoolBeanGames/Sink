@@ -51,6 +51,10 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="PODCASTS" VerticalAlignment="Center"/>
                             <Ellipse x:Name="PodcastsNewDot" Width="6" Height="6" Fill="#8B7CFF" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                            <Grid x:Name="PodcastSpinner" Width="12" Height="12" Margin="7,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" RenderTransformOrigin="0.5,0.5">
+                                <Grid.RenderTransform><RotateTransform/></Grid.RenderTransform>
+                                <Ellipse Stroke="#8B7CFF" StrokeThickness="1.7" StrokeDashArray="3.1 1.5" StrokeDashCap="Round"/>
+                            </Grid>
                         </StackPanel>
                     </Button>
                     <StackPanel x:Name="PodcastNav" Visibility="Collapsed">
@@ -76,6 +80,10 @@
                                 </Grid>
                             </Border>
                             <TextBlock Text="IPOD" VerticalAlignment="Center"/>
+                            <Grid x:Name="IpodSpinner" Width="12" Height="12" Margin="7,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" RenderTransformOrigin="0.5,0.5">
+                                <Grid.RenderTransform><RotateTransform/></Grid.RenderTransform>
+                                <Ellipse Stroke="#8B7CFF" StrokeThickness="1.7" StrokeDashArray="3.1 1.5" StrokeDashCap="Round"/>
+                            </Grid>
                         </StackPanel>
                     </Button>
                     <StackPanel x:Name="IpodNav" Visibility="Collapsed">
@@ -91,6 +99,10 @@
                                 <Path Data="M7,0 L7,9 M3,6 L7,10 L11,6 M1,14 L13,14" Stroke="#8B7CFF" StrokeThickness="1.6" StrokeEndLineCap="Round" StrokeStartLineCap="Round"/>
                             </Border>
                             <TextBlock Text="DOWNLOAD" VerticalAlignment="Center"/>
+                            <Grid x:Name="DownloadSpinner" Width="12" Height="12" Margin="7,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" RenderTransformOrigin="0.5,0.5">
+                                <Grid.RenderTransform><RotateTransform/></Grid.RenderTransform>
+                                <Ellipse Stroke="#8B7CFF" StrokeThickness="1.7" StrokeDashArray="3.1 1.5" StrokeDashCap="Round"/>
+                            </Grid>
                         </StackPanel>
                     </Button>
                 </StackPanel>
