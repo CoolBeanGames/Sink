@@ -280,32 +280,48 @@ public partial class MainWindow
             targets.AddRange(node.Children);
         if (node.Kind == DownloadKind.Artist)
             targets.AddRange(node.Children.SelectMany(c => c.Children));
+        targets = targets.Where(t => !string.IsNullOrWhiteSpace(t.Name)).Distinct().ToList();
+        if (targets.Count == 0) return;
 
+        // Mark every row up front so the whole set spins, then work through
+        // them with a little concurrency and per-title retries — one-at-a-time
+        // inline was unreliable for a whole album (task 112).
+        foreach (var target in targets) target.Translating = true;
         SetDownloadStatus(targets.Count > 1 ? $"Translating {targets.Count} titles…" : "Translating…");
+
         var changed = 0;
-        try
+        var failed = 0;
+        using var throttle = new SemaphoreSlim(4);
+        await Task.WhenAll(targets.Select(async target =>
         {
-            foreach (var target in targets)
+            await throttle.WaitAsync();
+            try
             {
-                var original = target.Name;
-                if (string.IsNullOrWhiteSpace(original)) continue;
-                var english = await Translation.ToEnglishAsync(original);
-                if (!string.Equals(english, original, StringComparison.Ordinal))
+                var result = await Translation.ToEnglishAsync(target.Name);
+                if (!result.Ok) { Interlocked.Increment(ref failed); return; }
+                if (result.Changed)
                 {
-                    target.Name = english;
-                    changed++;
+                    target.Name = result.Text;
+                    Interlocked.Increment(ref changed);
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            Log.Error("Translate titles failed", ex);
-            SetDownloadStatus($"Translation failed: {ex.Message}");
-            return;
-        }
-        SetDownloadStatus(changed == 0
-            ? "Nothing to translate — titles are already English"
-            : $"Translated {changed} title{(changed == 1 ? "" : "s")} to English");
+            catch (Exception ex)
+            {
+                Interlocked.Increment(ref failed);
+                Log.Warn($"Translate failed for \"{target.Name}\": {ex.Message}");
+            }
+            finally
+            {
+                throttle.Release();
+                target.Translating = false;
+            }
+        }));
+
+        var message = changed == 0
+            ? "Titles are already English"
+            : $"Translated {changed} title{(changed == 1 ? "" : "s")} to English";
+        if (failed > 0) message += $" · {failed} couldn't be reached — try again";
+        SetDownloadStatus(message);
     }
 
     private void EditNodeMetadata(DownloadNode node)
@@ -319,13 +335,32 @@ public partial class MainWindow
         SetDownloadStatus($"Updated metadata for “{node.Name}”");
     }
 
-    /// <summary>Sets every track's number to its position in the list (task 109).</summary>
-    private void NumberTracksByOrder(DownloadNode node)
+    /// <summary>
+    /// Sets every track's number to its position in the list (task 109). Works
+    /// from the album, artist or an individual track's menu (task 113); loads a
+    /// collapsed album's tracks first so the option is never a no-op.
+    /// </summary>
+    private async void NumberTracksByOrder(DownloadNode node)
     {
-        var tracks = node.SelfAndDescendants().Where(c => c.Kind == DownloadKind.Track).ToList();
-        foreach (var track in tracks)
-            if (track.Index > 0) track.TrackNumber = track.Index;
-        SetDownloadStatus($"Numbered {tracks.Count} track{(tracks.Count == 1 ? "" : "s")} by list order");
+        try
+        {
+            foreach (var album in node.SelfAndDescendants().Where(n => n.Kind == DownloadKind.Album && !n.Scanned).ToList())
+            {
+                album.IsExpanded = true;
+                await ScanAlbumTracksAsync(album);
+            }
+            var tracks = node.SelfAndDescendants().Where(c => c.Kind == DownloadKind.Track).ToList();
+            foreach (var track in tracks)
+                if (track.Index > 0) track.TrackNumber = track.Index;
+            SetDownloadStatus(tracks.Count == 0
+                ? "No tracks to number yet"
+                : $"Numbered {tracks.Count} track{(tracks.Count == 1 ? "" : "s")} by list order");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Numbering tracks failed", ex);
+            SetDownloadStatus($"Couldn't number tracks: {ex.Message}");
+        }
     }
 
     private void TrimTrackTitles(DownloadNode album)
@@ -499,9 +534,10 @@ public partial class MainWindow
             menu.Items.Add(Item("Clear cover art", () => { node.ArtworkOverride = null; RefreshDownloadNodeStatus(node); }));
         if (node.Kind == DownloadKind.Album && node.Children.Any(c => c.Kind == DownloadKind.Track))
             menu.Items.Add(Item("Trim track titles…", () => TrimTrackTitles(node)));
-        if (node.Kind is DownloadKind.Album or DownloadKind.Artist
-            && node.SelfAndDescendants().Any(c => c.Kind == DownloadKind.Track))
+        if (node.Kind is DownloadKind.Album or DownloadKind.Artist)
             menu.Items.Add(Item("Number tracks by list order", () => NumberTracksByOrder(node)));
+        else if (node.Kind == DownloadKind.Track && node.Parent is not null)
+            menu.Items.Add(Item("Number tracks by list order", () => NumberTracksByOrder(node.Parent)));
         if (node.Kind == DownloadKind.Album)
             menu.Items.Add(Item("Rescan tracks", () => { node.Scanned = false; node.IsExpanded = true; _ = ScanAlbumTracksAsync(node); }));
         menu.Items.Add(Item("Copy link", () =>

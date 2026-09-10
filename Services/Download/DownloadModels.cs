@@ -33,6 +33,7 @@ public sealed class DownloadNode : INotifyPropertyChanged
     private DownloadState _state = DownloadState.Pending;
     private double _progress;
     private string _statusText = "Waiting to scan";
+    private bool _translating;
 
     public DownloadNode(DownloadKind kind)
     {
@@ -184,12 +185,22 @@ public sealed class DownloadNode : INotifyPropertyChanged
     public DownloadState State
     {
         get => _state;
-        set { if (Set(ref _state, value)) { OnPropertyChanged(nameof(IsFinished)); NotifyStatus(); } }
+        set { if (Set(ref _state, value)) { OnPropertyChanged(nameof(IsFinished)); OnPropertyChanged(nameof(IsBusy)); NotifyStatus(); } }
     }
 
     public double Progress { get => _progress; set => Set(ref _progress, value); }
     public string StatusText { get => _statusText; set => Set(ref _statusText, value); }
     public bool IsFinished => _state is DownloadState.Done or DownloadState.Failed;
+
+    /// <summary>True while this row is fetching its English title (task 111).</summary>
+    public bool Translating
+    {
+        get => _translating;
+        set { if (Set(ref _translating, value)) OnPropertyChanged(nameof(IsBusy)); }
+    }
+
+    /// <summary>Drives the per-row spinner: a download or a title translation is in flight.</summary>
+    public bool IsBusy => _translating || _state is DownloadState.Downloading or DownloadState.Importing;
 
     // ---- Status glyph (task 110) --------------------------------------
     //

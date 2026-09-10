@@ -259,6 +259,32 @@
                                                            Visibility="{Binding IsTrack, Converter={StaticResource B2V}}"/>
                                                 <Button DockPanel.Dock="Right" Content="✕" Click="RemoveNode_Click" Background="Transparent" Foreground="#8A93A3" BorderThickness="0" Padding="6,0" FontSize="11" Cursor="Hand" ToolTip="Remove" VerticalAlignment="Center"/>
                                                 <TextBlock DockPanel.Dock="Right" Text="{Binding StatusText}" ToolTip="{Binding StatusText}" VerticalAlignment="Center" Foreground="#8A93A3" FontSize="11" Margin="14,0,6,0" MaxWidth="260" TextTrimming="CharacterEllipsis"/>
+                                                <Grid DockPanel.Dock="Right" Width="13" Height="13" Margin="6,0,2,0" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5"
+                                                      ToolTip="Working…">
+                                                    <Grid.RenderTransform><RotateTransform/></Grid.RenderTransform>
+                                                    <Grid.Style>
+                                                        <Style TargetType="Grid">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsBusy}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                    <DataTrigger.EnterActions>
+                                                                        <BeginStoryboard x:Name="RowSpin">
+                                                                            <Storyboard>
+                                                                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                                                 From="0" To="360" Duration="0:0:0.9" RepeatBehavior="Forever"/>
+                                                                            </Storyboard>
+                                                                        </BeginStoryboard>
+                                                                    </DataTrigger.EnterActions>
+                                                                    <DataTrigger.ExitActions>
+                                                                        <StopStoryboard BeginStoryboardName="RowSpin"/>
+                                                                    </DataTrigger.ExitActions>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Grid.Style>
+                                                    <Ellipse Stroke="#8B7CFF" StrokeThickness="1.8" StrokeDashArray="3.1 1.5" StrokeDashCap="Round"/>
+                                                </Grid>
                                                 <TextBox DockPanel.Dock="Left" Width="300" Tag="Name" Text="{Binding Name, UpdateSourceTrigger=LostFocus}"
                                                          Style="{StaticResource NodeField}" PreviewMouseLeftButtonDown="NodeName_PreviewMouseDown"
                                                          ToolTip="Double-click a track or single to preview it · arrow keys move between fields"/>
