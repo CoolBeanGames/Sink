@@ -29,7 +29,7 @@ public partial class MainWindow : Window
     private bool _ipodSyncing;
     private bool _recordSpinning;
     private IpodDevice? _ipodDevice;
-    private readonly DispatcherTimer _ipodPollTimer = new() { Interval = TimeSpan.FromSeconds(2.5) };
+    private readonly DispatcherTimer _ipodPollTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private Point _trackDragStart;
     private const string TrackDragFormat = "Sink.TrackIds";
 
@@ -45,6 +45,7 @@ public partial class MainWindow : Window
         RenderLibrary();
         _ipodPollTimer.Tick += (_, _) => PollForIpod();
         _ipodPollTimer.Start();
+        Loaded += (_, _) => PollForIpod();
     }
 
     private void LoadLibrary()
@@ -71,24 +72,37 @@ public partial class MainWindow : Window
     private void SaveLibrary() => LibraryStore.Save(_tracks, _playlists);
 
     private bool _ipodPolling;
+    private bool _manualRescan;
 
-    private async void PollForIpod()
+    private async void PollForIpod(bool manual = false)
     {
+        _manualRescan |= manual;
         if (_ipodPolling) return;
         _ipodPolling = true;
         IpodDevice? device;
         try { device = await Task.Run(IpodService.Detect); }
         finally { _ipodPolling = false; }
+
+        var wasManual = _manualRescan;
+        _manualRescan = false;
+
         if (device is not null)
         {
-            if (!_ipodConnected || _ipodDevice?.RootPath != device.RootPath)
+            if (!_ipodConnected || _ipodDevice?.Key != device.Key)
             {
                 _ipodDevice = device;
                 SetIpodConnected(true);
+                PlaybackStatus.Text = $"Connected {device.Name}";
+            }
+            else if (wasManual)
+            {
+                PlaybackStatus.Text = $"{device.Name} is connected";
             }
             return;
         }
+
         if (_ipodConnected && _ipodDevice is not null) SetIpodConnected(false);
+        if (wasManual) PlaybackStatus.Text = "No iPod found — check the cable, or click the record to simulate one";
     }
 
     private void Category_Click(object sender, RoutedEventArgs e)
@@ -317,7 +331,17 @@ public partial class MainWindow : Window
 
     private void IpodMenu_Opened(object sender, RoutedEventArgs e)
     {
-        foreach (var item in IpodMenu.Items.OfType<MenuItem>().Skip(1)) item.IsEnabled = _ipodConnected;
+        foreach (var item in IpodMenu.Items.OfType<MenuItem>())
+        {
+            if (item == IpodMenuHeader || item == IpodRescanItem) continue;
+            item.IsEnabled = _ipodConnected;
+        }
+    }
+
+    private void RescanIpod_Click(object sender, RoutedEventArgs e)
+    {
+        PlaybackStatus.Text = "Scanning for a connected iPod…";
+        PollForIpod(manual: true);
     }
 
     private void SyncIpod_Click(object sender, RoutedEventArgs e) => StartIpodSync();

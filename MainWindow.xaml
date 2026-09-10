@@ -86,6 +86,8 @@
                     <ContextMenu x:Name="IpodMenu" Background="#1D222C" Foreground="#F4F6FA" BorderBrush="#363D4B" Opened="IpodMenu_Opened">
                         <MenuItem x:Name="IpodMenuHeader" Header="No iPod connected" IsEnabled="False" FontWeight="SemiBold"/>
                         <Separator/>
+                        <MenuItem x:Name="IpodRescanItem" Header="Rescan for iPod" Click="RescanIpod_Click"/>
+                        <Separator/>
                         <MenuItem Header="Sync all" Click="SyncIpod_Click"/>
                         <MenuItem Header="Sync music" Click="SyncIpod_Click"/>
                         <MenuItem Header="Sync changes" Click="SyncIpod_Click"/>
