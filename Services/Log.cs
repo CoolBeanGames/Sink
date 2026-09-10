@@ -4,13 +4,29 @@ using System.Text;
 namespace Sink.Services;
 
 /// <summary>
-/// Minimal append-only file logger at %AppData%/Sink/logs/sink-yyyy-MM-dd.log.
-/// Every line is timestamped and tagged; exceptions log their full string.
-/// Cheap and swallow-all so logging never becomes a failure of its own.
+/// Minimal append-only file logger at Documents/Sink/Logs/sink-yyyy-MM-dd.log —
+/// kept under Documents so the user can get at it easily. Every line is
+/// timestamped and tagged; exceptions log their full string. Cheap and
+/// swallow-all so logging never becomes a failure of its own.
 /// </summary>
 public static class Log
 {
-    public static string Directory { get; } = Path.Combine(LibraryStore.Directory, "logs");
+    public static string Directory { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Sink", "Logs");
+
+    /// <summary>Opens the log folder in Explorer, creating it first if need be.</summary>
+    public static void OpenFolder()
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(Directory);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Directory) { UseShellExecute = true });
+        }
+        catch
+        {
+            // opening the folder is a convenience, never worth surfacing
+        }
+    }
 
     private static readonly object Gate = new();
     private static string CurrentPath => Path.Combine(Directory, $"sink-{DateTime.Now:yyyy-MM-dd}.log");

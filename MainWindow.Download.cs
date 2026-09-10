@@ -131,9 +131,9 @@ public partial class MainWindow
         catch (Exception ex)
         {
             probe.State = DownloadState.Failed;
-            probe.StatusText = "Couldn't scan";
+            probe.StatusText = $"Couldn't scan — {Shorten(ex.Message)}";
             Log.Error($"yt-dlp scan failed for {url}", ex);
-            SetDownloadStatus($"Scan failed for {url}: {ex.Message}");
+            SetDownloadStatus($"Scan failed for {url}: {ex.Message} (see Settings ▸ Open logs)");
         }
         UpdateDownloadButtonState();
     }
@@ -233,8 +233,9 @@ public partial class MainWindow
         catch (Exception ex)
         {
             node.State = DownloadState.Failed;
-            node.StatusText = "Couldn't load tracks";
+            node.StatusText = $"Couldn't load tracks — {Shorten(ex.Message)}";
             Log.Error($"track scan failed for {node.Url}", ex);
+            SetDownloadStatus($"Couldn't load tracks for {node.Name}: {ex.Message} (see Settings ▸ Open logs)");
         }
         UpdateDownloadButtonState();
     }
@@ -553,6 +554,7 @@ public partial class MainWindow
 
                     IReadOnlyList<string> paths;
                     var partialFailure = false;
+                    var partialReason = "";
                     try
                     {
                         paths = await DownloadService.DownloadAsync(node, options, progress, status, token);
@@ -561,6 +563,7 @@ public partial class MainWindow
                     {
                         paths = partial.Downloaded;
                         partialFailure = true;
+                        partialReason = partial.Reason;
                     }
 
                     node.State = DownloadState.Importing;
@@ -573,8 +576,9 @@ public partial class MainWindow
                     {
                         node.State = DownloadState.Failed;
                         var missing = node.Children.Count(c => c.Kind == DownloadKind.Track && c.State == DownloadState.Failed);
-                        node.StatusText = $"{tracks.Count} done, {missing} failed — retry";
-                        SetDownloadStatus($"{node.Name}: {missing} track{(missing == 1 ? "" : "s")} couldn't be downloaded");
+                        node.StatusText = $"{tracks.Count} done, {missing} failed — {Shorten(partialReason)}";
+                        SetDownloadStatus($"{node.Name}: {missing} track{(missing == 1 ? "" : "s")} failed — {partialReason} (see Settings ▸ Open logs)");
+                        Log.Warn($"{node.Name}: {missing} track(s) failed — {partialReason}");
                     }
                     else
                     {
@@ -592,8 +596,9 @@ public partial class MainWindow
                 catch (Exception ex)
                 {
                     node.State = DownloadState.Failed;
-                    node.StatusText = "Failed";
-                    SetDownloadStatus($"{node.Name}: {ex.Message}");
+                    node.StatusText = $"Failed — {Shorten(ex.Message)}";
+                    SetDownloadStatus($"{node.Name}: {ex.Message} (see Settings ▸ Open logs)");
+                    Log.Error($"Download failed for {node.Name} ({node.Url})", ex);
                 }
                 UpdateAggregateProgress(queue);
             }
@@ -681,6 +686,13 @@ public partial class MainWindow
     {
         var hasWork = DownloadUnits().Any(n => n.State is not DownloadState.Done);
         DownloadButton.IsEnabled = _downloading || (hasWork && ToolManager.ToolsPresent);
+    }
+
+    /// <summary>Trims a failure reason to something that fits a status cell; the full text goes to the log.</summary>
+    private static string Shorten(string text)
+    {
+        text = text.Replace('\n', ' ').Replace('\r', ' ').Trim();
+        return text.Length <= 60 ? text : text[..57].TrimEnd() + "…";
     }
 
     private void SetDownloadStatus(string message)

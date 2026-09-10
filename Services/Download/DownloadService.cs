@@ -213,8 +213,10 @@ public static partial class DownloadService
         // failed tracks in the tree for a retry.
         if (produced.Count == 0)
         {
-            foreach (var t in trackNodes) t.State = DownloadState.Failed;
-            throw new InvalidOperationException(FirstError(stderr) ?? "Download failed");
+            var reason = FirstError(stderr) ?? "yt-dlp produced no audio";
+            foreach (var t in trackNodes) { t.State = DownloadState.Failed; t.StatusText = reason; }
+            Log.Error($"Download failed for {node.Name} ({node.Url}): {reason}");
+            throw new InvalidOperationException(reason);
         }
 
         // Map produced files to playlist positions ("001 - Title.mp3").
@@ -237,7 +239,12 @@ public static partial class DownloadService
                 : produced[0];
             if (file is null)
             {
-                if (trackNode.Kind == DownloadKind.Track) trackNode.State = DownloadState.Failed;
+                if (trackNode.Kind == DownloadKind.Track)
+                {
+                    trackNode.State = DownloadState.Failed;
+                    trackNode.StatusText = FirstError(stderr) ?? "yt-dlp skipped this track";
+                    Log.Warn($"Track {trackNode.Index} \"{trackNode.Name}\" of {album} did not download: {trackNode.StatusText}");
+                }
                 continue;
             }
 
@@ -258,16 +265,26 @@ public static partial class DownloadService
 
         progress.Report(1);
         if (finished.Count == 0)
-            throw new InvalidOperationException(FirstError(stderr) ?? "Download failed");
+        {
+            var reason = FirstError(stderr) ?? "Download failed";
+            Log.Error($"Download failed for {node.Name} ({node.Url}): {reason}");
+            throw new InvalidOperationException(reason);
+        }
         if (exit != 0 && isPlaylist && finished.Count < titleOrder.Count)
-            throw new PartialDownloadException(finished);
+        {
+            var reason = FirstError(stderr) ?? "yt-dlp reported an error on one or more tracks";
+            Log.Warn($"Partial album download for {album} ({node.Url}): {finished.Count}/{titleOrder.Count} tracks — {reason}");
+            throw new PartialDownloadException(finished, reason);
+        }
         return finished;
     }
 
-    /// <summary>Thrown when an album partly downloaded — carries the files that did land.</summary>
-    public sealed class PartialDownloadException(IReadOnlyList<string> downloaded) : Exception("Some tracks could not be downloaded")
+    /// <summary>Thrown when an album partly downloaded — carries the files that did land and why the rest didn't.</summary>
+    public sealed class PartialDownloadException(IReadOnlyList<string> downloaded, string reason)
+        : Exception(reason)
     {
         public IReadOnlyList<string> Downloaded { get; } = downloaded;
+        public string Reason { get; } = reason;
     }
 
     [GeneratedRegex(@"^(\d+)\s*-\s*")]

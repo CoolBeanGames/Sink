@@ -64,9 +64,15 @@ public sealed class SettingsWindow : SinkDialog
         }));
         actions.Children.Add(SecondaryButton("Export library…", (_, _) => _export()));
         actions.Children.Add(SecondaryButton("Import library…", (_, _) => _import()));
-        actions.Children[1].SetValue(MarginProperty, new Thickness(8, 0, 0, 0));
-        actions.Children[2].SetValue(MarginProperty, new Thickness(8, 0, 0, 0));
+        actions.Children.Add(SecondaryButton("Open logs…", (_, _) => Log.OpenFolder()));
+        for (var i = 1; i < actions.Children.Count; i++)
+            actions.Children[i].SetValue(MarginProperty, new Thickness(8, 0, 0, 0));
         body.Children.Add(actions);
+        body.Children.Add(new TextBlock
+        {
+            Text = $"Logs — including why a download failed — are written to {Log.Directory}",
+            Foreground = Hex("#6E7584"), FontSize = 11, Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap,
+        });
 
         var footer = new StackPanel
         {
