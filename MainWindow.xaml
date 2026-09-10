@@ -237,8 +237,11 @@
                                                 <Button DockPanel.Dock="Right" Content="✕" Click="RemoveNode_Click" Background="Transparent" Foreground="#8A93A3" BorderThickness="0" Padding="6,0" FontSize="11" Cursor="Hand" ToolTip="Remove" VerticalAlignment="Center"/>
                                                 <TextBlock DockPanel.Dock="Right" Text="{Binding StatusText}" VerticalAlignment="Center" Foreground="#8A93A3" FontSize="11" Margin="14,0,6,0"/>
                                                 <TextBox DockPanel.Dock="Left" Width="300" Text="{Binding Name, UpdateSourceTrigger=LostFocus}"
-                                                         Style="{StaticResource NodeField}" PreviewMouseDoubleClick="NodeName_PreviewDoubleClick"
+                                                         Style="{StaticResource NodeField}" PreviewMouseLeftButtonDown="NodeName_PreviewMouseDown"
                                                          ToolTip="Double-click a track or single to preview it"/>
+                                                <TextBox DockPanel.Dock="Left" Width="44" Text="{Binding TrackNumberText, UpdateSourceTrigger=LostFocus}"
+                                                         Style="{StaticResource NodeField}" Visibility="{Binding ShowTrackNumber, Converter={StaticResource B2V}}"
+                                                         ToolTip="Track number"/>
                                                 <TextBox DockPanel.Dock="Left" Width="150" Text="{Binding Artist, UpdateSourceTrigger=LostFocus}"
                                                          Style="{StaticResource NodeField}" Visibility="{Binding ShowArtist, Converter={StaticResource B2V}}"/>
                                                 <TextBox DockPanel.Dock="Left" Width="150" Text="{Binding Album, UpdateSourceTrigger=LostFocus}"

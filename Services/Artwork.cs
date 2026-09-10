@@ -88,6 +88,31 @@ public static class Artwork
         }
     }
 
+    /// <summary>Square-crops an image file to a <see cref="Size"/> JPEG and returns the bytes, or null.</summary>
+    public static byte[]? SquareCropBytes(string imagePath)
+    {
+        try
+        {
+            if (!File.Exists(imagePath)) return null;
+            using var image = Image.Load(File.ReadAllBytes(imagePath));
+            var scale = (double)Size / Math.Min(image.Width, image.Height);
+            var w = Math.Max(Size, (int)Math.Ceiling(image.Width * scale));
+            var h = Math.Max(Size, (int)Math.Ceiling(image.Height * scale));
+            image.Mutate(ctx =>
+            {
+                ctx.Resize(w, h);
+                ctx.Crop(new Rectangle((w - Size) / 2, (h - Size) / 2, Size, Size));
+            });
+            using var ms = new MemoryStream();
+            image.SaveAsJpeg(ms);
+            return ms.ToArray();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException or ImageFormatException or InvalidImageContentException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Extracts embedded art from an audio file, force-cropping (overwrites any cached copy).</summary>
     public static string? ExtractAndCrop(string audioFilePath, string key)
     {

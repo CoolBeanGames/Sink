@@ -177,9 +177,13 @@ public static partial class DownloadService
             "--ffmpeg-location", ToolManager.Directory,
             "-o", Path.Combine(workDir, isPlaylist ? "%(playlist_index)03d - %(title)s.%(ext)s" : "%(title)s.%(ext)s"),
         };
+        // A user-supplied cover replaces whatever yt-dlp would embed.
+        var artOverride = node.ArtworkOverride ?? node.Parent?.ArtworkOverride;
+        var artBytes = string.IsNullOrWhiteSpace(artOverride) ? null : Artwork.SquareCropBytes(artOverride);
+
         if (partial) { args.Add("--playlist-items"); args.Add(string.Join(",", chosen.Select(t => t.Index))); }
         if (options.WriteMetadata) args.Add("--embed-metadata");
-        if (options.EmbedAlbumArt) { args.Add("--embed-thumbnail"); args.Add("--convert-thumbnails"); args.Add("jpg"); }
+        if (options.EmbedAlbumArt && artBytes is null) { args.Add("--embed-thumbnail"); args.Add("--convert-thumbnails"); args.Add("jpg"); }
         args.Add(node.Url);
 
         var current = 0;
@@ -199,20 +203,44 @@ public static partial class DownloadService
                 progress.Report(Math.Clamp((current + pct / 100.0) / total, 0, 1));
         }, token).ConfigureAwait(false);
 
-        if (exit != 0)
-            throw new InvalidOperationException(FirstError(stderr) ?? "Download failed");
-
         var produced = System.IO.Directory.EnumerateFiles(workDir)
             .Where(f => AudioExtensions.Contains(Path.GetExtension(f)))
             .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        // yt-dlp exits non-zero if *any* track failed. Keep whatever it did
+        // manage to fetch and mark the rest failed, so the caller can leave the
+        // failed tracks in the tree for a retry.
         if (produced.Count == 0)
-            throw new InvalidOperationException("yt-dlp produced no audio file");
+        {
+            foreach (var t in trackNodes) t.State = DownloadState.Failed;
+            throw new InvalidOperationException(FirstError(stderr) ?? "Download failed");
+        }
+
+        // Map produced files to playlist positions ("001 - Title.mp3").
+        var byIndex = new Dictionary<int, string>();
+        foreach (var f in produced)
+        {
+            var m = ProducedIndex().Match(Path.GetFileName(f));
+            if (m.Success && int.TryParse(m.Groups[1].Value, out var idx)) byIndex[idx] = f;
+        }
 
         var finished = new List<string>();
-        for (var i = 0; i < produced.Count; i++)
+        var ordered = isPlaylist
+            ? titleOrder
+            : new List<DownloadNode> { node };
+        for (var i = 0; i < ordered.Count; i++)
         {
-            var file = produced[i];
+            var trackNode = ordered[i];
+            string? file = isPlaylist
+                ? (byIndex.TryGetValue(trackNode.Index, out var byIdx) ? byIdx : (i < produced.Count && byIndex.Count == 0 ? produced[i] : null))
+                : produced[0];
+            if (file is null)
+            {
+                if (trackNode.Kind == DownloadKind.Track) trackNode.State = DownloadState.Failed;
+                continue;
+            }
+
             var stem = isPlaylist ? Path.GetFileNameWithoutExtension(file) : $"{artist} - {node.Title}";
             var finalPath = UniquePath(Path.Combine(DownloadsDirectory, Sanitize(stem) + Path.GetExtension(file)));
             File.Move(file, finalPath, overwrite: false);
@@ -221,15 +249,29 @@ public static partial class DownloadService
             // album when the user renamed that track. An untouched album track
             // keeps yt-dlp's own title (see archived task 49).
             var title = !isPlaylist ? node.Title
-                : (i < titleOrder.Count && titleOrder[i].TitleEdited ? titleOrder[i].Title.Trim() : null);
-            ApplyTags(finalPath, artist, album, genre, title);
+                : (trackNode.TitleEdited ? trackNode.Title.Trim() : null);
+            ApplyTags(finalPath, artist, album, genre, title, trackNode.TrackNumber, artBytes);
+            if (trackNode.Kind == DownloadKind.Track) trackNode.State = DownloadState.Done;
             finished.Add(finalPath);
         }
         try { System.IO.Directory.Delete(workDir, recursive: true); } catch (IOException) { }
 
         progress.Report(1);
+        if (finished.Count == 0)
+            throw new InvalidOperationException(FirstError(stderr) ?? "Download failed");
+        if (exit != 0 && isPlaylist && finished.Count < titleOrder.Count)
+            throw new PartialDownloadException(finished);
         return finished;
     }
+
+    /// <summary>Thrown when an album partly downloaded — carries the files that did land.</summary>
+    public sealed class PartialDownloadException(IReadOnlyList<string> downloaded) : Exception("Some tracks could not be downloaded")
+    {
+        public IReadOnlyList<string> Downloaded { get; } = downloaded;
+    }
+
+    [GeneratedRegex(@"^(\d+)\s*-\s*")]
+    private static partial Regex ProducedIndex();
 
     /// <summary>
     /// Downloads a single track to a temp file for double-click preview. No tags,
@@ -279,7 +321,8 @@ public static partial class DownloadService
         values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v) && v != "Unknown Artist" && v != "Unknown");
 
     /// <summary>Writes the user's (possibly edited) metadata over whatever yt-dlp embedded.</summary>
-    private static void ApplyTags(string path, string artist, string album, string genre, string? title)
+    private static void ApplyTags(
+        string path, string artist, string album, string genre, string? title, int trackNo, byte[]? artwork)
     {
         try
         {
@@ -293,6 +336,14 @@ public static partial class DownloadService
             if (!string.IsNullOrWhiteSpace(album)) file.Tag.Album = album;
             if (!string.IsNullOrWhiteSpace(genre) && genre != "Unknown")
                 file.Tag.Genres = [genre];
+            if (trackNo > 0) file.Tag.Track = (uint)trackNo;
+            if (artwork is { Length: > 0 })
+                file.Tag.Pictures = [new TagLib.Picture(new TagLib.ByteVector(artwork))
+                {
+                    Type = TagLib.PictureType.FrontCover,
+                    MimeType = "image/jpeg",
+                    Description = "Cover",
+                }];
             file.Save();
         }
         catch (Exception e) when (e is not OutOfMemoryException) { }

@@ -209,11 +209,15 @@ public partial class MainWindow
     }
 
     /// <summary>Loads an album's track list the first time it is expanded.</summary>
-    private async void LinksTree_ItemExpanded(object sender, RoutedEventArgs e)
+    private void LinksTree_ItemExpanded(object sender, RoutedEventArgs e)
     {
-        if (e.OriginalSource is not TreeViewItem { DataContext: DownloadNode node }) return;
-        if (node.Kind != DownloadKind.Album || node.Scanned || node.State == DownloadState.Scanning) return;
+        if (e.OriginalSource is TreeViewItem { DataContext: DownloadNode { Kind: DownloadKind.Album, Scanned: false } node }
+            && node.State != DownloadState.Scanning)
+            _ = ScanAlbumTracksAsync(node);
+    }
 
+    private async Task ScanAlbumTracksAsync(DownloadNode node)
+    {
         node.State = DownloadState.Scanning;
         node.StatusText = "Loading tracks…";
         try
@@ -224,7 +228,7 @@ public partial class MainWindow
                 node.Artist = info.Artist;
             node.Scanned = true;
             node.State = DownloadState.Ready;
-            node.StatusText = $"{node.Children.Count} tracks";
+            RefreshDownloadNodeStatus(node);
         }
         catch (Exception ex)
         {
@@ -233,6 +237,43 @@ public partial class MainWindow
             Log.Error($"track scan failed for {node.Url}", ex);
         }
         UpdateDownloadButtonState();
+    }
+
+    private static void RefreshDownloadNodeStatus(DownloadNode node)
+    {
+        if (node.State is DownloadState.Downloading or DownloadState.Importing or DownloadState.Done) return;
+        var art = node.HasArtworkOverride ? " · custom art" : "";
+        node.StatusText = node.Kind switch
+        {
+            DownloadKind.Artist => $"{node.Children.Count} albums",
+            DownloadKind.Album => (node.Scanned ? $"{node.Children.Count} tracks" : "Expand to load tracks") + art,
+            DownloadKind.Single => "Ready" + art,
+            _ => node.StatusText,
+        };
+    }
+
+    private void SetNodeArtwork(DownloadNode node)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Choose cover art",
+            Filter = "Images|*.jpg;*.jpeg;*.png;*.webp;*.bmp|All files|*.*",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        node.ArtworkOverride = dialog.FileName;
+        RefreshDownloadNodeStatus(node);
+        SetDownloadStatus($"Cover art set for “{node.Name}”");
+    }
+
+    private void TrimTrackTitles(DownloadNode album)
+    {
+        var tracks = album.Children.Where(c => c.Kind == DownloadKind.Track).ToList();
+        if (tracks.Count == 0) return;
+        var dialog = new TrimTitlesWindow(tracks) { Owner = this };
+        BlurBehind(true);
+        var ok = dialog.ShowDialog() == true;
+        BlurBehind(false);
+        if (ok) SetDownloadStatus($"Trimmed {tracks.Count} track title{(tracks.Count == 1 ? "" : "s")}");
     }
 
     private void RemoveNode_Click(object sender, RoutedEventArgs e)
@@ -261,8 +302,14 @@ public partial class MainWindow
             menu.Items.Add(Item("Select all", () => node.Enabled = true));
             menu.Items.Add(Item("Select none", () => node.Enabled = false));
         }
+        if (node.Kind is DownloadKind.Album or DownloadKind.Single)
+            menu.Items.Add(Item(node.HasArtworkOverride ? "Change cover art…" : "Set cover art…", () => SetNodeArtwork(node)));
+        if (node.HasArtworkOverride)
+            menu.Items.Add(Item("Clear cover art", () => { node.ArtworkOverride = null; RefreshDownloadNodeStatus(node); }));
+        if (node.Kind == DownloadKind.Album && node.Children.Any(c => c.Kind == DownloadKind.Track))
+            menu.Items.Add(Item("Trim track titles…", () => TrimTrackTitles(node)));
         if (node.Kind == DownloadKind.Album)
-            menu.Items.Add(Item("Rescan tracks", () => { node.Scanned = false; node.IsExpanded = true; LinksTree_ItemExpanded(this, new RoutedEventArgs()); }));
+            menu.Items.Add(Item("Rescan tracks", () => { node.Scanned = false; node.IsExpanded = true; _ = ScanAlbumTracksAsync(node); }));
         menu.Items.Add(Item("Copy link", () =>
         {
             try { Clipboard.SetText(node.Url); }
@@ -307,8 +354,12 @@ public partial class MainWindow
     private string? _previewFile;
     private CancellationTokenSource? _previewCts;
 
-    private void NodeName_PreviewDoubleClick(object sender, MouseButtonEventArgs e)
+    // A TextBox swallows MouseLeftButtonDown for caret placement, which stops
+    // Control.MouseDoubleClick / PreviewMouseDoubleClick from ever firing — so
+    // detect the double-click straight off the tunnelling button-down instead.
+    private void NodeName_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (e.ClickCount != 2) return;
         if ((sender as FrameworkElement)?.DataContext is not DownloadNode node) return;
         if (node.Kind is not (DownloadKind.Track or DownloadKind.Single)) return;
         e.Handled = true;
@@ -498,7 +549,18 @@ public partial class MainWindow
                         UpdateAggregateProgress(queue);
                     });
                     var status = new Progress<string>(s => SetDownloadStatus(s + linkLabel));
-                    var paths = await DownloadService.DownloadAsync(node, options, progress, status, token);
+
+                    IReadOnlyList<string> paths;
+                    var partialFailure = false;
+                    try
+                    {
+                        paths = await DownloadService.DownloadAsync(node, options, progress, status, token);
+                    }
+                    catch (DownloadService.PartialDownloadException partial)
+                    {
+                        paths = partial.Downloaded;
+                        partialFailure = true;
+                    }
 
                     node.State = DownloadState.Importing;
                     node.StatusText = "Importing…";
@@ -506,9 +568,19 @@ public partial class MainWindow
                     foreach (var track in tracks) _tracks.Add(track);
                     imported += tracks.Count;
 
-                    node.State = DownloadState.Done;
-                    node.Progress = 1;
-                    node.StatusText = tracks.Count > 1 ? $"Done · {tracks.Count} tracks" : "Done";
+                    if (partialFailure)
+                    {
+                        node.State = DownloadState.Failed;
+                        var missing = node.Children.Count(c => c.Kind == DownloadKind.Track && c.State == DownloadState.Failed);
+                        node.StatusText = $"{tracks.Count} done, {missing} failed — retry";
+                        SetDownloadStatus($"{node.Name}: {missing} track{(missing == 1 ? "" : "s")} couldn't be downloaded");
+                    }
+                    else
+                    {
+                        node.State = DownloadState.Done;
+                        node.Progress = 1;
+                        node.StatusText = tracks.Count > 1 ? $"Done · {tracks.Count} tracks" : "Done";
+                    }
                 }
                 catch (OperationCanceledException)
                 {
@@ -544,18 +616,40 @@ public partial class MainWindow
                 ? $"Finished — imported {imported} track{(imported == 1 ? "" : "s")}"
                 : $"Finished — {done} done, {failed} failed, imported {imported} track{(imported == 1 ? "" : "s")}");
 
-            if (done > 0 && failed == 0)
-                foreach (var root in _rootNodes.Where(IsFullyDone).ToList())
-                    _rootNodes.Remove(root);
+            if (done > 0) PruneSucceeded();
             RefreshDownloadChrome();
         }
     }
 
-    private static bool IsFullyDone(DownloadNode node) => node.Kind switch
+    /// <summary>
+    /// After a run, drop everything that downloaded cleanly and keep everything
+    /// that failed (plus the album / artist rows above it) so a retry only has
+    /// to cover what's left.
+    /// </summary>
+    private void PruneSucceeded()
     {
-        DownloadKind.Single or DownloadKind.Album => node.State == DownloadState.Done,
-        _ => node.Children.Count > 0 && node.Children.All(IsFullyDone),
-    };
+        foreach (var root in _rootNodes.ToList())
+        {
+            Prune(root);
+            var emptyContainer = root.Kind is DownloadKind.Artist && root.Children.Count == 0;
+            if (root.State == DownloadState.Done || emptyContainer)
+                _rootNodes.Remove(root);
+        }
+
+        static void Prune(DownloadNode node)
+        {
+            foreach (var child in node.Children.ToList())
+            {
+                Prune(child);
+                var succeeded = child.State == DownloadState.Done
+                    || (child.Kind == DownloadKind.Track && node.State == DownloadState.Done);
+                var emptyContainer = child.Kind is DownloadKind.Artist or DownloadKind.Album
+                    && child.CanHaveChildren && child.Children.Count == 0 && child.State == DownloadState.Done;
+                if (succeeded || emptyContainer)
+                    node.Children.Remove(child);
+            }
+        }
+    }
 
     // ---- Progress + status chrome --------------------------------------
 

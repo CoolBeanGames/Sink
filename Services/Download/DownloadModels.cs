@@ -27,6 +27,8 @@ public sealed class DownloadNode : INotifyPropertyChanged
     private bool _enabled = true;
     private bool _isExpanded;
     private bool _scanned;
+    private int _trackNumber;
+    private string? _artworkOverride;
     private DownloadState _state = DownloadState.Pending;
     private double _progress;
     private string _statusText = "Waiting to scan";
@@ -114,8 +116,28 @@ public sealed class DownloadNode : INotifyPropertyChanged
         }
     }
 
+    /// <summary>Track number written on import (Track and Single nodes).</summary>
+    public int TrackNumber { get => _trackNumber; set => Set(ref _trackNumber, value); }
+
+    /// <summary>Bound to the little number box; empty string clears it.</summary>
+    public string TrackNumberText
+    {
+        get => _trackNumber > 0 ? _trackNumber.ToString() : "";
+        set => TrackNumber = int.TryParse(value?.Trim(), out var n) && n > 0 ? n : 0;
+    }
+
+    /// <summary>User-supplied cover image path; overrides yt-dlp's embed for the whole album / single.</summary>
+    public string? ArtworkOverride
+    {
+        get => _artworkOverride;
+        set { if (Set(ref _artworkOverride, value)) OnPropertyChanged(nameof(HasArtworkOverride)); }
+    }
+
+    public bool HasArtworkOverride => !string.IsNullOrWhiteSpace(_artworkOverride);
+
     // Which secondary fields this kind exposes.
     public bool IsTrack => Kind == DownloadKind.Track;
+    public bool ShowTrackNumber => Kind is DownloadKind.Track or DownloadKind.Single;
     public bool ShowArtist => Kind == DownloadKind.Single || (Kind == DownloadKind.Album && Parent is null);
     public bool ShowAlbum => Kind == DownloadKind.Single;
     public bool ShowGenre => Kind is DownloadKind.Single or DownloadKind.Artist
