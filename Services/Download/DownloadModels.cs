@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Windows.Media;
 
 namespace Sink.Services.Download;
 
@@ -171,6 +172,7 @@ public sealed class DownloadNode : INotifyPropertyChanged
             {
                 foreach (var c in Children) c.Enabled = v;
             }
+            NotifyStatus();
             Parent?.OnChildChanged();
         }
     }
@@ -182,12 +184,77 @@ public sealed class DownloadNode : INotifyPropertyChanged
     public DownloadState State
     {
         get => _state;
-        set { if (Set(ref _state, value)) OnPropertyChanged(nameof(IsFinished)); }
+        set { if (Set(ref _state, value)) { OnPropertyChanged(nameof(IsFinished)); NotifyStatus(); } }
     }
 
     public double Progress { get => _progress; set => Set(ref _progress, value); }
     public string StatusText { get => _statusText; set => Set(ref _statusText, value); }
     public bool IsFinished => _state is DownloadState.Done or DownloadState.Failed;
+
+    // ---- Status glyph (task 110) --------------------------------------
+    //
+    // A small light on every row. Green downloaded, blue downloading, red
+    // failed, orange armed-and-selected, grey scanning, black off. Everything
+    // but the black / grey states glows. Clicking the light toggles the row
+    // between black (won't download) and orange (will).
+
+    private const string GlyphGreen = "#3FB950";
+    private const string GlyphBlue = "#4C8DFF";
+    private const string GlyphRed = "#F85149";
+    private const string GlyphOrange = "#F0883E";
+    private const string GlyphGrey = "#6E7584";
+    private const string GlyphBlack = "#0C0D11";
+
+    private string GlyphHex => _state switch
+    {
+        DownloadState.Done => GlyphGreen,
+        DownloadState.Failed => GlyphRed,
+        DownloadState.Downloading or DownloadState.Importing => GlyphBlue,
+        DownloadState.Scanning or DownloadState.Pending => GlyphGrey,
+        _ => Enabled == false ? GlyphBlack : GlyphOrange,
+    };
+
+    private bool GlyphGlows => _state switch
+    {
+        DownloadState.Done or DownloadState.Failed or DownloadState.Downloading or DownloadState.Importing => true,
+        DownloadState.Scanning or DownloadState.Pending => false,
+        _ => Enabled == true,
+    };
+
+    public Brush StatusBrush
+    {
+        get
+        {
+            var brush = new SolidColorBrush(ParseColor(GlyphHex));
+            brush.Freeze();
+            return brush;
+        }
+    }
+
+    public Color StatusGlowColor => ParseColor(GlyphHex);
+    public double StatusGlowOpacity => GlyphGlows ? 0.95 : 0.0;
+    public double StatusGlowRadius => GlyphGlows ? 13 : 0;
+
+    public string StatusGlyphTooltip => _state switch
+    {
+        DownloadState.Done => "Downloaded",
+        DownloadState.Failed => "Download failed",
+        DownloadState.Downloading or DownloadState.Importing => "Downloading…",
+        DownloadState.Scanning => "Scanning…",
+        DownloadState.Pending => "Waiting to scan",
+        _ => Enabled == false ? "Off — click to queue for download" : "Queued — click to skip",
+    };
+
+    private static Color ParseColor(string hex) => (Color)ColorConverter.ConvertFromString(hex)!;
+
+    private void NotifyStatus()
+    {
+        OnPropertyChanged(nameof(StatusBrush));
+        OnPropertyChanged(nameof(StatusGlowColor));
+        OnPropertyChanged(nameof(StatusGlowOpacity));
+        OnPropertyChanged(nameof(StatusGlowRadius));
+        OnPropertyChanged(nameof(StatusGlyphTooltip));
+    }
 
     /// <summary>True when a Track's title was hand-edited away from what yt-dlp reported.</summary>
     public bool TitleEdited => Kind == DownloadKind.Track
@@ -211,6 +278,7 @@ public sealed class DownloadNode : INotifyPropertyChanged
     private void OnChildChanged()
     {
         OnPropertyChanged(nameof(Enabled));
+        NotifyStatus();
         Parent?.OnChildChanged();
     }
 

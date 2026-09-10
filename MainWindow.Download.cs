@@ -517,6 +517,16 @@ public partial class MainWindow
         }));
     }
 
+    /// <summary>Clicking a row's status light toggles it between "will download" and "skip" (task 110).</summary>
+    private void StatusGlyph_Click(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not DownloadNode node) return;
+        e.Handled = true;
+        if (node.State is DownloadState.Done or DownloadState.Downloading or DownloadState.Importing) return;
+        node.Enabled = node.Enabled != true;
+        UpdateDownloadButtonState();
+    }
+
     private void LinksTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
         if (_previewNode is not null && !ReferenceEquals(e.NewValue, _previewNode))
