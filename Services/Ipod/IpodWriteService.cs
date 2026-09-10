@@ -124,6 +124,47 @@ public static class IpodWriteService
         }
     }
 
+    /// <summary>
+    /// Pushes podcast resume positions onto the device: for each iPod track whose
+    /// file name is a key in <paramref name="positionsByFileName"/>, sets its
+    /// bookmark. Returns the number of tracks updated (0 when the DB library
+    /// can't expose the bookmark field).
+    /// </summary>
+    public static int WritePodcastPositions(string root, IReadOnlyDictionary<string, long> positionsByFileName)
+    {
+        if (positionsByFileName.Count == 0) return 0;
+        IPod ipod;
+        try { ipod = IpodReader.Open(root); ipod.AssertIsWritable(); }
+        catch (Exception) { return 0; }
+
+        var backup = BackupDatabase(root);
+        IPodBackup.EnableBackups = false;
+        ipod.AcquireLock();
+        var updated = 0;
+        try
+        {
+            foreach (var track in ipod.Tracks)
+            {
+                var name = Path.GetFileName(IpodReader.ResolvePath(root, track.FilePath));
+                if (!positionsByFileName.TryGetValue(name, out var ms) || ms <= 0) continue;
+                if (IpodBookmarks.GetMs(track) >= ms) continue; // device already further along
+                IpodBookmarks.SetMs(track, ms);
+                updated++;
+            }
+            if (updated > 0) ipod.SaveChanges();
+            return updated;
+        }
+        catch (Exception)
+        {
+            TryRestore(backup);
+            return 0;
+        }
+        finally
+        {
+            try { ipod.ReleaseLock(); } catch { }
+        }
+    }
+
     private static NewTrack NewTrackFrom(Track src)
     {
         uint length = (uint)Math.Clamp(src.Duration.TotalMilliseconds, 0, uint.MaxValue);
