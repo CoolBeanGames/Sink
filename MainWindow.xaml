@@ -23,6 +23,11 @@
                         <Button x:Name="GenresButton" Content="◇    Genres" Tag="Genres" Click="Category_Click" Style="{StaticResource NavButtonStyle}"/>
                         <Button x:Name="SongsButton" Content="♫    Songs" Tag="Songs" Click="Category_Click" Style="{StaticResource NavButtonStyle}"/>
                     </StackPanel>
+                    <Button x:Name="PodcastsHeaderButton" Content="PODCASTS" Click="ShowPodcasts_Click" Style="{StaticResource SectionHeaderButtonStyle}" Margin="0,14,0,0"/>
+                    <StackPanel x:Name="PodcastNav" Visibility="Collapsed">
+                        <Button x:Name="PodcastLibraryButton" Content="▤    Library" Tag="Active" Click="PodcastMode_Click" Style="{StaticResource NavButtonStyle}"/>
+                        <Button x:Name="PodcastSearchButton" Content="⌕    Search" Tag="Search" Click="PodcastMode_Click" Style="{StaticResource NavButtonStyle}"/>
+                    </StackPanel>
                 </StackPanel>
                 <Grid Grid.Row="2" Margin="10,24,4,8"><TextBlock Text="PLAYLISTS" Style="{StaticResource EyebrowStyle}"/><Button Content="＋" HorizontalAlignment="Right" Margin="0,-8,0,0" Foreground="#8B7CFF" Background="Transparent" BorderThickness="0" FontSize="20" Click="NewPlaylist_Click"/></Grid>
                 <ListBox x:Name="PlaylistList" Grid.Row="3" Background="Transparent" BorderThickness="0" SelectionChanged="PlaylistList_SelectionChanged">
@@ -208,6 +213,119 @@
             <Border Grid.Row="5" Margin="0,16,0,0" Background="#161A22" BorderBrush="#2A303C" BorderThickness="1" CornerRadius="9" Padding="13,8">
                 <TextBlock x:Name="DownloadStatusBar" Text="Ready" Foreground="#9AA0AE" FontSize="11" TextTrimming="CharacterEllipsis"/>
             </Border>
+        </Grid>
+
+        <Grid x:Name="PodcastPage" Grid.Column="1" Margin="38,32,38,24" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Grid>
+                <StackPanel>
+                    <Button x:Name="PodcastBackButton" Content="← Shows" Visibility="Collapsed" Click="PodcastBack_Click" HorizontalAlignment="Left" Foreground="#9D91FF" Background="Transparent" BorderThickness="0" Padding="0,0,0,8"/>
+                    <TextBlock Text="PODCASTS" Style="{StaticResource EyebrowStyle}"/>
+                    <TextBlock x:Name="PodcastTitle" Text="Library" FontSize="34" FontWeight="SemiBold" Margin="0,4,0,2"/>
+                    <TextBlock x:Name="PodcastSubtitle" Foreground="#7D8493" FontSize="12"/>
+                    <TextBlock x:Name="PodcastStatus" Foreground="#A79DFF" FontSize="11" Margin="0,5,0,0"/>
+                </StackPanel>
+                <Border Width="290" Height="39" HorizontalAlignment="Right" VerticalAlignment="Top" Background="#12151C" BorderBrush="#262C38" BorderThickness="1" CornerRadius="10" Padding="12,7">
+                    <DockPanel>
+                        <TextBlock Text="⌕" Foreground="#747B8B" Margin="0,0,8,0"/>
+                        <TextBox x:Name="PodcastSearchBox" KeyDown="PodcastSearchBox_KeyDown" Background="Transparent" BorderThickness="0" Foreground="#F4F6FA" CaretBrush="#F4F6FA"/>
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <!-- Show mode toolbar -->
+            <StackPanel x:Name="PodcastShowToolbar" Grid.Row="1" Orientation="Horizontal" Margin="0,20,0,0" Visibility="Collapsed">
+                <Border Width="220" Height="34" Background="#12151C" BorderBrush="#262C38" BorderThickness="1" CornerRadius="8" Padding="10,4" Margin="0,0,10,0">
+                    <TextBox x:Name="EpisodeFilterBox" TextChanged="EpisodeFilter_Changed" Background="Transparent" BorderThickness="0" Foreground="#F4F6FA" CaretBrush="#F4F6FA" VerticalContentAlignment="Center"/>
+                </Border>
+                <ComboBox x:Name="EpisodeSort" Width="170" SelectionChanged="EpisodeSort_Changed" Margin="0,0,10,0">
+                    <ComboBoxItem Content="Newest first"/>
+                    <ComboBoxItem Content="Oldest first"/>
+                    <ComboBoxItem Content="Title A–Z"/>
+                    <ComboBoxItem Content="Episode number"/>
+                </ComboBox>
+                <CheckBox x:Name="EpisodeUnplayedOnly" Content="Unplayed only" Foreground="#C7CCD6" VerticalAlignment="Center" Click="EpisodeFilter_Changed"/>
+            </StackPanel>
+
+            <ScrollViewer Grid.Row="2" Margin="0,22,0,0" VerticalScrollBarVisibility="Auto">
+                <Grid>
+                    <!-- LIBRARY MODE -->
+                    <ItemsControl x:Name="PodcastLibraryView">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate><DataTemplate>
+                            <Button Style="{StaticResource CardButtonStyle}" Width="184" Margin="0,0,12,14" MouseDoubleClick="PodcastCard_DoubleClick" Click="PodcastCard_DoubleClick">
+                                <StackPanel>
+                                    <Border Height="160" CornerRadius="12" Background="#273A78" BorderBrush="#303744" BorderThickness="1" ClipToBounds="True">
+                                        <Grid>
+                                            <TextBlock Text="🎙" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            <Image Source="{Binding ArtworkUrl}" Stretch="UniformToFill"/>
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock Text="{Binding Title}" Foreground="#F4F6FA" FontWeight="SemiBold" Margin="3,10,3,0" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Author}" Foreground="#7D8493" FontSize="11" Margin="3,3,3,0" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Foreground="#9D91FF" FontSize="10.5" Margin="3,5,3,0">
+                                        <Run Text="{Binding UnplayedCount, Mode=OneWay}"/><Run Text=" unplayed · "/><Run Text="{Binding Episodes.Count, Mode=OneWay}"/><Run Text=" episodes"/>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate></ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- SEARCH MODE -->
+                    <ItemsControl x:Name="PodcastSearchView" Visibility="Collapsed">
+                        <ItemsControl.ItemTemplate><DataTemplate>
+                            <Border Background="#12151C" BorderBrush="#20252F" BorderThickness="1" CornerRadius="10" Margin="0,0,0,8" Padding="12">
+                                <DockPanel>
+                                    <Border Width="64" Height="64" CornerRadius="8" ClipToBounds="True" Background="#273A78" DockPanel.Dock="Left" Margin="0,0,12,0">
+                                        <Image Source="{Binding ArtworkUrl}" Stretch="UniformToFill"/>
+                                    </Border>
+                                    <Button Content="Subscribe" DockPanel.Dock="Right" VerticalAlignment="Center" Click="Subscribe_Click" Style="{StaticResource PrimaryButtonStyle}" Background="#272243" Foreground="#CBC5FF" Padding="12,7"/>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Title}" Foreground="#F4F6FA" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding Author}" Foreground="#7D8493" FontSize="11" Margin="0,2,0,0"/>
+                                        <TextBlock Foreground="#7D8493" FontSize="10.5" Margin="0,4,0,0">
+                                            <Run Text="{Binding EpisodeCount, Mode=OneWay}"/><Run Text=" episodes"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+                        </DataTemplate></ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- SHOW MODE -->
+                    <ItemsControl x:Name="EpisodeView" Visibility="Collapsed">
+                        <ItemsControl.ItemTemplate><DataTemplate>
+                            <Border Background="#12151C" BorderBrush="#20252F" BorderThickness="1" CornerRadius="10" Margin="0,0,0,7" Padding="13,10"
+                                    MouseMove="Episode_MouseMove" PreviewMouseLeftButtonDown="Episode_MouseDown">
+                                <Grid>
+                                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                    <DockPanel>
+                                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                                            <Button Content="▶" Click="EpisodePlay_Click" ToolTip="Play" Style="{StaticResource PlayButtonStyle}" Width="30" Height="30" Margin="4,0"/>
+                                            <Button x:Name="EpDownloadBtn" Content="⭳" Click="EpisodeDownload_Click" ToolTip="Download / delete download" Background="#242A34" Foreground="#CBD0DA" BorderThickness="0" Padding="9,5" Margin="4,0"/>
+                                            <Button Content="✓" Click="EpisodeMarkPlayed_Click" ToolTip="Mark played / unplayed" Background="#242A34" Foreground="#CBD0DA" BorderThickness="0" Padding="9,5" Margin="4,0"/>
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Title}" Foreground="#F4F6FA" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Foreground="#7D8493" FontSize="10.5" Margin="0,3,0,0">
+                                                <Run Text="{Binding Published, StringFormat=d, Mode=OneWay}"/><Run Text="  ·  "/><Run Text="{Binding RemainingText, Mode=OneWay}"/>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </DockPanel>
+                                    <ProgressBar Grid.Row="1" Height="4" Margin="0,8,0,0" Minimum="0" Maximum="1" Value="{Binding Progress, Mode=OneWay}" Background="#1B1F28" BorderThickness="0" Foreground="#8B7CFF"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate></ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock x:Name="PodcastEmptyHint" Foreground="#6E7584" FontSize="12" HorizontalAlignment="Center" Margin="0,40,0,0"
+                               Text="No podcasts yet — use Search to find a show and Subscribe."/>
+                </Grid>
+            </ScrollViewer>
         </Grid>
 
         <Border x:Name="DownloadDim" Grid.RowSpan="2" Grid.ColumnSpan="2" Panel.ZIndex="40" Visibility="Collapsed" Background="#99090B10"/>

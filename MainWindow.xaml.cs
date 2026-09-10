@@ -52,6 +52,7 @@ public partial class MainWindow : Window
         _mediaPlayer.Volume = 0.7;
         RenderLibrary();
         InitDownloadPage();
+        InitPodcasts();
         _ipodPollTimer.Tick += (_, _) => PollForIpod();
         _ipodPollTimer.Start();
         Loaded += (_, _) => PollForIpod();
@@ -143,6 +144,7 @@ public partial class MainWindow : Window
             var readableName = library.DeviceName ?? _ipodDevice?.Name ?? "iPod";
             PlaybackStatus.Text = $"Read {library.Tracks.Count} track{(library.Tracks.Count == 1 ? "" : "s")} from {readableName}";
             ApplyIpodLibraryChrome(library, readableName);
+            SyncPodcastStatusFromIpod();
         }
         catch (Exception ex)
         {
@@ -228,6 +230,7 @@ public partial class MainWindow : Window
     private void ApplySourceChrome()
     {
         ExitDownloadView();
+        ExitPodcastView();
         var music = _source == LibrarySource.Music;
         MusicNav.Visibility = music ? Visibility.Visible : Visibility.Collapsed;
         IpodNav.Visibility = music ? Visibility.Collapsed : Visibility.Visible;
@@ -658,7 +661,7 @@ public partial class MainWindow : Window
 
     private void IpodButton_DragOver(object sender, DragEventArgs e)
     {
-        var canSync = _ipodConnected && e.Data.GetDataPresent(TrackDragFormat);
+        var canSync = _ipodConnected && (e.Data.GetDataPresent(TrackDragFormat) || e.Data.GetDataPresent(PodcastDragFormat));
         e.Effects = canSync ? DragDropEffects.Copy : DragDropEffects.None;
         if (canSync) RecordLabel.Fill = new SolidColorBrush(Color.FromRgb(92, 89, 206));
         e.Handled = true;
@@ -671,6 +674,13 @@ public partial class MainWindow : Window
 
     private void IpodButton_Drop(object sender, DragEventArgs e)
     {
+        if (e.Data.GetData(PodcastDragFormat) is string episodeIdText && Guid.TryParse(episodeIdText, out var episodeId))
+        {
+            e.Handled = true;
+            if (!_ipodConnected) { PlaybackStatus.Text = "Connect an iPod before syncing"; return; }
+            SyncEpisodeToIpod(episodeId);
+            return;
+        }
         if (e.Data.GetData(TrackDragFormat) is not Guid[] trackIds) return;
         e.Handled = true;
         if (!_ipodConnected)
