@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using Sink.Controls;
 using Sink.Models;
 
 namespace Sink.Dialogs;
@@ -13,9 +14,9 @@ public sealed class MetadataWindow : SinkDialog
     private const string Mixed = "— multiple —";
     private readonly IReadOnlyList<Track> _tracks;
     private readonly TextBox _title = Field();
-    private readonly TextBox _artist = Field();
-    private readonly TextBox _album = Field();
-    private readonly TextBox _genre = Field();
+    private readonly TextBox _artist = Auto(SuggestionField.Artist);
+    private readonly TextBox _album = Auto(SuggestionField.Album);
+    private readonly TextBox _genre = Auto(SuggestionField.Genre);
     private readonly TextBox _year = Field();
 
     public bool Applied { get; private set; }
@@ -83,11 +84,19 @@ public sealed class MetadataWindow : SinkDialog
         return values.Count == 1 ? values[0] : Mixed;
     }
 
-    private static TextBox Field() => new()
+    private static TextBox Field() => Styled(new TextBox());
+
+    private static TextBox Auto(SuggestionField field) => Styled(new AutoCompleteTextBox { SuggestionField = field });
+
+    private static TextBox Styled(TextBox box)
     {
-        Height = 34, Padding = new Thickness(10, 7, 10, 7),
-        Foreground = Hex("#F4F6FA"), Background = Hex("#0F1218"),
-        BorderBrush = Hex("#353C49"), CaretBrush = Hex("#F4F6FA"),
-        VerticalContentAlignment = VerticalAlignment.Center
-    };
+        box.Height = 34;
+        box.Padding = new Thickness(10, 7, 10, 7);
+        box.Foreground = Hex("#F4F6FA");
+        box.Background = Hex("#0F1218");
+        box.BorderBrush = Hex("#353C49");
+        box.CaretBrush = Hex("#F4F6FA");
+        box.VerticalContentAlignment = VerticalAlignment.Center;
+        return box;
+    }
 }

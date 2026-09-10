@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:models="clr-namespace:Sink.Models"
         xmlns:dl="clr-namespace:Sink.Services.Download"
+        xmlns:ctrl="clr-namespace:Sink.Controls"
         Title="Sink" Icon="Assets/sink.ico" Width="1260" Height="800" MinWidth="940" MinHeight="620" WindowStartupLocation="CenterScreen" Background="#0B0D12" AllowDrop="True" DragEnter="Window_DragEnter" DragOver="Window_DragOver" DragLeave="Window_DragLeave" Drop="Window_Drop">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="B2V"/>
@@ -242,11 +243,11 @@
                                                 <TextBox DockPanel.Dock="Left" Width="44" Text="{Binding TrackNumberText, UpdateSourceTrigger=LostFocus}"
                                                          Style="{StaticResource NodeField}" Visibility="{Binding ShowTrackNumber, Converter={StaticResource B2V}}"
                                                          ToolTip="Track number"/>
-                                                <TextBox DockPanel.Dock="Left" Width="150" Text="{Binding Artist, UpdateSourceTrigger=LostFocus}"
+                                                <ctrl:AutoCompleteTextBox DockPanel.Dock="Left" Width="150" SuggestionField="Artist" Text="{Binding Artist, UpdateSourceTrigger=LostFocus}"
                                                          Style="{StaticResource NodeField}" Visibility="{Binding ShowArtist, Converter={StaticResource B2V}}"/>
-                                                <TextBox DockPanel.Dock="Left" Width="150" Text="{Binding Album, UpdateSourceTrigger=LostFocus}"
+                                                <ctrl:AutoCompleteTextBox DockPanel.Dock="Left" Width="150" SuggestionField="Album" Text="{Binding Album, UpdateSourceTrigger=LostFocus}"
                                                          Style="{StaticResource NodeField}" Visibility="{Binding ShowAlbum, Converter={StaticResource B2V}}"/>
-                                                <TextBox DockPanel.Dock="Left" Width="120" Text="{Binding Genre, UpdateSourceTrigger=LostFocus}"
+                                                <ctrl:AutoCompleteTextBox DockPanel.Dock="Left" Width="120" SuggestionField="Genre" Text="{Binding Genre, UpdateSourceTrigger=LostFocus}"
                                                          Style="{StaticResource NodeField}" Visibility="{Binding ShowGenre, Converter={StaticResource B2V}}"/>
                                             </DockPanel>
                                         </Border>

@@ -251,6 +251,7 @@ public partial class MainWindow : Window
 
     private void RenderLibrary()
     {
+        MetadataIndex.Rebuild(_tracks);
         var query = SearchBox?.Text?.Trim() ?? "";
         var ipodOnDevice = _source == LibrarySource.Ipod && _ipodLibrary is not null;
         var source = _source != LibrarySource.Ipod ? _tracks.ToList()
@@ -1087,7 +1088,7 @@ public partial class MainWindow : Window
 
     private void RenameGenre(string genre)
     {
-        var dialog = new TextPromptWindow { Owner = this };
+        var dialog = new TextPromptWindow { Owner = this, Suggestions = Controls.SuggestionField.Genre };
         if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.Answer)) return;
         var count = 0;
         foreach (var track in _tracks.Where(t => t.Genre == genre))

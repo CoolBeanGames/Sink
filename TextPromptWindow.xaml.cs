@@ -1,4 +1,5 @@
 using System.Windows;
+using Sink.Controls;
 
 namespace Sink;
 
@@ -10,6 +11,13 @@ public partial class TextPromptWindow : Window
     {
         InitializeComponent();
         Loaded += (_, _) => NameBox.Focus();
+    }
+
+    /// <summary>Turns the input into an autocomplete field for the given metadata kind.</summary>
+    public SuggestionField Suggestions
+    {
+        get => NameBox.SuggestionField;
+        set => NameBox.SuggestionField = value;
     }
 
     private void Create_Click(object sender, RoutedEventArgs e)
