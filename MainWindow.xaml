@@ -150,7 +150,9 @@
                             <TextBlock x:Name="DownloadEmptyHint" Text="No links yet — click Add link to paste one." Foreground="#6E7584" FontSize="12" Margin="16,18" HorizontalAlignment="Center"/>
                             <DataGrid x:Name="LinksGrid" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="None"
                                       Background="Transparent" BorderThickness="0" MaxHeight="420" RowHeight="30" CanUserAddRows="False" CanUserDeleteRows="False"
-                                      SelectionUnit="Cell" SelectionMode="Single" CellEditEnding="LinksGrid_CellEditEnding" VerticalScrollBarVisibility="Auto">
+                                      SelectionUnit="FullRow" SelectionMode="Extended" CellEditEnding="LinksGrid_CellEditEnding"
+                                      SelectionChanged="LinksGrid_SelectionChanged" ContextMenuOpening="LinksGrid_ContextMenuOpening" VerticalScrollBarVisibility="Auto">
+                                <DataGrid.ContextMenu><ContextMenu/></DataGrid.ContextMenu>
                                 <DataGrid.RowStyle>
                                     <Style TargetType="DataGridRow">
                                         <Setter Property="Background" Value="Transparent"/>
@@ -159,6 +161,7 @@
                                         <Setter Property="MinHeight" Value="0"/>
                                         <Style.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#1B1F28"/></Trigger>
+                                            <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#2B2850"/><Setter Property="Foreground" Value="#F4F6FA"/></Trigger>
                                         </Style.Triggers>
                                     </Style>
                                 </DataGrid.RowStyle>

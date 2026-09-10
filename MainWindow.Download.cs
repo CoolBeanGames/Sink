@@ -148,6 +148,55 @@ public partial class MainWindow
             _downloadItems.Remove(item);
     }
 
+    // ---- Selection + right-click menu -----------------------------------
+
+    private List<DownloadItem> SelectedDownloadItems()
+    {
+        var items = LinksGrid.SelectedItems.OfType<DownloadItem>().ToList();
+        if (items.Count == 0 && LinksGrid.SelectedItem is DownloadItem one) items.Add(one);
+        return items;
+    }
+
+    private void LinksGrid_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
+
+    private void LinksGrid_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        var items = SelectedDownloadItems();
+        var menu = LinksGrid.ContextMenu!;
+        menu.Items.Clear();
+        if (items.Count == 0) { e.Handled = true; return; }
+
+        var label = items.Count == 1
+            ? (string.IsNullOrWhiteSpace(items[0].Title) ? items[0].Url : items[0].Title)
+            : $"{items.Count} links";
+        menu.Items.Add(Header(label));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Edit details…", () => EditLinkMetadata(items)));
+        menu.Items.Add(Item("Rescan", () => { foreach (var it in items) _ = ScanItemAsync(it); }));
+        menu.Items.Add(Item("Copy link", () =>
+        {
+            try { Clipboard.SetText(string.Join(Environment.NewLine, items.Select(i => i.Url))); }
+            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or OutOfMemoryException) { }
+        }));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item(items.Count == 1 ? "Remove" : $"Remove {items.Count} links", () =>
+        {
+            foreach (var it in items.ToList()) _downloadItems.Remove(it);
+        }));
+    }
+
+    private void EditLinkMetadata(IReadOnlyList<DownloadItem> items)
+    {
+        if (items.Count == 0) return;
+        var dialog = new LinkMetadataWindow(items) { Owner = this };
+        BlurBehind(true);
+        var ok = dialog.ShowDialog() == true;
+        BlurBehind(false);
+        if (!ok) return;
+        LinksGrid.Items.Refresh();
+        SetDownloadStatus($"Updated {items.Count} link{(items.Count == 1 ? "" : "s")}");
+    }
+
     private void LinksGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
     {
         // The edited value is already pushed to the item by the binding; just
