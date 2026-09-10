@@ -122,6 +122,7 @@ public static class PodcastService
             }
             else
             {
+                episode.IsNew = true;
                 existing.Episodes.Add(episode);
             }
         }

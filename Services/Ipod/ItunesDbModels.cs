@@ -21,6 +21,9 @@ public sealed class IpodDbTrack
     public int PlayCount { get; set; }
     public bool IsPodcast { get; set; }
 
+    /// <summary>Resume position stored on the device (milliseconds); 0 when none.</summary>
+    public long BookmarkMs { get; set; }
+
     /// <summary>Stable identity used to match against the local library.</summary>
     public string Key => $"{Title}{Artist}{Album}{TrackNumber}".ToLowerInvariant();
 }

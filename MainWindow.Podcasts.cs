@@ -44,6 +44,7 @@ public partial class MainWindow
         };
         _podcastPlayer.MediaEnded += (_, _) => StopPodcast(markPlayed: true);
         _podcastTimer.Tick += (_, _) => PodcastTimer_Tick();
+        Loaded += (_, _) => UpdatePodcastSidebarDot();
     }
 
     // ---- View / mode switching ---------------------------------------------
@@ -69,6 +70,7 @@ public partial class MainWindow
         _podcastMode = PodcastMode.Library;
         SetPodcastNav();
         RenderPodcasts();
+        UpdatePodcastSidebarDot();
         _ = RefreshAllFeedsAsync();
     }
 
@@ -160,7 +162,40 @@ public partial class MainWindow
         _currentShow = podcast;
         _podcastMode = PodcastMode.Show;
         EpisodeFilterBox.Text = "";
+        // Opening the show marks its new episodes as seen (clears the show dot;
+        // per-episode dots clear as they render this pass).
+        foreach (var episode in podcast.Episodes) episode.IsNew = false;
+        PodcastStore.Save(_podcasts);
         RenderPodcasts();
+        UpdatePodcastSidebarDot();
+    }
+
+    // ---- Per-show download rule (task 66) --------------------------------
+
+    private bool _syncingRuleCombos;
+
+    private void RuleChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_syncingRuleCombos || _currentShow is null) return;
+        _currentShow.RuleCount = (RuleCountCombo.SelectedItem as ComboBoxItem)?.Tag is string tag && int.TryParse(tag, out var n) ? n : 0;
+        _currentShow.RuleMode = RuleModeCombo.SelectedIndex == 1 ? PodcastRuleMode.Oldest : PodcastRuleMode.Newest;
+        PodcastStore.Save(_podcasts);
+        PodcastSubtitle.Text = $"{_currentShow.UnplayedCount} unplayed · {_currentShow.Episodes.Count} episodes · rule: {_currentShow.RuleCount} {_currentShow.RuleMode.ToString().ToLowerInvariant()}";
+        _ = RunAutoDownloadsAsync(_currentShow);
+    }
+
+    private void LoadRuleCombos(Podcast show)
+    {
+        _syncingRuleCombos = true;
+        var idx = show.RuleCount switch { 0 => 0, 1 => 1, 2 => 2, 3 => 3, 5 => 4, _ => show.RuleCount >= 10 ? 5 : 3 };
+        RuleCountCombo.SelectedIndex = idx;
+        RuleModeCombo.SelectedIndex = show.RuleMode == PodcastRuleMode.Oldest ? 1 : 0;
+        _syncingRuleCombos = false;
+    }
+
+    private void UpdatePodcastSidebarDot()
+    {
+        PodcastsNewDot.Visibility = _podcasts.Any(p => p.HasNewUnplayed) ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // ---- Episode actions ------------------------------------------------
@@ -345,39 +380,73 @@ public partial class MainWindow
         }
         PodcastStore.Save(_podcasts);
         RenderPodcasts();
+        UpdatePodcastSidebarDot();
         foreach (var podcast in _podcasts.ToList()) await RunAutoDownloadsAsync(podcast);
     }
 
-    // ---- iPod play-status sync (task 63) --------------------------------
+    // ---- iPod play-status + bookmark sync (tasks 63, 67) ----------------
 
     /// <summary>
-    /// Pulls play status back from a connected iPod: an episode whose synced file
-    /// shows a play count on the device is marked played in the library, which
-    /// lets the auto-downloader advance. (The iTunesDB exposes play count but not
-    /// a resumable bookmark, so partial positions are not round-tripped.)
+    /// Reconciles podcast state with a connected iPod: pulls the device's resume
+    /// bookmark back into the matching episode, marks an episode played when the
+    /// device shows a play count or a near-complete bookmark, then pushes our
+    /// newer positions out to the device. Falls back to play-count-only when the
+    /// DB library can't surface the bookmark field.
     /// </summary>
     private void SyncPodcastStatusFromIpod()
     {
-        if (_ipodLibrary is null || _podcasts.Count == 0) return;
-        var playedOnDevice = _ipodLibrary.Tracks
-            .Where(t => t.PlayCount > 0 && !string.IsNullOrWhiteSpace(t.FilePath))
-            .Select(t => Path.GetFileName(t.FilePath))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (playedOnDevice.Count == 0) return;
+        var root = _ipodDevice?.LibraryRoot;
+        if (_ipodLibrary is null || root is null || _podcasts.Count == 0) return;
+
+        var byName = _ipodLibrary.Tracks
+            .Where(t => !string.IsNullOrWhiteSpace(t.FilePath))
+            .GroupBy(t => Path.GetFileName(t.FilePath), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
         var changed = false;
+        var toPush = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         foreach (var episode in _podcasts.SelectMany(p => p.Episodes))
         {
-            if (episode.IsPlayed || string.IsNullOrEmpty(episode.LocalPath)) continue;
-            if (!playedOnDevice.Contains(Path.GetFileName(episode.LocalPath))) continue;
-            episode.IsPlayed = true;
-            episode.PositionSeconds = episode.Duration.TotalSeconds;
-            if (episode.IsDownloaded) PodcastRules.DropDownload(episode);
-            changed = true;
+            if (string.IsNullOrEmpty(episode.LocalPath)) continue;
+            var name = Path.GetFileName(episode.LocalPath);
+            if (!byName.TryGetValue(name, out var deviceTrack)) continue;
+
+            // Pull: take the further-along position between library and device.
+            if (deviceTrack.BookmarkMs > episode.PositionSeconds * 1000 + 1500)
+            {
+                episode.PositionSeconds = deviceTrack.BookmarkMs / 1000.0;
+                episode.IpodBookmarkMs = deviceTrack.BookmarkMs;
+                changed = true;
+            }
+
+            var nearEnd = episode.Duration > TimeSpan.Zero && episode.PositionSeconds >= episode.Duration.TotalSeconds * 0.95;
+            if (!episode.IsPlayed && (deviceTrack.PlayCount > 0 || nearEnd))
+            {
+                episode.IsPlayed = true;
+                episode.PositionSeconds = episode.Duration.TotalSeconds;
+                if (episode.IsDownloaded) PodcastRules.DropDownload(episode);
+                changed = true;
+            }
+
+            // Push: our position is ahead of the device's bookmark.
+            var ourMs = (long)(episode.PositionSeconds * 1000);
+            if (!episode.IsPlayed && ourMs > deviceTrack.BookmarkMs + 1500)
+                toPush[name] = ourMs;
         }
+
+        if (toPush.Count > 0 && !_ipodWriting)
+        {
+            _ = Task.Run(() => Sink.Services.Ipod.IpodWriteService.WritePodcastPositions(root, toPush))
+                .ContinueWith(t =>
+                {
+                    if (t.Status == TaskStatus.RanToCompletion && t.Result > 0)
+                        Dispatcher.Invoke(() => PlaybackStatus.Text = $"Synced {t.Result} podcast position{(t.Result == 1 ? "" : "s")} to iPod");
+                });
+        }
+
         if (!changed) return;
         PodcastStore.Save(_podcasts);
-        if (_podcastViewActive) RenderPodcasts();
+        if (_podcastViewActive) { RenderPodcasts(); UpdatePodcastSidebarDot(); }
         foreach (var podcast in _podcasts.ToList()) _ = RunAutoDownloadsAsync(podcast);
     }
 
@@ -415,6 +484,7 @@ public partial class MainWindow
             case PodcastMode.Show:
                 PodcastTitle.Text = _currentShow!.Title;
                 PodcastSubtitle.Text = $"{_currentShow.UnplayedCount} unplayed · {_currentShow.Episodes.Count} episodes · rule: {_currentShow.RuleCount} {_currentShow.RuleMode.ToString().ToLowerInvariant()}";
+                LoadRuleCombos(_currentShow);
                 RenderEpisodes();
                 break;
         }

@@ -24,6 +24,9 @@ public sealed class Podcast
 
     [JsonIgnore] public DateTime? LastPublished => Episodes.Count == 0 ? null : Episodes.Max(e => e.Published);
     [JsonIgnore] public int UnplayedCount => Episodes.Count(e => !e.IsPlayed);
+
+    /// <summary>Show has episodes that arrived since it was last opened and haven't been played.</summary>
+    [JsonIgnore] public bool HasNewUnplayed => Episodes.Any(e => e.IsNew && !e.IsPlayed);
 }
 
 public sealed class PodcastEpisode
@@ -45,6 +48,12 @@ public sealed class PodcastEpisode
 
     public double PositionSeconds { get; set; }
     public bool IsPlayed { get; set; }
+
+    /// <summary>Arrived on a feed refresh after the show was last opened; drives the "new content" dot.</summary>
+    public bool IsNew { get; set; }
+
+    /// <summary>Resume position on the iPod (milliseconds), last seen from the device.</summary>
+    public long IpodBookmarkMs { get; set; }
 
     /// <summary>When the local file was downloaded — drives the "20% after a week" played rule.</summary>
     public DateTime? DownloadedAt { get; set; }
