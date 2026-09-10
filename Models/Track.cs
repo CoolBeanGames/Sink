@@ -16,6 +16,9 @@ public sealed class Track
     public TimeSpan Duration { get; init; }
     public bool ExcludedFromShuffle { get; set; }
 
+    /// <summary>Absolute path to extracted cover art (jpg/png) under %AppData%/Sink/artwork, if any.</summary>
+    public string? ArtworkPath { get; set; }
+
     [JsonIgnore]
     public string DurationText => Duration.ToString(@"m\:ss");
 }

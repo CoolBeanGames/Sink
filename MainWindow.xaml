@@ -58,7 +58,7 @@
             <ScrollViewer x:Name="GroupsScroller" Grid.Row="1" Margin="0,28,0,0" VerticalScrollBarVisibility="Auto">
                 <ItemsControl x:Name="GroupsView"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate><DataTemplate><Button Tag="{Binding Name}" Click="GroupCard_Click" MouseDoubleClick="GroupCard_MouseDoubleClick" ContextMenuOpening="GroupCard_ContextMenuOpening" PreviewMouseLeftButtonDown="GroupCard_PreviewMouseLeftButtonDown" PreviewMouseMove="GroupCard_PreviewMouseMove" Width="184" Margin="0,0,18,18" Padding="0" BorderThickness="0" Background="Transparent" HorizontalContentAlignment="Stretch"><Button.ContextMenu><ContextMenu/></Button.ContextMenu>
-                        <StackPanel><Border Height="145" CornerRadius="12" Background="{Binding Color}" BorderBrush="#303744" BorderThickness="1"><Grid><Ellipse Width="92" Height="92" Stroke="#FFFFFF" StrokeThickness="1" Opacity="0.13"/><Ellipse Width="30" Height="30" Fill="#0B0D12" Opacity="0.35"/><TextBlock Text="{Binding Initial}" FontSize="36" Foreground="#DAD7FF" HorizontalAlignment="Center" VerticalAlignment="Center"/></Grid></Border><TextBlock Text="{Binding Name}" Foreground="#F4F6FA" FontWeight="SemiBold" Margin="3,10,3,0" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Detail}" Foreground="#7D8493" FontSize="11" Margin="3,3,3,0"/></StackPanel>
+                        <StackPanel><Border Height="145" CornerRadius="12" Background="{Binding Color}" BorderBrush="#303744" BorderThickness="1" ClipToBounds="True"><Grid><Ellipse Width="92" Height="92" Stroke="#FFFFFF" StrokeThickness="1" Opacity="0.13"/><Ellipse Width="30" Height="30" Fill="#0B0D12" Opacity="0.35"/><TextBlock Text="{Binding Initial}" FontSize="36" Foreground="#DAD7FF" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding Art}" Stretch="UniformToFill"/></Grid></Border><TextBlock Text="{Binding Name}" Foreground="#F4F6FA" FontWeight="SemiBold" Margin="3,10,3,0" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Detail}" Foreground="#7D8493" FontSize="11" Margin="3,3,3,0"/></StackPanel>
                     </Button></DataTemplate></ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
@@ -75,7 +75,12 @@
         <Border Grid.Row="1" Grid.Column="1" Background="#161A22" BorderBrush="#2A303C" BorderThickness="0,1,0,0" Padding="24,10">
             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" MinWidth="220"/><ColumnDefinition Width="1.4*" MinWidth="380"/><ColumnDefinition Width="*" MinWidth="140"/></Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Width="50" Height="50" CornerRadius="8" Background="#3F3A75"><TextBlock x:Name="PlayerArtInitial" Text="♫" FontSize="20" Foreground="#DED9FF" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                    <Border Width="50" Height="50" CornerRadius="8" Background="#3F3A75" ClipToBounds="True">
+                        <Grid>
+                            <TextBlock x:Name="PlayerArtInitial" Text="♫" FontSize="20" Foreground="#DED9FF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Image x:Name="PlayerArtImage" Stretch="UniformToFill" Visibility="Collapsed"/>
+                        </Grid>
+                    </Border>
                     <StackPanel Margin="12,6,0,0"><TextBlock x:Name="PlayerTitle" Text="Choose something to play" FontWeight="SemiBold" FontSize="13"/><TextBlock x:Name="PlayerArtist" Text="Your library is ready" Foreground="#7F8696" FontSize="11" Margin="0,4,0,0"/></StackPanel>
                 </StackPanel>
                 <Grid Grid.Column="1"><Grid.RowDefinitions><RowDefinition Height="36"/><RowDefinition Height="*"/></Grid.RowDefinitions>

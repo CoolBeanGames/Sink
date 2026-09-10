@@ -48,18 +48,50 @@ public static partial class MusicImporter
         var file = new FileInfo(filePath);
         var baseName = Path.GetFileNameWithoutExtension(file.Name);
         var numberMatch = LeadingTrackNumber().Match(baseName);
-        var title = CleanSeparators().Replace(LeadingTrackNumber().Replace(baseName, ""), " ").Trim();
+        var titleFromName = CleanSeparators().Replace(LeadingTrackNumber().Replace(baseName, ""), " ").Trim();
+        if (string.IsNullOrWhiteSpace(titleFromName)) titleFromName = baseName;
+
+        // Read embedded tags. TagLib throws on unreadable/corrupt files — fall
+        // back to the filename-derived values in that case.
+        string title = titleFromName, genre = "Unknown";
+        string artist = "Unknown Artist";
+        string album = file.Directory?.Name ?? "Imported Music";
+        int trackNumber = numberMatch.Success && int.TryParse(numberMatch.Groups[1].Value, out var n) ? n : 0;
+        int year = file.LastWriteTime.Year;
+        var duration = TimeSpan.Zero;
+        string? artworkPath = null;
+
+        try
+        {
+            using var tag = TagLib.File.Create(filePath);
+            var t = tag.Tag;
+            if (!string.IsNullOrWhiteSpace(t.Title)) title = t.Title.Trim();
+            if (!string.IsNullOrWhiteSpace(t.FirstPerformer)) artist = t.FirstPerformer.Trim();
+            else if (!string.IsNullOrWhiteSpace(t.FirstAlbumArtist)) artist = t.FirstAlbumArtist.Trim();
+            if (!string.IsNullOrWhiteSpace(t.Album)) album = t.Album.Trim();
+            if (!string.IsNullOrWhiteSpace(t.FirstGenre)) genre = t.FirstGenre.Trim();
+            if (t.Track is > 0 and < int.MaxValue) trackNumber = (int)t.Track;
+            if (t.Year is > 0 and < 9999) year = (int)t.Year;
+            if (tag.Properties?.Duration > TimeSpan.Zero) duration = tag.Properties.Duration;
+
+            var picture = t.Pictures?.FirstOrDefault(p => p.Data?.Data?.Length > 0);
+            if (picture is not null)
+                artworkPath = Artwork.Save($"{album}|{artist}", picture.Data.Data, picture.MimeType);
+        }
+        catch (Exception e) when (e is not OutOfMemoryException) { }
+
         return new Track
         {
-            Title = string.IsNullOrWhiteSpace(title) ? baseName : title,
-            Artist = "Unknown Artist",
-            Album = file.Directory?.Name ?? "Imported Music",
-            Genre = "Unknown",
+            Title = title,
+            Artist = artist,
+            Album = album,
+            Genre = genre,
             FileName = file.Name,
             FilePath = file.FullName,
-            TrackNumber = numberMatch.Success && int.TryParse(numberMatch.Groups[1].Value, out var number) ? number : 0,
-            Year = file.LastWriteTime.Year,
-            Duration = TimeSpan.Zero
+            TrackNumber = trackNumber,
+            Year = year,
+            Duration = duration,
+            ArtworkPath = artworkPath
         };
     }
 

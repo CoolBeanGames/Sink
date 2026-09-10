@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Sink.Dialogs;
 using Sink.Models;
@@ -268,9 +269,9 @@ public partial class MainWindow : Window
 
         var groups = _category switch
         {
-            LibraryCategory.Artists => source.GroupBy(track => track.Artist).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key)),
-            LibraryCategory.Genres => source.GroupBy(track => track.Genre).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key)),
-            _ => source.GroupBy(track => track.Album).Select(group => Card(group.Key, group.First().Artist, group.Key))
+            LibraryCategory.Artists => source.GroupBy(track => track.Artist).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key, group)),
+            LibraryCategory.Genres => source.GroupBy(track => track.Genre).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key, group)),
+            _ => source.GroupBy(track => track.Album).Select(group => Card(group.Key, group.First().Artist, group.Key, group))
         };
         var cards = groups.Where(card => query.Length == 0 || card.Name.Contains(query, StringComparison.OrdinalIgnoreCase)).OrderBy(card => card.Name).ToList();
         GroupsView.ItemsSource = cards;
@@ -292,10 +293,38 @@ public partial class MainWindow : Window
         return _syncedTrackIds.Count == 0 ? "Nothing synced to iPod yet — drag music onto IPOD" : null;
     }
 
-    private static GroupCard Card(string name, string detail, string colorSeed)
+    private static GroupCard Card(string name, string detail, string colorSeed, IEnumerable<Track> members)
     {
         var palette = new[] { "#273A78", "#6E354B", "#285D56", "#6C4D31" };
-        return new GroupCard(name, detail, name[..1].ToUpperInvariant(), new SolidColorBrush((Color)ColorConverter.ConvertFromString(palette[Math.Abs(colorSeed.GetHashCode()) % palette.Length])));
+        var initial = string.IsNullOrEmpty(name) ? "?" : name[..1].ToUpperInvariant();
+        var artPath = members.Select(t => t.ArtworkPath).FirstOrDefault(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p));
+        return new GroupCard(name, detail, initial,
+            new SolidColorBrush((Color)ColorConverter.ConvertFromString(palette[Math.Abs(colorSeed.GetHashCode()) % palette.Length])),
+            LoadArtwork(artPath));
+    }
+
+    private static readonly Dictionary<string, ImageSource> _artCache = [];
+
+    private static ImageSource? LoadArtwork(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        if (_artCache.TryGetValue(path, out var cached)) return cached;
+        try
+        {
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.UriSource = new Uri(path);
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.DecodePixelWidth = 320;
+            bitmap.EndInit();
+            bitmap.Freeze();
+            _artCache[path] = bitmap;
+            return bitmap;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private void GroupCard_Click(object sender, RoutedEventArgs e) { }
@@ -337,7 +366,10 @@ public partial class MainWindow : Window
         }
         PlayerTitle.Text = track.Title;
         PlayerArtist.Text = track.Artist;
-        PlayerArtInitial.Text = track.Album[..1].ToUpperInvariant();
+        PlayerArtInitial.Text = string.IsNullOrEmpty(track.Album) ? "♫" : track.Album[..1].ToUpperInvariant();
+        var art = LoadArtwork(track.ArtworkPath);
+        PlayerArtImage.Source = art;
+        PlayerArtImage.Visibility = art is null ? Visibility.Collapsed : Visibility.Visible;
         PlaybackStatus.Text = $"▶  Playing {track.Title} — {track.Artist}";
         PlayPauseButton.Content = "Ⅱ";
         UpdatePlayerDuration();
@@ -949,5 +981,5 @@ public partial class MainWindow : Window
         PlaybackStatus.Text = $"Deleted {tracks.Count} track{(tracks.Count == 1 ? "" : "s")}";
     }
 
-    private sealed record GroupCard(string Name, string Detail, string Initial, Brush Color);
+    private sealed record GroupCard(string Name, string Detail, string Initial, Brush Color, ImageSource? Art = null);
 }
