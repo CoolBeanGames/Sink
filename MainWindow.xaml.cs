@@ -44,6 +44,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        var v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        if (v is not null) VersionText.Text = $"v{v.Major}.{v.Minor}.{v.Build}";
         LoadLibrary();
         PlaylistList.ItemsSource = _playlists;
         _playbackTimer.Tick += PlaybackTimer_Tick;
