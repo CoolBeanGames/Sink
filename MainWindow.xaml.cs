@@ -289,12 +289,12 @@ public partial class MainWindow : Window
         _ipodConnected = connected;
         if (connected)
         {
-            var summary = _ipodDevice?.Summary ?? "Simulated iPod · 160 GB · 84 GB free";
-            var header = _ipodDevice is null ? "Simulated iPod · 160 GB" : $"{_ipodDevice.Name} · {_ipodDevice.CapacityText}";
+            var tooltip = _ipodDevice?.Tooltip ?? "Simulated iPod\n160 GB · 84 GB free\nClick the record to disconnect";
+            var header = _ipodDevice is null ? "Simulated iPod · 160 GB" : _ipodDevice.Summary;
             RecordLabel.Fill = new SolidColorBrush(Color.FromRgb(40, 91, 184));
             IpodStateText.Text = "IPOD";
             IpodStateText.Foreground = new SolidColorBrush(Color.FromRgb(139, 124, 255));
-            IpodButton.ToolTip = summary;
+            IpodButton.ToolTip = tooltip;
             IpodMenuHeader.Header = header;
         }
         else
