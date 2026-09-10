@@ -129,6 +129,12 @@ public partial class MainWindow
             if (string.IsNullOrWhiteSpace(item.Genre)) item.Genre = info.Genre;
             item.IsPlaylist = info.IsPlaylist;
             item.TrackCount = info.TrackCount;
+
+            item.Tracks.Clear();
+            if (info.TrackTitles is { Count: > 0 })
+                for (var i = 0; i < info.TrackTitles.Count; i++)
+                    item.Tracks.Add(new TrackChoice(i + 1, info.TrackTitles[i]));
+
             item.State = DownloadState.Ready;
             item.StatusText = info.IsPlaylist ? $"Album · {info.TrackCount} tracks" : "Ready";
         }
@@ -237,8 +243,11 @@ public partial class MainWindow
             return;
         }
 
-        var queue = _downloadItems.Where(i => i.State is not DownloadState.Done).ToList();
-        if (queue.Count == 0) { SetDownloadStatus("Add a link first"); return; }
+        var queue = _downloadItems
+            .Where(i => i.State is not DownloadState.Done && i.Enabled)
+            .Where(i => !i.HasTrackList || i.Tracks.Any(t => t.Enabled))
+            .ToList();
+        if (queue.Count == 0) { SetDownloadStatus("Nothing selected to download"); return; }
         if (!ToolManager.ToolsPresent) { SetDownloadStatus("Still setting up yt-dlp…"); EnsureToolsReady(); return; }
 
         var options = ReadOptions();

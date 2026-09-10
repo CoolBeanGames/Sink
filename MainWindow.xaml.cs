@@ -319,6 +319,51 @@ public partial class MainWindow : Window
 
     private static readonly Dictionary<string, ImageSource> _artCache = [];
 
+    // Guards against a slow remote-art fetch landing after the user has moved on
+    // to something else.
+    private object? _nowPlayingArtToken;
+
+    /// <summary>
+    /// Points the bottom transport bar's cover at a local artwork path or a
+    /// remote image URL (podcast show art), falling back to the letter tile.
+    /// </summary>
+    private void SetNowPlayingArt(string? source)
+    {
+        var token = new object();
+        _nowPlayingArtToken = token;
+
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            PlayerArtImage.Source = null;
+            PlayerArtImage.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        if (!source.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+        {
+            ApplyNowPlayingArt(LoadArtwork(source));
+            return;
+        }
+
+        ApplyNowPlayingArt(null);
+        _ = LoadRemoteNowPlayingArtAsync(source, token);
+    }
+
+    private async Task LoadRemoteNowPlayingArtAsync(string url, object token)
+    {
+        string? path = null;
+        try { path = await Task.Run(() => Artwork.CacheRemote(url)); }
+        catch (Exception ex) { Services.Log.Error("Now-playing art fetch failed", ex); }
+        if (!ReferenceEquals(_nowPlayingArtToken, token)) return;
+        ApplyNowPlayingArt(path is null ? null : LoadArtwork(path));
+    }
+
+    private void ApplyNowPlayingArt(ImageSource? art)
+    {
+        PlayerArtImage.Source = art;
+        PlayerArtImage.Visibility = art is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
     private static ImageSource? LoadArtwork(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return null;
@@ -341,14 +386,28 @@ public partial class MainWindow : Window
         }
     }
 
-    private void GroupCard_Click(object sender, RoutedEventArgs e) { }
-
     private void GroupCard_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not Button { Tag: string name }) return;
-        _drilldown = name;
+        if (GroupsView.SelectedItem is not GroupCard card) return;
+        _drilldown = card.Name;
         RenderLibrary();
         e.Handled = true;
+    }
+
+    private List<GroupCard> SelectedCards() => GroupsView.SelectedItems.OfType<GroupCard>().ToList();
+
+    private List<Track> TracksForCards(IReadOnlyList<GroupCard> cards)
+    {
+        IEnumerable<Track> pool = _source == LibrarySource.Ipod
+            ? _tracks.Where(t => _syncedTrackIds.Contains(t.Id))
+            : _tracks;
+        var names = cards.Select(c => c.Name).ToHashSet();
+        return (_category switch
+        {
+            LibraryCategory.Artists => pool.Where(t => names.Contains(t.Artist)),
+            LibraryCategory.Genres => pool.Where(t => names.Contains(t.Genre)),
+            _ => pool.Where(t => names.Contains(t.Album))
+        }).ToList();
     }
 
     private void TracksGrid_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -382,9 +441,7 @@ public partial class MainWindow : Window
         PlayerTitle.Text = track.Title;
         PlayerArtist.Text = track.Artist;
         PlayerArtInitial.Text = string.IsNullOrEmpty(track.Album) ? "♫" : track.Album[..1].ToUpperInvariant();
-        var art = LoadArtwork(track.ArtworkPath);
-        PlayerArtImage.Source = art;
-        PlayerArtImage.Visibility = art is null ? Visibility.Collapsed : Visibility.Visible;
+        SetNowPlayingArt(track.ArtworkPath);
         PlaybackStatus.Text = $"▶  Playing {track.Title} — {track.Artist}";
         PlayPauseButton.Content = "Ⅱ";
         UpdatePlayerDuration();
@@ -760,19 +817,22 @@ public partial class MainWindow : Window
 
     private void GroupCard_PreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed || sender is not Button { DataContext: GroupCard card }) return;
+        if (e.LeftButton != MouseButtonState.Pressed) return;
         var position = e.GetPosition(this);
         if (Math.Abs(position.X - _trackDragStart.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(position.Y - _trackDragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        var cards = SelectedCards();
+        if (cards.Count == 0) return;
+        var names = cards.Select(c => c.Name).ToHashSet();
         var ids = (_category switch
         {
-            LibraryCategory.Artists => _tracks.Where(t => t.Artist == card.Name),
-            LibraryCategory.Genres => _tracks.Where(t => t.Genre == card.Name),
-            _ => _tracks.Where(t => t.Album == card.Name)
+            LibraryCategory.Artists => _tracks.Where(t => names.Contains(t.Artist)),
+            LibraryCategory.Genres => _tracks.Where(t => names.Contains(t.Genre)),
+            _ => _tracks.Where(t => names.Contains(t.Album))
         }).Select(t => t.Id).ToArray();
         if (ids.Length == 0) return;
         var data = new DataObject();
         data.SetData(TrackDragFormat, ids);
-        DragDrop.DoDragDrop((DependencyObject)sender, data, DragDropEffects.Copy);
+        DragDrop.DoDragDrop(GroupsView, data, DragDropEffects.Copy);
     }
 
     private void PlaylistItem_DragOver(object sender, DragEventArgs e)
@@ -904,32 +964,28 @@ public partial class MainWindow : Window
         menu.Items.Add(Item("Delete from library", () => DeleteTracks(tracks)));
     }
 
-    private void GroupCard_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    private void GroupsView_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
-        if (sender is not Button { DataContext: GroupCard card, ContextMenu: { } menu }) { e.Handled = true; return; }
+        var menu = GroupsView.ContextMenu!;
         var kind = _category;
-        IEnumerable<Track> pool = _source == LibrarySource.Ipod
-            ? _tracks.Where(t => _syncedTrackIds.Contains(t.Id))
-            : _tracks;
-        var members = kind switch
-        {
-            LibraryCategory.Artists => pool.Where(t => t.Artist == card.Name),
-            LibraryCategory.Genres => pool.Where(t => t.Genre == card.Name),
-            _ => pool.Where(t => t.Album == card.Name)
-        };
-        var tracks = members.ToList();
+        var cards = SelectedCards();
+        if (cards.Count == 0) { e.Handled = true; return; }
+        var tracks = TracksForCards(cards);
         if (tracks.Count == 0) { e.Handled = true; return; }
+        var single = cards.Count == 1;
 
         menu.Items.Clear();
-        menu.Items.Add(Header(card.Name));
+        menu.Items.Add(Header(single ? cards[0].Name : $"{cards.Count} {kind.ToString().ToLowerInvariant()}"));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Play", () => PlayTracks(tracks)));
         if (kind == LibraryCategory.Genres)
-            menu.Items.Add(Item("Rename…", () => RenameGenre(card.Name)));
+        {
+            if (single) menu.Items.Add(Item("Rename…", () => RenameGenre(cards[0].Name)));
+        }
         else
             menu.Items.Add(Item("Edit metadata…", () => EditMetadata(tracks)));
-        if (kind == LibraryCategory.Albums)
-            menu.Items.Add(Item("Crop album art", () => CropAlbumArt(card.Name, tracks)));
+        if (kind == LibraryCategory.Albums && single)
+            menu.Items.Add(Item("Crop album art", () => CropAlbumArt(cards[0].Name, tracks)));
         menu.Items.Add(AddToPlaylistMenu(tracks));
         if (_source == LibrarySource.Ipod)
             menu.Items.Add(Item("Unsync from iPod", () => UnsyncTracks(tracks)));

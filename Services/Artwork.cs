@@ -1,4 +1,5 @@
 using System.IO;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using SixLabors.ImageSharp;
@@ -55,6 +56,35 @@ public static class Artwork
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException or ImageFormatException or InvalidImageContentException)
         {
             return false;
+        }
+    }
+
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
+
+    /// <summary>
+    /// Downloads a remote image (e.g. podcast show art) into the artwork cache,
+    /// square-cropped like every other cover, and returns the local file path.
+    /// Cached by URL, so repeat calls are cheap. Blocking — call from a worker.
+    /// </summary>
+    public static string? CacheRemote(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)
+            || !Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || uri.Scheme is not ("http" or "https"))
+            return null;
+        try
+        {
+            System.IO.Directory.CreateDirectory(Directory);
+            var name = "rmt_" + Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(url)))[..16] + ".jpg";
+            var path = Path.Combine(Directory, name);
+            if (File.Exists(path)) return path;
+            var data = Http.GetByteArrayAsync(uri).GetAwaiter().GetResult();
+            SquareCropTo(data, path);
+            return path;
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            return null;
         }
     }
 

@@ -1,7 +1,45 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
 namespace Sink.Services.Download;
+
+/// <summary>
+/// One track inside an album / playlist download row: its (editable) title and
+/// whether it should be included in the download. <see cref="Index"/> is the
+/// 1-based position in the source playlist, used for <c>--playlist-items</c>.
+/// </summary>
+public sealed class TrackChoice : INotifyPropertyChanged
+{
+    private bool _enabled = true;
+    private string _title;
+
+    public TrackChoice(int index, string title)
+    {
+        Index = index;
+        ScannedTitle = title;
+        _title = title;
+    }
+
+    public int Index { get; }
+    public string ScannedTitle { get; }
+
+    public bool Enabled { get => _enabled; set => Set(ref _enabled, value); }
+    public string Title { get => _title; set => Set(ref _title, value); }
+
+    /// <summary>True when the user has changed the title away from what yt-dlp reported.</summary>
+    public bool TitleEdited =>
+        _title.Trim().Length > 0 && !string.Equals(_title.Trim(), ScannedTitle.Trim(), StringComparison.Ordinal);
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value)) return;
+        field = value;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
+}
 
 public enum DownloadState { Pending, Scanning, Ready, Downloading, Importing, Done, Failed }
 
@@ -22,6 +60,34 @@ public sealed class DownloadItem : INotifyPropertyChanged
     private string _statusText = "Waiting to scan";
     private bool _isPlaylist;
     private int _trackCount;
+    private bool _enabled = true;
+    private bool _isExpanded;
+
+    public DownloadItem()
+    {
+        Tracks.CollectionChanged += (_, e) =>
+        {
+            foreach (var added in e.NewItems?.OfType<TrackChoice>() ?? [])
+                added.PropertyChanged += (_, _) => OnPropertyChanged(nameof(TrackSummary));
+            OnPropertyChanged(nameof(HasTrackList));
+            OnPropertyChanged(nameof(TrackSummary));
+        };
+    }
+
+    /// <summary>Child tracks for an album / playlist row; empty for a single track.</summary>
+    public ObservableCollection<TrackChoice> Tracks { get; } = [];
+
+    public bool HasTrackList => Tracks.Count > 0;
+
+    public string TrackSummary => Tracks.Count == 0
+        ? ""
+        : $"{Tracks.Count(t => t.Enabled)}/{Tracks.Count} tracks";
+
+    /// <summary>Whether this row is part of the next download run.</summary>
+    public bool Enabled { get => _enabled; set => Set(ref _enabled, value); }
+
+    /// <summary>Whether the row's track list is shown.</summary>
+    public bool IsExpanded { get => _isExpanded; set => Set(ref _isExpanded, value); }
 
     public string Url { get => _url; set => Set(ref _url, value); }
     public string Title { get => _title; set => Set(ref _title, value); }

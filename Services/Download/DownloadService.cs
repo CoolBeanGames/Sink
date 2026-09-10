@@ -8,7 +8,7 @@ namespace Sink.Services.Download;
 
 public sealed record ScannedInfo(
     string Title, string Artist, string Album, string Genre, bool IsPlaylist, int TrackCount,
-    IReadOnlyList<ScannedAlbum>? Albums = null);
+    IReadOnlyList<ScannedAlbum>? Albums = null, IReadOnlyList<string>? TrackTitles = null);
 
 /// <summary>One album found on a YouTube Music artist page.</summary>
 public sealed record ScannedAlbum(string Url, string Title);
@@ -65,7 +65,8 @@ public static partial class DownloadService
             var count = entryList.Count;
             var album = StripCollectionPrefix(Str(root, "title") ?? Str(root, "playlist_title") ?? "Unknown Album");
             var artist = CleanUploader(Str(root, "uploader") ?? Str(root, "channel") ?? Str(entries[0], "uploader") ?? Str(entries[0], "channel")) ?? "Unknown Artist";
-            return new ScannedInfo(album.Trim(), artist.Trim(), album.Trim(), "Unknown", IsPlaylist: true, TrackCount: count);
+            var titles = entryList.Select(en => (Str(en, "track") ?? Str(en, "title") ?? "Untitled").Trim()).ToList();
+            return new ScannedInfo(album.Trim(), artist.Trim(), album.Trim(), "Unknown", IsPlaylist: true, TrackCount: count, TrackTitles: titles);
         }
 
         var title = Str(root, "track") ?? Str(root, "title") ?? "Unknown title";
@@ -88,7 +89,15 @@ public static partial class DownloadService
         var workDir = Path.Combine(DownloadsDirectory, "_" + Guid.NewGuid().ToString("N")[..8]);
         System.IO.Directory.CreateDirectory(workDir);
 
-        var total = Math.Max(1, item.IsPlaylist ? item.TrackCount : 1);
+        // A partial album — some tracks toggled off — downloads just the chosen
+        // playlist positions; otherwise the whole link comes down as before.
+        var chosen = item.Tracks.Where(t => t.Enabled).OrderBy(t => t.Index).ToList();
+        var partial = item.IsPlaylist && item.Tracks.Count > 0 && chosen.Count < item.Tracks.Count;
+        var titleOrder = item.IsPlaylist && item.Tracks.Count > 0
+            ? (partial ? chosen : item.Tracks.OrderBy(t => t.Index).ToList())
+            : new List<TrackChoice>();
+
+        var total = Math.Max(1, item.IsPlaylist ? (partial ? chosen.Count : Math.Max(item.TrackCount, item.Tracks.Count)) : 1);
         var args = new List<string>
         {
             "-x",
@@ -103,6 +112,7 @@ public static partial class DownloadService
             "--ffmpeg-location", ToolManager.Directory,
             "-o", Path.Combine(workDir, item.IsPlaylist ? "%(playlist_index)03d - %(title)s.%(ext)s" : "%(title)s.%(ext)s"),
         };
+        if (partial) { args.Add("--playlist-items"); args.Add(string.Join(",", chosen.Select(t => t.Index))); }
         if (options.WriteMetadata) args.Add("--embed-metadata");
         if (options.EmbedAlbumArt) { args.Add("--embed-thumbnail"); args.Add("--convert-thumbnails"); args.Add("jpg"); }
         args.Add(item.Url);
@@ -137,14 +147,21 @@ public static partial class DownloadService
             throw new InvalidOperationException("yt-dlp produced no audio file");
 
         var finished = new List<string>();
-        foreach (var file in produced)
+        for (var i = 0; i < produced.Count; i++)
         {
+            var file = produced[i];
             var stem = item.IsPlaylist
                 ? Path.GetFileNameWithoutExtension(file)
                 : $"{item.Artist} - {item.Title}";
             var finalPath = UniquePath(Path.Combine(DownloadsDirectory, Sanitize(stem) + Path.GetExtension(file)));
             File.Move(file, finalPath, overwrite: false);
-            ApplyTags(finalPath, item);
+
+            // Write an edited title: always for a single, and per-track for an
+            // album when the user renamed that track. An untouched album track
+            // keeps yt-dlp's own title (see archived task 49).
+            var title = !item.IsPlaylist ? item.Title
+                : (i < titleOrder.Count && titleOrder[i].TitleEdited ? titleOrder[i].Title.Trim() : null);
+            ApplyTags(finalPath, item, title);
             finished.Add(finalPath);
         }
         try { System.IO.Directory.Delete(workDir, recursive: true); } catch (IOException) { }
@@ -158,11 +175,12 @@ public static partial class DownloadService
     /// yt-dlp embedded. Title is deliberately left alone — one row can stand for
     /// a whole album, so each track keeps its own downloaded title.
     /// </summary>
-    private static void ApplyTags(string path, DownloadItem item)
+    private static void ApplyTags(string path, DownloadItem item, string? title = null)
     {
         try
         {
             using var file = TagLib.File.Create(path);
+            if (!string.IsNullOrWhiteSpace(title)) file.Tag.Title = title;
             if (!string.IsNullOrWhiteSpace(item.Artist) && item.Artist != "Unknown Artist")
             {
                 file.Tag.Performers = [item.Artist];

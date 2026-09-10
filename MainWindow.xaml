@@ -107,11 +107,35 @@
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"><Button Content="⚙" Click="Settings_Click" ToolTip="Settings" Margin="0,0,9,0" Padding="11,8" FontSize="14" Background="#161A22" Foreground="#BCC2CD" BorderBrush="#303744"/><Button Content="⊙  Duplicates" Click="Duplicates_Click" Margin="0,0,9,0" Padding="13,8" Background="#161A22" Foreground="#BCC2CD" BorderBrush="#303744"/><Border Width="260" Height="39" Background="#12151C" BorderBrush="#262C38" BorderThickness="1" CornerRadius="10" Padding="12,7"><DockPanel><TextBlock Text="⌕" Foreground="#747B8B" Margin="0,0,8,0"/><TextBox x:Name="SearchBox" TextChanged="SearchBox_TextChanged" Background="Transparent" BorderThickness="0" Foreground="#F4F6FA" CaretBrush="#F4F6FA"/></DockPanel></Border></StackPanel>
             </Grid>
             <ScrollViewer x:Name="GroupsScroller" Grid.Row="1" Margin="0,28,0,0" VerticalScrollBarVisibility="Auto">
-                <ItemsControl x:Name="GroupsView"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate><DataTemplate><Button Style="{StaticResource CardButtonStyle}" Tag="{Binding Name}" Click="GroupCard_Click" MouseDoubleClick="GroupCard_MouseDoubleClick" ContextMenuOpening="GroupCard_ContextMenuOpening" PreviewMouseLeftButtonDown="GroupCard_PreviewMouseLeftButtonDown" PreviewMouseMove="GroupCard_PreviewMouseMove" Width="184" Margin="0,0,12,12"><Button.ContextMenu><ContextMenu/></Button.ContextMenu>
-                        <StackPanel><Border Height="145" CornerRadius="12" Background="{Binding Color}" BorderBrush="#303744" BorderThickness="1" ClipToBounds="True"><Grid><Ellipse Width="92" Height="92" Stroke="#FFFFFF" StrokeThickness="1" Opacity="0.13"/><Ellipse Width="30" Height="30" Fill="#0B0D12" Opacity="0.35"/><TextBlock Text="{Binding Initial}" FontSize="36" Foreground="#DAD7FF" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding Art}" Stretch="UniformToFill"/></Grid></Border><TextBlock Text="{Binding Name}" Foreground="#F4F6FA" FontWeight="SemiBold" Margin="3,10,3,0" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Detail}" Foreground="#7D8493" FontSize="11" Margin="3,3,3,0"/></StackPanel>
-                    </Button></DataTemplate></ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <ListBox x:Name="GroupsView" Background="Transparent" BorderThickness="0" SelectionMode="Extended"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="False"
+                         MouseDoubleClick="GroupCard_MouseDoubleClick" ContextMenuOpening="GroupsView_ContextMenuOpening"
+                         PreviewMouseLeftButtonDown="GroupCard_PreviewMouseLeftButtonDown" PreviewMouseMove="GroupCard_PreviewMouseMove">
+                    <ListBox.ContextMenu><ContextMenu/></ListBox.ContextMenu>
+                    <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Margin" Value="0,0,12,12"/>
+                            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="Sel" CornerRadius="14" Padding="4" BorderThickness="2" BorderBrush="Transparent" Background="Transparent">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Sel" Property="Background" Value="#161A22"/></Trigger>
+                                            <Trigger Property="IsSelected" Value="True"><Setter TargetName="Sel" Property="BorderBrush" Value="#8B7CFF"/><Setter TargetName="Sel" Property="Background" Value="#221F3D"/></Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate><DataTemplate>
+                        <StackPanel Width="184"><Border Height="145" CornerRadius="12" Background="{Binding Color}" BorderBrush="#303744" BorderThickness="1" ClipToBounds="True"><Grid><Ellipse Width="92" Height="92" Stroke="#FFFFFF" StrokeThickness="1" Opacity="0.13"/><Ellipse Width="30" Height="30" Fill="#0B0D12" Opacity="0.35"/><TextBlock Text="{Binding Initial}" FontSize="36" Foreground="#DAD7FF" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding Art}" Stretch="UniformToFill"/></Grid></Border><TextBlock Text="{Binding Name}" Foreground="#F4F6FA" FontWeight="SemiBold" Margin="3,10,3,0" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Detail}" Foreground="#7D8493" FontSize="11" Margin="3,3,3,0"/></StackPanel>
+                    </DataTemplate></ListBox.ItemTemplate>
+                </ListBox>
             </ScrollViewer>
             <Border x:Name="TracksBorder" Grid.Row="1" Margin="0,28,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#12151C" Visibility="Collapsed">
                 <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
@@ -151,14 +175,33 @@
                             <DataGrid x:Name="LinksGrid" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="None"
                                       Background="Transparent" BorderThickness="0" MaxHeight="420" RowHeight="30" CanUserAddRows="False" CanUserDeleteRows="False"
                                       SelectionUnit="FullRow" SelectionMode="Extended" CellEditEnding="LinksGrid_CellEditEnding"
-                                      SelectionChanged="LinksGrid_SelectionChanged" ContextMenuOpening="LinksGrid_ContextMenuOpening" VerticalScrollBarVisibility="Auto">
+                                      SelectionChanged="LinksGrid_SelectionChanged" ContextMenuOpening="LinksGrid_ContextMenuOpening" VerticalScrollBarVisibility="Auto"
+                                      RowDetailsVisibilityMode="Collapsed">
                                 <DataGrid.ContextMenu><ContextMenu/></DataGrid.ContextMenu>
+                                <DataGrid.RowDetailsTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#0E1116" BorderBrush="#20252F" BorderThickness="0,0,0,1" Padding="46,6,12,10">
+                                            <ItemsControl ItemsSource="{Binding Tracks}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <DockPanel Margin="0,2">
+                                                            <CheckBox IsChecked="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,0,9,0"/>
+                                                            <TextBlock Text="{Binding Index}" Width="26" Foreground="#6E7584" FontSize="11" VerticalAlignment="Center"/>
+                                                            <TextBox Text="{Binding Title, UpdateSourceTrigger=LostFocus}" Background="#12151C" Foreground="#D4D8E0" CaretBrush="#F4F6FA" BorderBrush="#2A303C" BorderThickness="1" Padding="6,3" FontSize="12"/>
+                                                        </DockPanel>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Border>
+                                    </DataTemplate>
+                                </DataGrid.RowDetailsTemplate>
                                 <DataGrid.RowStyle>
                                     <Style TargetType="DataGridRow">
                                         <Setter Property="Background" Value="Transparent"/>
                                         <Setter Property="BorderBrush" Value="#20252F"/>
                                         <Setter Property="BorderThickness" Value="0,0,0,1"/>
                                         <Setter Property="MinHeight" Value="0"/>
+                                        <Setter Property="DetailsVisibility" Value="{Binding IsExpanded, Converter={StaticResource B2V}}"/>
                                         <Style.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#1B1F28"/></Trigger>
                                             <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#2B2850"/><Setter Property="Foreground" Value="#F4F6FA"/></Trigger>
@@ -175,7 +218,39 @@
                                     </Style>
                                 </DataGrid.CellStyle>
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="TITLE / ALBUM" Binding="{Binding Title}" Width="2*" IsReadOnly="True"/>
+                                    <DataGridTemplateColumn Width="26" IsReadOnly="True">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                              Visibility="{Binding HasTrackList, Converter={StaticResource B2V}}"
+                                                              VerticalAlignment="Center" FontSize="10" Cursor="Hand"
+                                                              Background="Transparent" BorderThickness="0" Foreground="#8A93A3" Content="▸">
+                                                    <ToggleButton.Style>
+                                                        <Style TargetType="ToggleButton">
+                                                            <Setter Property="Template">
+                                                                <Setter.Value>
+                                                                    <ControlTemplate TargetType="ToggleButton">
+                                                                        <Border Background="Transparent"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                                                                    </ControlTemplate>
+                                                                </Setter.Value>
+                                                            </Setter>
+                                                            <Style.Triggers>
+                                                                <Trigger Property="IsChecked" Value="True"><Setter Property="Content" Value="▾"/></Trigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </ToggleButton.Style>
+                                                </ToggleButton>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Width="28" IsReadOnly="True">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <CheckBox IsChecked="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" HorizontalAlignment="Center" ToolTip="Include in download"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="TITLE / ALBUM" Binding="{Binding Title}" Width="2*"/>
                                     <DataGridTextColumn Header="ARTIST" Binding="{Binding Artist}" Width="*"/>
                                     <DataGridTextColumn Header="ALBUM" Binding="{Binding Album}" Width="*"/>
                                     <DataGridTextColumn Header="GENRE" Binding="{Binding Genre}" Width="120"/>

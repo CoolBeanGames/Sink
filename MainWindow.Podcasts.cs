@@ -346,9 +346,7 @@ public partial class MainWindow
         PlayerTitle.Text = episode.Title;
         PlayerArtist.Text = show.Title;
         PlayerArtInitial.Text = string.IsNullOrEmpty(show.Title) ? "🎙" : show.Title[..1].ToUpperInvariant();
-        var art = LoadArtwork(show.ArtworkUrl);
-        PlayerArtImage.Source = art;
-        PlayerArtImage.Visibility = art is null ? Visibility.Collapsed : Visibility.Visible;
+        SetNowPlayingArt(show.ArtworkUrl);
         PlayPauseButton.Content = "Ⅱ";
         ProgressSlider.Maximum = Math.Max(1, episode.Duration.TotalSeconds);
         _updatingProgress = true;
@@ -417,7 +415,7 @@ public partial class MainWindow
         PlayerTitle.Text = "Choose something to play";
         PlayerArtist.Text = "Your library is ready";
         PlayerArtInitial.Text = "♫";
-        PlayerArtImage.Visibility = Visibility.Collapsed;
+        SetNowPlayingArt(null);
         _updatingProgress = true;
         ProgressSlider.Value = 0;
         _updatingProgress = false;
