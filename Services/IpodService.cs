@@ -21,7 +21,7 @@ public sealed record IpodDevice(
         return $"{value:0.#} {units[unit]}";
     }
 
-    public string Key => RootPath ?? Serial ?? Name;
+    public string Key => RootPath ?? Name;
     public string CapacityText => Human(CapacityBytes);
     public string FreeText => Human(FreeBytes);
 
@@ -46,11 +46,11 @@ public sealed record IpodDevice(
             if (!string.IsNullOrWhiteSpace(Model) && !string.Equals(Model, Name, StringComparison.OrdinalIgnoreCase))
                 lines.Add(Model!);
             if (CapacityBytes > 0)
-                lines.Add(FreeBytes > 0
-                    ? $"{CapacityText} · {FreeText} free"
-                    : $"{CapacityText} capacity");
-            if (RootPath is not null) lines.Add($"Mounted at {RootPath}");
-            else lines.Add("Storage not mounted (Mac-formatted?)");
+                lines.Add(FreeBytes > 0 ? $"{CapacityText} · {FreeText} free" : $"{CapacityText} capacity");
+            if (RootPath is not null)
+                lines.Add($"Mounted at {RootPath}");
+            else if (CapacityBytes == 0)
+                lines.Add("Capacity unavailable — Windows can't read a Mac-formatted iPod");
             if (!string.IsNullOrWhiteSpace(Serial)) lines.Add($"Serial {Serial}");
             return string.Join("\n", lines);
         }
@@ -80,31 +80,85 @@ public static class IpodService
         var mounted = TryMountedVolume();
         var usb = FindUsbIpod();
 
+        var disk = usb is not null || mounted is not null
+            ? RunBounded(IpodDiskProbe.FindIpod, TimeSpan.FromSeconds(12), null)
+            : null;
+
         if (mounted is not null)
-            return mounted with { Model = usb?.Model ?? mounted.Model, Serial = usb?.Serial ?? mounted.Serial };
+            return mounted with
+            {
+                CapacityBytes = mounted.CapacityBytes > 0 ? mounted.CapacityBytes : disk?.SizeBytes ?? 0,
+                Model = DescribeModel(disk) ?? usb?.Model ?? mounted.Model,
+                Serial = PickSerial(disk?.Serial, usb?.Serial, mounted.Serial)
+            };
 
-        if (usb is null) return null;
+        if (usb is null && disk is null) return null;
 
-        var capacity = TryDiskCapacity(usb.PnpDeviceId);
-        return new IpodDevice("iPod", null, capacity, 0, usb.Model, usb.Serial);
+        var name = usb?.Model is { Length: > 0 } and not "iPod" ? usb!.Model : "iPod";
+        return new IpodDevice(
+            name, null,
+            disk?.SizeBytes ?? 0, 0,
+            DescribeModel(disk),
+            PickSerial(disk?.Serial, usb?.Serial, null));
+    }
+
+    private static string? DescribeModel(IpodDiskProbe.DiskInfo? disk)
+    {
+        if (disk is null) return null;
+        var text = $"{disk.Vendor} {disk.Product}".Trim();
+        return text.Length == 0 ? null : text;
+    }
+
+    private static string? PickSerial(string? diskSerial, string? usbSerial, string? fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(diskSerial)) return diskSerial;
+        if (!string.IsNullOrWhiteSpace(usbSerial)) return usbSerial;
+        return fallback;
     }
 
     private sealed record UsbIpod(string Model, string? Serial, string PnpDeviceId);
+
+    // Apple USB product IDs (VID 05AC) for iPod-family devices.
+    private static readonly Dictionary<string, string> IpodModels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["1201"] = "iPod", ["1203"] = "iPod (3rd gen)", ["1204"] = "iPod mini",
+        ["1205"] = "iPod mini (2nd gen)", ["1207"] = "iPod (4th gen)",
+        ["1209"] = "iPod (5th gen / classic)", ["120a"] = "iPod nano",
+        ["1223"] = "iPod nano (2nd gen)", ["1224"] = "iPod shuffle (2nd gen)",
+        ["1240"] = "iPod nano (3rd gen)", ["1250"] = "iPod nano (4th gen)",
+        ["1260"] = "iPod nano (5th gen)", ["1261"] = "iPod classic",
+        ["1262"] = "iPod nano (6th gen)", ["1263"] = "iPod nano (7th gen)",
+        ["1265"] = "iPod shuffle (4th gen)", ["1266"] = "iPod nano (5th gen)",
+        ["1300"] = "iPod shuffle (3rd gen)", ["1301"] = "iPod touch",
+    };
 
     private static UsbIpod? FindUsbIpod()
     {
         return Probe(() =>
         {
             using var searcher = new ManagementObjectSearcher(
-                "SELECT Name, DeviceID FROM Win32_PnPEntity WHERE Name LIKE '%iPod%' OR DeviceID LIKE '%VEN_APPLE&PROD_IPOD%'");
+                "SELECT Name, DeviceID FROM Win32_PnPEntity WHERE Name LIKE '%iPod%' OR DeviceID LIKE '%VEN_APPLE&PROD_IPOD%' OR DeviceID LIKE '%VID_05AC&PID_12%'");
+            string? model = null, serial = null, deviceId = null;
             foreach (var obj in searcher.Get().OfType<ManagementObject>())
             {
-                var name = (obj["Name"] as string) ?? "Apple iPod";
-                var deviceId = (obj["DeviceID"] as string) ?? "";
-                return new UsbIpod(name, ParseSerial(deviceId), deviceId);
+                var id = (obj["DeviceID"] as string) ?? "";
+                var name = (obj["Name"] as string) ?? "";
+                deviceId ??= id;
+                serial ??= ParseSerial(id);
+                var byPid = ModelFromPid(id);
+                if (byPid is not null) model = byPid;
+                else if (model is null && name.Contains("iPod", StringComparison.OrdinalIgnoreCase)) model = name;
             }
-            return null;
+            return deviceId is null ? null : new UsbIpod(model ?? "iPod", serial, deviceId);
         }, WmiTimeout);
+    }
+
+    private static string? ModelFromPid(string deviceId)
+    {
+        var marker = deviceId.IndexOf("PID_", StringComparison.OrdinalIgnoreCase);
+        if (marker < 0 || marker + 8 > deviceId.Length) return null;
+        var pid = deviceId.Substring(marker + 4, 4);
+        return IpodModels.GetValueOrDefault(pid);
     }
 
     private static string? ParseSerial(string deviceId)
@@ -112,21 +166,7 @@ public static class IpodService
         var tail = deviceId.Split('\\').LastOrDefault();
         if (string.IsNullOrWhiteSpace(tail)) return null;
         var serial = tail.Split('&')[0].Trim();
-        return string.IsNullOrWhiteSpace(serial) ? null : serial;
-    }
-
-    private static long TryDiskCapacity(string pnpDeviceId)
-    {
-        return RunBounded<long>(() =>
-        {
-            var escaped = pnpDeviceId.Replace("\\", "\\\\");
-            using var searcher = new ManagementObjectSearcher(
-                $"ASSOCIATORS OF {{Win32_PnPEntity.DeviceID='{escaped}'}} WHERE ResultClass=Win32_DiskDrive");
-            foreach (var disk in searcher.Get().OfType<ManagementObject>())
-                if (disk["Size"] is not null && long.TryParse(disk["Size"].ToString(), out var size))
-                    return size;
-            return 0;
-        }, WmiTimeout, 0);
+        return string.IsNullOrWhiteSpace(serial) || serial.Length < 6 ? null : serial;
     }
 
     private static IpodDevice? TryMountedVolume()

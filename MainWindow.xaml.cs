@@ -94,16 +94,15 @@ public partial class MainWindow : Window
 
         if (device is not null)
         {
-            if (!_ipodConnected || _ipodDevice?.Key != device.Key)
+            var isNew = !_ipodConnected || _ipodDevice?.Key != device.Key;
+            var changed = isNew || _ipodDevice?.Tooltip != device.Tooltip;
+            if (changed)
             {
                 _ipodDevice = device;
                 SetIpodConnected(true);
-                PlaybackStatus.Text = $"Connected {device.Name}";
             }
-            else if (wasManual)
-            {
-                PlaybackStatus.Text = $"{device.Name} is connected";
-            }
+            if (isNew) PlaybackStatus.Text = $"Connected {device.Name}";
+            else if (wasManual) PlaybackStatus.Text = $"{device.Name} is connected";
             return;
         }
 
