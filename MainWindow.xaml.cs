@@ -890,6 +890,8 @@ public partial class MainWindow : Window
             menu.Items.Add(Item("Rename…", () => RenameGenre(card.Name)));
         else
             menu.Items.Add(Item("Edit metadata…", () => EditMetadata(tracks)));
+        if (kind == LibraryCategory.Albums)
+            menu.Items.Add(Item("Crop album art", () => CropAlbumArt(card.Name, tracks)));
         menu.Items.Add(AddToPlaylistMenu(tracks));
         if (_source == LibrarySource.Ipod)
             menu.Items.Add(Item("Unsync from iPod", () => UnsyncTracks(tracks)));
@@ -988,6 +990,34 @@ public partial class MainWindow : Window
         SaveLibrary();
         RenderLibrary();
         PlaybackStatus.Text = $"Renamed genre on {count} track{(count == 1 ? "" : "s")}";
+    }
+
+    /// <summary>Forces the album's cover art through the standard 300x300 centre-crop.</summary>
+    private void CropAlbumArt(string album, IReadOnlyList<Track> tracks)
+    {
+        var artist = tracks.Select(t => t.Artist).FirstOrDefault() ?? "";
+        var key = $"{album}|{artist}";
+        var existing = tracks.Select(t => t.ArtworkPath).FirstOrDefault(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p));
+
+        string? cropped = null;
+        if (existing is not null && Artwork.Recrop(existing)) cropped = existing;
+        if (cropped is null)
+        {
+            var withFile = tracks.FirstOrDefault(t => !string.IsNullOrWhiteSpace(t.FilePath) && File.Exists(t.FilePath!));
+            if (withFile is not null) cropped = Artwork.ExtractAndCrop(withFile.FilePath!, key);
+        }
+
+        if (cropped is null)
+        {
+            PlaybackStatus.Text = $"No cover art to crop for {album}";
+            return;
+        }
+
+        foreach (var track in tracks) track.ArtworkPath = cropped;
+        _artCache.Clear();
+        SaveLibrary();
+        RenderLibrary();
+        PlaybackStatus.Text = $"Cropped album art for {album}";
     }
 
     private void DeleteTracks(IReadOnlyList<Track> tracks)

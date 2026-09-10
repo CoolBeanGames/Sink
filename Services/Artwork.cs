@@ -39,6 +39,46 @@ public static class Artwork
     }
 
     /// <summary>
+    /// Re-runs the square centre-crop on an existing artwork file in place (for
+    /// art that was imported before cropping, or that just looks wrong). Returns
+    /// true on success.
+    /// </summary>
+    public static bool Recrop(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return false;
+            var data = File.ReadAllBytes(path);
+            SquareCropTo(data, path);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException or ImageFormatException or InvalidImageContentException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Extracts embedded art from an audio file, force-cropping (overwrites any cached copy).</summary>
+    public static string? ExtractAndCrop(string audioFilePath, string key)
+    {
+        try
+        {
+            using var tag = TagLib.File.Create(audioFilePath);
+            var picture = tag.Tag.Pictures?.FirstOrDefault(p => p.Data?.Data?.Length > 0);
+            if (picture is null) return null;
+            System.IO.Directory.CreateDirectory(Directory);
+            var name = Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(key)))[..16] + ".jpg";
+            var path = Path.Combine(Directory, name);
+            SquareCropTo(picture.Data.Data, path);
+            return path;
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Scales the image so its shorter side is <see cref="Size"/>, then crops the
     /// centred <see cref="Size"/> x <see cref="Size"/> square and writes it as JPEG.
     /// Explicit two-step so the output is always exactly square whatever the source.
