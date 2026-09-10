@@ -16,6 +16,7 @@ public sealed class LibraryData
 {
     public List<Track> Tracks { get; set; } = [];
     public List<PlaylistData> Playlists { get; set; } = [];
+    public List<Guid> SyncedTrackIds { get; set; } = [];
 }
 
 /// <summary>
@@ -48,7 +49,7 @@ public static class LibraryStore
         }
     }
 
-    public static void Save(IEnumerable<Track> tracks, IEnumerable<Playlist> playlists)
+    public static void Save(IEnumerable<Track> tracks, IEnumerable<Playlist> playlists, IEnumerable<Guid> syncedTrackIds)
     {
         var data = new LibraryData
         {
@@ -58,7 +59,8 @@ public static class LibraryStore
                 Id = p.Id,
                 Name = p.Name,
                 TrackIds = p.TrackIds.ToList()
-            }).ToList()
+            }).ToList(),
+            SyncedTrackIds = syncedTrackIds.ToList()
         };
         try
         {

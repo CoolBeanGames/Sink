@@ -12,11 +12,15 @@ using Sink.Services;
 
 namespace Sink;
 
+public enum LibrarySource { Music, Ipod }
+
 public partial class MainWindow : Window
 {
     private readonly ObservableCollection<Track> _tracks = [];
     private readonly ObservableCollection<Playlist> _playlists = [];
+    private readonly HashSet<Guid> _syncedTrackIds = [];
     private LibraryCategory _category = LibraryCategory.Albums;
+    private LibrarySource _source = LibrarySource.Music;
     private string? _drilldown;
     private Playlist? _activePlaylist;
     private readonly MediaPlayer _mediaPlayer = new();
@@ -67,9 +71,11 @@ public partial class MainWindow : Window
             foreach (var id in playlist.TrackIds) restored.TrackIds.Add(id);
             _playlists.Add(restored);
         }
+        var known = _tracks.Select(t => t.Id).ToHashSet();
+        foreach (var id in data.SyncedTrackIds.Where(known.Contains)) _syncedTrackIds.Add(id);
     }
 
-    private void SaveLibrary() => LibraryStore.Save(_tracks, _playlists);
+    private void SaveLibrary() => LibraryStore.Save(_tracks, _playlists, _syncedTrackIds);
 
     private bool _ipodPolling;
     private bool _manualRescan;
@@ -108,20 +114,61 @@ public partial class MainWindow : Window
     private void Category_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button button || !Enum.TryParse(button.Name.Replace("Button", ""), out LibraryCategory category)) return;
+        _source = LibrarySource.Music;
         _category = category; _drilldown = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
+        ApplySourceChrome();
         SetActiveNavigation(button);
         RenderLibrary();
     }
 
+    private void IpodCategory_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || !Enum.TryParse(button.Name.Replace("Ipod", "").Replace("Button", ""), out LibraryCategory category)) return;
+        _source = LibrarySource.Ipod;
+        _category = category; _drilldown = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
+        ApplySourceChrome();
+        SetActiveNavigation(button);
+        RenderLibrary();
+    }
+
+    private void ShowMusicSource_Click(object sender, RoutedEventArgs e) => SetSource(LibrarySource.Music);
+    private void ShowIpodSource_Click(object sender, RoutedEventArgs e) => SetSource(LibrarySource.Ipod);
+
+    private void SetSource(LibrarySource source)
+    {
+        _source = source;
+        _category = LibraryCategory.Albums;
+        _drilldown = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
+        ApplySourceChrome();
+        SetActiveNavigation(source == LibrarySource.Music ? AlbumsButton : IpodAlbumsButton);
+        RenderLibrary();
+    }
+
+    private void ApplySourceChrome()
+    {
+        var music = _source == LibrarySource.Music;
+        MusicNav.Visibility = music ? Visibility.Visible : Visibility.Collapsed;
+        IpodNav.Visibility = music ? Visibility.Collapsed : Visibility.Visible;
+        MusicHeaderButton.Tag = music ? "Active" : null;
+        IpodHeaderButton.Tag = music ? null : "Active";
+    }
+
     private void SetActiveNavigation(Button? active)
     {
-        foreach (var button in new[] { ArtistsButton, AlbumsButton, GenresButton, SongsButton }) button.Tag = button == active ? "Active" : button.Name.Replace("Button", "");
+        foreach (var button in new[] { ArtistsButton, AlbumsButton, GenresButton, SongsButton, IpodArtistsButton, IpodAlbumsButton, IpodGenresButton, IpodSongsButton })
+        {
+            var name = button.Name.Replace("Ipod", "").Replace("Button", "");
+            button.Tag = button == active ? "Active" : name;
+        }
     }
 
     private void RenderLibrary()
     {
         var query = SearchBox?.Text?.Trim() ?? "";
-        IEnumerable<Track> visible = _tracks;
+        var source = _source == LibrarySource.Ipod
+            ? _tracks.Where(track => _syncedTrackIds.Contains(track.Id)).ToList()
+            : _tracks.ToList();
+        IEnumerable<Track> visible = source;
         if (_activePlaylist is not null) visible = visible.Where(track => _activePlaylist.TrackIds.Contains(track.Id));
         if (_drilldown is not null) visible = _category switch
         {
@@ -141,21 +188,25 @@ public partial class MainWindow : Window
         {
             var rows = visible.OrderBy(track => track.Album).ThenBy(track => track.TrackNumber).ToList();
             TracksGrid.ItemsSource = rows;
-            ViewTitle.Text = _drilldown ?? _activePlaylist?.Name ?? "Songs";
-            ViewSubtitle.Text = $"{rows.Count} tracks";
+            ViewTitle.Text = _drilldown ?? _activePlaylist?.Name ?? (_source == LibrarySource.Ipod ? "iPod · Songs" : "Songs");
+            ViewSubtitle.Text = _source == LibrarySource.Ipod && _syncedTrackIds.Count == 0
+                ? "Nothing synced to iPod yet — drag music onto IPOD"
+                : $"{rows.Count} tracks";
             return;
         }
 
         var groups = _category switch
         {
-            LibraryCategory.Artists => _tracks.GroupBy(track => track.Artist).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key)),
-            LibraryCategory.Genres => _tracks.GroupBy(track => track.Genre).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key)),
-            _ => _tracks.GroupBy(track => track.Album).Select(group => Card(group.Key, group.First().Artist, group.Key))
+            LibraryCategory.Artists => source.GroupBy(track => track.Artist).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key)),
+            LibraryCategory.Genres => source.GroupBy(track => track.Genre).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key)),
+            _ => source.GroupBy(track => track.Album).Select(group => Card(group.Key, group.First().Artist, group.Key))
         };
         var cards = groups.Where(card => query.Length == 0 || card.Name.Contains(query, StringComparison.OrdinalIgnoreCase)).OrderBy(card => card.Name).ToList();
         GroupsView.ItemsSource = cards;
-        ViewTitle.Text = _category.ToString();
-        ViewSubtitle.Text = $"{cards.Count} {_category.ToString().ToLowerInvariant()}";
+        ViewTitle.Text = _source == LibrarySource.Ipod ? $"iPod · {_category}" : _category.ToString();
+        ViewSubtitle.Text = _source == LibrarySource.Ipod && _syncedTrackIds.Count == 0
+            ? "Nothing synced to iPod yet"
+            : $"{cards.Count} {_category.ToString().ToLowerInvariant()}";
     }
 
     private static GroupCard Card(string name, string detail, string colorSeed)
@@ -344,7 +395,60 @@ public partial class MainWindow : Window
         PollForIpod(manual: true);
     }
 
-    private void SyncIpod_Click(object sender, RoutedEventArgs e) => StartIpodSync();
+    private void SyncIpod_Click(object sender, RoutedEventArgs e)
+    {
+        var header = (sender as MenuItem)?.Header as string ?? "";
+        if (header is "Sync all" or "Sync music")
+            MarkSynced(_tracks.Where(t => !t.ExcludedFromShuffle).Select(t => t.Id), announce: true);
+        StartIpodSync();
+    }
+
+    private void MarkSynced(IEnumerable<Guid> ids, bool announce = false)
+    {
+        var added = 0;
+        foreach (var id in ids)
+            if (_syncedTrackIds.Add(id)) added++;
+        if (added == 0)
+        {
+            if (announce) PlaybackStatus.Text = "iPod already up to date";
+            return;
+        }
+        SaveLibrary();
+        if (_source == LibrarySource.Ipod) RenderLibrary();
+        if (announce) PlaybackStatus.Text = $"Synced {added} track{(added == 1 ? "" : "s")} to iPod";
+    }
+
+    private void UnsyncTracks(IReadOnlyList<Track> tracks)
+    {
+        var removed = 0;
+        foreach (var track in tracks)
+            if (_syncedTrackIds.Remove(track.Id)) removed++;
+        if (removed == 0) return;
+        SaveLibrary();
+        RenderLibrary();
+        PlaybackStatus.Text = $"Removed {removed} track{(removed == 1 ? "" : "s")} from iPod";
+    }
+
+    private void IpodNav_DragOver(object sender, DragEventArgs e)
+    {
+        var canSync = e.Data.GetDataPresent(TrackDragFormat);
+        e.Effects = canSync ? DragDropEffects.Copy : DragDropEffects.None;
+        if (canSync && sender is Button button) button.Tag = "Active";
+        e.Handled = true;
+    }
+
+    private void IpodNav_DragLeave(object sender, DragEventArgs e)
+    {
+        if (sender is Button button) button.Tag = _source == LibrarySource.Ipod ? "Active" : null;
+    }
+
+    private void IpodNav_Drop(object sender, DragEventArgs e)
+    {
+        IpodNav_DragLeave(sender, e);
+        if (e.Data.GetData(TrackDragFormat) is not Guid[] trackIds) return;
+        e.Handled = true;
+        MarkSynced(_tracks.Where(t => trackIds.Contains(t.Id) && !t.ExcludedFromShuffle).Select(t => t.Id), announce: true);
+    }
 
     private void StartIpodSync()
     {
@@ -390,9 +494,11 @@ public partial class MainWindow : Window
             PlaybackStatus.Text = "Connect an iPod before syncing";
             return;
         }
-        var count = _tracks.Count(track => trackIds.Contains(track.Id) && !track.ExcludedFromShuffle);
-        PlaybackStatus.Text = count > 0 ? $"Syncing {count} track{(count == 1 ? "" : "s")} to iPod" : "Nothing to sync";
-        if (count > 0) StartIpodSync();
+        var syncable = _tracks.Where(track => trackIds.Contains(track.Id) && !track.ExcludedFromShuffle).Select(t => t.Id).ToList();
+        if (syncable.Count == 0) { PlaybackStatus.Text = "Nothing to sync"; return; }
+        MarkSynced(syncable);
+        PlaybackStatus.Text = $"Syncing {syncable.Count} track{(syncable.Count == 1 ? "" : "s")} to iPod";
+        StartIpodSync();
     }
 
     private void TracksGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) => _trackDragStart = e.GetPosition(TracksGrid);
@@ -525,6 +631,7 @@ public partial class MainWindow : Window
     private void PlaylistList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (PlaylistList.SelectedItem is not Playlist playlist) return;
+        _source = LibrarySource.Music; ApplySourceChrome();
         _activePlaylist = playlist; _category = LibraryCategory.Playlist; _drilldown = null; SetActiveNavigation(null); RenderLibrary();
     }
 
@@ -544,21 +651,31 @@ public partial class MainWindow : Window
         menu.Items.Add(Item("Play", () => PlayTracks(tracks)));
         menu.Items.Add(Item("Edit metadata…", () => EditMetadata(tracks)));
         menu.Items.Add(AddToPlaylistMenu(tracks));
-        menu.Items.Add(Item("Sync to iPod", () => SyncTracksToIpod(tracks)));
-        menu.Items.Add(ExcludeFromShuffleItem(tracks));
+        if (_source == LibrarySource.Ipod)
+        {
+            menu.Items.Add(Item("Unsync from iPod", () => UnsyncTracks(tracks)));
+        }
+        else
+        {
+            menu.Items.Add(Item("Sync to iPod", () => SyncTracksToIpod(tracks)));
+            menu.Items.Add(ExcludeFromShuffleItem(tracks));
+        }
         menu.Items.Add(new Separator());
-        menu.Items.Add(Item($"Delete from library", () => DeleteTracks(tracks)));
+        menu.Items.Add(Item("Delete from library", () => DeleteTracks(tracks)));
     }
 
     private void GroupCard_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         if (sender is not Button { DataContext: GroupCard card, ContextMenu: { } menu }) { e.Handled = true; return; }
         var kind = _category;
+        IEnumerable<Track> pool = _source == LibrarySource.Ipod
+            ? _tracks.Where(t => _syncedTrackIds.Contains(t.Id))
+            : _tracks;
         var members = kind switch
         {
-            LibraryCategory.Artists => _tracks.Where(t => t.Artist == card.Name),
-            LibraryCategory.Genres => _tracks.Where(t => t.Genre == card.Name),
-            _ => _tracks.Where(t => t.Album == card.Name)
+            LibraryCategory.Artists => pool.Where(t => t.Artist == card.Name),
+            LibraryCategory.Genres => pool.Where(t => t.Genre == card.Name),
+            _ => pool.Where(t => t.Album == card.Name)
         };
         var tracks = members.ToList();
         if (tracks.Count == 0) { e.Handled = true; return; }
@@ -572,7 +689,10 @@ public partial class MainWindow : Window
         else
             menu.Items.Add(Item("Edit metadata…", () => EditMetadata(tracks)));
         menu.Items.Add(AddToPlaylistMenu(tracks));
-        menu.Items.Add(Item("Sync to iPod", () => SyncTracksToIpod(tracks)));
+        if (_source == LibrarySource.Ipod)
+            menu.Items.Add(Item("Unsync from iPod", () => UnsyncTracks(tracks)));
+        else
+            menu.Items.Add(Item("Sync to iPod", () => SyncTracksToIpod(tracks)));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Delete from library", () => DeleteTracks(tracks)));
     }
@@ -639,10 +759,10 @@ public partial class MainWindow : Window
 
     private void SyncTracksToIpod(IReadOnlyList<Track> tracks)
     {
-        if (!_ipodConnected) { PlaybackStatus.Text = "Connect an iPod before syncing"; return; }
-        var count = tracks.Count(t => !t.ExcludedFromShuffle);
-        PlaybackStatus.Text = count > 0 ? $"Syncing {count} track{(count == 1 ? "" : "s")} to iPod" : "Nothing to sync";
-        if (count > 0) StartIpodSync();
+        var syncable = tracks.Where(t => !t.ExcludedFromShuffle).Select(t => t.Id).ToList();
+        if (syncable.Count == 0) { PlaybackStatus.Text = "Nothing to sync"; return; }
+        MarkSynced(syncable, announce: true);
+        if (_ipodConnected) StartIpodSync();
     }
 
     private void EditMetadata(IReadOnlyList<Track> tracks)
@@ -676,6 +796,7 @@ public partial class MainWindow : Window
         foreach (var playlist in _playlists)
             foreach (var id in playlist.TrackIds.Where(ids.Contains).ToList())
                 playlist.TrackIds.Remove(id);
+        _syncedTrackIds.RemoveWhere(ids.Contains);
         if (_nowPlaying is not null && ids.Contains(_nowPlaying.Id))
         {
             _mediaPlayer.Stop(); _mediaPlayer.Close(); _nowPlaying = null; _isPlaying = false; _playbackTimer.Stop();

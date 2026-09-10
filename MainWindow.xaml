@@ -13,14 +13,16 @@
         <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="82"/></Grid.RowDefinitions>
         <Grid.ColumnDefinitions><ColumnDefinition Width="238"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
         <Border Grid.RowSpan="2" Background="#12151C" BorderBrush="#262C38" BorderThickness="0,0,1,0" Padding="16,24">
-            <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <StackPanel Orientation="Horizontal" Margin="8,0,0,28"><Border Width="32" Height="32" CornerRadius="10" Background="#7568E5"><TextBlock Text="S" FontSize="17" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock Text="Sink" FontSize="20" FontWeight="Bold" Margin="11,3,0,0"/></StackPanel>
                 <StackPanel Grid.Row="1">
-                    <TextBlock Text="LIBRARY" Style="{StaticResource EyebrowStyle}" Margin="10,0,0,7"/>
-                    <Button x:Name="ArtistsButton" Content="●    Artists" Tag="Artists" Click="Category_Click" Style="{StaticResource NavButtonStyle}"/>
-                    <Button x:Name="AlbumsButton" Content="▣    Albums" Tag="Active" Click="Category_Click" Style="{StaticResource NavButtonStyle}"/>
-                    <Button x:Name="GenresButton" Content="◇    Genres" Tag="Genres" Click="Category_Click" Style="{StaticResource NavButtonStyle}"/>
-                    <Button x:Name="SongsButton" Content="♫    Songs" Tag="Songs" Click="Category_Click" Style="{StaticResource NavButtonStyle}"/>
+                    <Button x:Name="MusicHeaderButton" Content="LIBRARY" Tag="Active" Click="ShowMusicSource_Click" Style="{StaticResource SectionHeaderButtonStyle}"/>
+                    <StackPanel x:Name="MusicNav">
+                        <Button x:Name="ArtistsButton" Content="●    Artists" Tag="Artists" Click="Category_Click" Style="{StaticResource NavButtonStyle}"/>
+                        <Button x:Name="AlbumsButton" Content="▣    Albums" Tag="Active" Click="Category_Click" Style="{StaticResource NavButtonStyle}"/>
+                        <Button x:Name="GenresButton" Content="◇    Genres" Tag="Genres" Click="Category_Click" Style="{StaticResource NavButtonStyle}"/>
+                        <Button x:Name="SongsButton" Content="♫    Songs" Tag="Songs" Click="Category_Click" Style="{StaticResource NavButtonStyle}"/>
+                    </StackPanel>
                 </StackPanel>
                 <Grid Grid.Row="2" Margin="10,24,4,8"><TextBlock Text="PLAYLISTS" Style="{StaticResource EyebrowStyle}"/><Button Content="＋" HorizontalAlignment="Right" Margin="0,-8,0,0" Foreground="#8B7CFF" Background="Transparent" BorderThickness="0" FontSize="20" Click="NewPlaylist_Click"/></Grid>
                 <ListBox x:Name="PlaylistList" Grid.Row="3" Background="Transparent" BorderThickness="0" SelectionChanged="PlaylistList_SelectionChanged">
@@ -28,6 +30,17 @@
                     <ListBox.ItemTemplate><DataTemplate DataType="{x:Type models:Playlist}"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Name}"/><TextBlock Grid.Column="1" Text="{Binding TrackIds.Count}" Foreground="#737A89" FontSize="10"/></Grid></DataTemplate></ListBox.ItemTemplate>
                 </ListBox>
                 <Button Grid.Row="4" Content="＋  New playlist" Click="NewPlaylist_Click" Style="{StaticResource PrimaryButtonStyle}" Background="#272243" Foreground="#CBC5FF"/>
+                <StackPanel Grid.Row="5" Margin="0,16,0,0">
+                    <Button x:Name="IpodHeaderButton" Content="IPOD" Click="ShowIpodSource_Click" Style="{StaticResource SectionHeaderButtonStyle}"
+                            AllowDrop="True" DragOver="IpodNav_DragOver" DragLeave="IpodNav_DragLeave" Drop="IpodNav_Drop"/>
+                    <StackPanel x:Name="IpodNav" Visibility="Collapsed">
+                        <Button x:Name="IpodArtistsButton" Content="●    Artists" Tag="Artists" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
+                        <Button x:Name="IpodAlbumsButton" Content="▣    Albums" Tag="Albums" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
+                        <Button x:Name="IpodGenresButton" Content="◇    Genres" Tag="Genres" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
+                        <Button x:Name="IpodSongsButton" Content="♫    Songs" Tag="Songs" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
+                        <TextBlock x:Name="IpodNavHint" Text="Drag music onto IPOD to sync" Foreground="#6E7584" FontSize="10" Margin="12,7,0,2"/>
+                    </StackPanel>
+                </StackPanel>
             </Grid>
         </Border>
         <Grid Grid.Column="1" Margin="38,32,38,30">
