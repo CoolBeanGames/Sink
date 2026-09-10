@@ -54,7 +54,13 @@ public abstract class SinkDialog : Window
         Grid.SetRow(header, 0);
         root.Children.Add(header);
 
-        var bodyHost = new ContentControl { Content = body, Margin = new Thickness(0, 18, 0, 0) };
+        var bodyHost = new ContentControl
+        {
+            Content = body,
+            Margin = new Thickness(0, 18, 0, 0),
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Top,
+        };
         Grid.SetRow(bodyHost, 1);
         root.Children.Add(bodyHost);
 

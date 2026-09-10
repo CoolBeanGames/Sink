@@ -120,7 +120,7 @@
                                       Background="Transparent" BorderThickness="0" MaxHeight="260" CanUserAddRows="False" CanUserDeleteRows="False"
                                       SelectionUnit="Cell" SelectionMode="Single" CellEditEnding="LinksGrid_CellEditEnding">
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="TITLE" Binding="{Binding Title}" Width="2*"/>
+                                    <DataGridTextColumn Header="TITLE / ALBUM" Binding="{Binding Title}" Width="2*" IsReadOnly="True"/>
                                     <DataGridTextColumn Header="ARTIST" Binding="{Binding Artist}" Width="*"/>
                                     <DataGridTextColumn Header="ALBUM" Binding="{Binding Album}" Width="*"/>
                                     <DataGridTextColumn Header="GENRE" Binding="{Binding Genre}" Width="120"/>

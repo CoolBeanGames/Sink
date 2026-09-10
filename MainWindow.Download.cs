@@ -103,8 +103,10 @@ public partial class MainWindow
             if (string.IsNullOrWhiteSpace(item.Artist)) item.Artist = info.Artist;
             if (string.IsNullOrWhiteSpace(item.Album)) item.Album = info.Album;
             if (string.IsNullOrWhiteSpace(item.Genre)) item.Genre = info.Genre;
+            item.IsPlaylist = info.IsPlaylist;
+            item.TrackCount = info.TrackCount;
             item.State = DownloadState.Ready;
-            item.StatusText = "Ready";
+            item.StatusText = info.IsPlaylist ? $"Album · {info.TrackCount} tracks" : "Ready";
         }
         catch (Exception ex)
         {
@@ -190,17 +192,17 @@ public partial class MainWindow
                         item.StatusText = $"Downloading {p * 100:0}%";
                         UpdateAggregateProgress(queue);
                     });
-                    var path = await DownloadService.DownloadAsync(item, options, progress, token);
+                    var paths = await DownloadService.DownloadAsync(item, options, progress, token);
 
                     item.State = DownloadState.Importing;
                     item.StatusText = "Importing…";
-                    var tracks = await Task.Run(() => MusicImporter.Import([path]));
+                    var tracks = await Task.Run(() => MusicImporter.Import(paths));
                     foreach (var track in tracks) _tracks.Add(track);
                     imported += tracks.Count;
 
                     item.State = DownloadState.Done;
                     item.Progress = 1;
-                    item.StatusText = "Done";
+                    item.StatusText = tracks.Count > 1 ? $"Done · {tracks.Count} tracks" : "Done";
                 }
                 catch (OperationCanceledException)
                 {

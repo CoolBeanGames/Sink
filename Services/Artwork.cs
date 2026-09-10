@@ -29,22 +29,31 @@ public static class Artwork
             // and resized to Size x Size so the UI and the iPod get uniform tiles.
             var name = Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(key)))[..16] + ".jpg";
             var path = Path.Combine(Directory, name);
-            if (!File.Exists(path))
-            {
-                using var image = Image.Load(data);
-                image.Mutate(ctx => ctx.Resize(new ResizeOptions
-                {
-                    Size = new SixLabors.ImageSharp.Size(Size, Size),
-                    Mode = ResizeMode.Crop,
-                    Position = AnchorPositionMode.Center
-                }));
-                image.SaveAsJpeg(path);
-            }
+            if (!File.Exists(path)) SquareCropTo(data, path);
             return path;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException or ImageFormatException or InvalidImageContentException)
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Scales the image so its shorter side is <see cref="Size"/>, then crops the
+    /// centred <see cref="Size"/> x <see cref="Size"/> square and writes it as JPEG.
+    /// Explicit two-step so the output is always exactly square whatever the source.
+    /// </summary>
+    private static void SquareCropTo(byte[] data, string path)
+    {
+        using var image = Image.Load(data);
+        var scale = (double)Size / Math.Min(image.Width, image.Height);
+        var scaledW = Math.Max(Size, (int)Math.Ceiling(image.Width * scale));
+        var scaledH = Math.Max(Size, (int)Math.Ceiling(image.Height * scale));
+        image.Mutate(ctx =>
+        {
+            ctx.Resize(scaledW, scaledH);
+            ctx.Crop(new Rectangle((scaledW - Size) / 2, (scaledH - Size) / 2, Size, Size));
+        });
+        image.SaveAsJpeg(path);
     }
 }

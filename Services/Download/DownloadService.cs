@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 
 namespace Sink.Services.Download;
 
-public sealed record ScannedInfo(string Title, string Artist, string Album, string Genre);
+public sealed record ScannedInfo(string Title, string Artist, string Album, string Genre, bool IsPlaylist, int TrackCount);
 
 /// <summary>
 /// Drives yt-dlp: a metadata-only scan of a link, and the actual audio
@@ -17,58 +17,79 @@ public static partial class DownloadService
 {
     public static string DownloadsDirectory { get; } = Path.Combine(LibraryStore.Directory, "downloads");
 
-    /// <summary>Fetches title/artist/album/genre for a link without downloading media.</summary>
+    /// <summary>
+    /// Fetches title/artist/album/genre for a link without downloading media.
+    /// A playlist / album link is reported as one <see cref="ScannedInfo"/> with
+    /// <see cref="ScannedInfo.IsPlaylist"/> set; a watch URL that carries a
+    /// &amp;list= is still treated as a single track (yt-dlp's default).
+    /// </summary>
     public static async Task<ScannedInfo> ScanAsync(string url, CancellationToken token = default)
     {
+        // No --no-playlist: let yt-dlp decide. --flat-playlist keeps it fast by
+        // not resolving every entry of an album.
         var (exit, stdout, stderr) = await RunAsync(
-            ["-J", "--no-playlist", "--no-warnings", url], null, token).ConfigureAwait(false);
+            ["-J", "--flat-playlist", "--no-warnings", url], null, token).ConfigureAwait(false);
         if (exit != 0)
             throw new InvalidOperationException(FirstError(stderr) ?? "yt-dlp could not read that link");
 
         using var doc = JsonDocument.Parse(stdout);
         var root = doc.RootElement;
-        // Playlist / album URL: yt-dlp returns an "entries" array — describe the set.
+
         if (root.TryGetProperty("entries", out var entries) && entries.ValueKind == JsonValueKind.Array && entries.GetArrayLength() > 0)
-            root = entries[0];
+        {
+            var count = entries.GetArrayLength();
+            var album = Str(root, "title") ?? Str(root, "playlist_title") ?? "Unknown Album";
+            var artist = CleanUploader(Str(root, "uploader") ?? Str(root, "channel") ?? Str(entries[0], "uploader") ?? Str(entries[0], "channel")) ?? "Unknown Artist";
+            return new ScannedInfo(album.Trim(), artist.Trim(), album.Trim(), "Unknown", IsPlaylist: true, TrackCount: count);
+        }
 
         var title = Str(root, "track") ?? Str(root, "title") ?? "Unknown title";
-        var artist = Str(root, "artist") ?? Str(root, "creator") ?? CleanUploader(Str(root, "uploader") ?? Str(root, "channel")) ?? "Unknown Artist";
-        var album = Str(root, "album") ?? Str(root, "playlist_title") ?? Str(root, "playlist") ?? title;
+        var single = Str(root, "artist") ?? Str(root, "creator") ?? CleanUploader(Str(root, "uploader") ?? Str(root, "channel")) ?? "Unknown Artist";
+        var singleAlbum = Str(root, "album") ?? Str(root, "playlist_title") ?? Str(root, "playlist") ?? title;
         var genre = Str(root, "genre") ?? "Unknown";
-        return new ScannedInfo(title.Trim(), artist.Trim(), album.Trim(), genre.Trim());
+        return new ScannedInfo(title.Trim(), single.Trim(), singleAlbum.Trim(), genre.Trim(), IsPlaylist: false, TrackCount: 1);
     }
 
     /// <summary>
-    /// Downloads one link to an audio file, honouring <paramref name="options"/>,
-    /// and reports 0..1 progress. Returns the path to the finished file.
+    /// Downloads a link to one or more audio files, honouring <paramref name="options"/>,
+    /// and reports 0..1 progress across the whole link. Returns every finished file
+    /// (one for a single track, many for an album / playlist).
     /// </summary>
-    public static async Task<string> DownloadAsync(
+    public static async Task<IReadOnlyList<string>> DownloadAsync(
         DownloadItem item, DownloadOptions options, IProgress<double> progress, CancellationToken token = default)
     {
         System.IO.Directory.CreateDirectory(DownloadsDirectory);
         var workDir = Path.Combine(DownloadsDirectory, "_" + Guid.NewGuid().ToString("N")[..8]);
         System.IO.Directory.CreateDirectory(workDir);
 
+        var total = Math.Max(1, item.IsPlaylist ? item.TrackCount : 1);
         var args = new List<string>
         {
             "-x",
             "--audio-format", options.FormatExtension,
             "--audio-quality", options.Quality > 0 ? options.Quality + "K" : "0",
-            "--no-playlist",
+            item.IsPlaylist ? "--yes-playlist" : "--no-playlist",
             "--no-warnings",
             "--newline",
+            "--no-overwrites",
+            "--retries", "5",
+            "--fragment-retries", "5",
             "--ffmpeg-location", ToolManager.Directory,
-            "-o", Path.Combine(workDir, "%(title)s.%(ext)s"),
+            "-o", Path.Combine(workDir, item.IsPlaylist ? "%(playlist_index)03d - %(title)s.%(ext)s" : "%(title)s.%(ext)s"),
         };
         if (options.WriteMetadata) args.Add("--embed-metadata");
         if (options.EmbedAlbumArt) { args.Add("--embed-thumbnail"); args.Add("--convert-thumbnails"); args.Add("jpg"); }
         args.Add(item.Url);
 
+        var current = 0;
         var (exit, _, stderr) = await RunAsync(args, line =>
         {
-            var m = ProgressLine().Match(line);
-            if (m.Success && double.TryParse(m.Groups[1].Value, out var pct))
-                progress.Report(Math.Clamp(pct / 100.0, 0, 1));
+            var itemMatch = PlaylistItemLine().Match(line);
+            if (itemMatch.Success && int.TryParse(itemMatch.Groups[1].Value, out var n)) current = n - 1;
+
+            var pctMatch = ProgressLine().Match(line);
+            if (pctMatch.Success && double.TryParse(pctMatch.Groups[1].Value, out var pct))
+                progress.Report(Math.Clamp((current + pct / 100.0) / total, 0, 1));
         }, token).ConfigureAwait(false);
 
         if (exit != 0)
@@ -76,31 +97,46 @@ public static partial class DownloadService
 
         var produced = System.IO.Directory.EnumerateFiles(workDir)
             .Where(f => AudioExtensions.Contains(Path.GetExtension(f)))
-            .OrderByDescending(f => new FileInfo(f).Length)
-            .FirstOrDefault()
-            ?? throw new InvalidOperationException("yt-dlp produced no audio file");
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (produced.Count == 0)
+            throw new InvalidOperationException("yt-dlp produced no audio file");
 
-        // Move to the flat downloads folder with a unique-enough name.
-        var finalPath = UniquePath(Path.Combine(DownloadsDirectory, Sanitize($"{item.Artist} - {item.Title}") + Path.GetExtension(produced)));
-        File.Move(produced, finalPath, overwrite: false);
+        var finished = new List<string>();
+        foreach (var file in produced)
+        {
+            var stem = item.IsPlaylist
+                ? Path.GetFileNameWithoutExtension(file)
+                : $"{item.Artist} - {item.Title}";
+            var finalPath = UniquePath(Path.Combine(DownloadsDirectory, Sanitize(stem) + Path.GetExtension(file)));
+            File.Move(file, finalPath, overwrite: false);
+            ApplyTags(finalPath, item);
+            finished.Add(finalPath);
+        }
         try { System.IO.Directory.Delete(workDir, recursive: true); } catch (IOException) { }
 
-        ApplyTags(finalPath, item);
         progress.Report(1);
-        return finalPath;
+        return finished;
     }
 
-    /// <summary>Writes the user's (possibly edited) metadata over whatever yt-dlp embedded.</summary>
+    /// <summary>
+    /// Writes the user's (possibly edited) album-level metadata over whatever
+    /// yt-dlp embedded. Title is deliberately left alone — one row can stand for
+    /// a whole album, so each track keeps its own downloaded title.
+    /// </summary>
     private static void ApplyTags(string path, DownloadItem item)
     {
         try
         {
             using var file = TagLib.File.Create(path);
-            file.Tag.Title = item.Title;
-            file.Tag.Performers = [item.Artist];
-            file.Tag.AlbumArtists = [item.Artist];
-            file.Tag.Album = item.Album;
-            file.Tag.Genres = string.IsNullOrWhiteSpace(item.Genre) || item.Genre == "Unknown" ? [] : [item.Genre];
+            if (!string.IsNullOrWhiteSpace(item.Artist) && item.Artist != "Unknown Artist")
+            {
+                file.Tag.Performers = [item.Artist];
+                file.Tag.AlbumArtists = [item.Artist];
+            }
+            if (!string.IsNullOrWhiteSpace(item.Album)) file.Tag.Album = item.Album;
+            if (!string.IsNullOrWhiteSpace(item.Genre) && item.Genre != "Unknown")
+                file.Tag.Genres = [item.Genre];
             file.Save();
         }
         catch (Exception e) when (e is not OutOfMemoryException) { }
@@ -188,4 +224,7 @@ public static partial class DownloadService
 
     [GeneratedRegex(@"\[download\]\s+([0-9.]+)%")]
     private static partial Regex ProgressLine();
+
+    [GeneratedRegex(@"Downloading item (\d+) of (\d+)")]
+    private static partial Regex PlaylistItemLine();
 }
