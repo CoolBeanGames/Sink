@@ -19,6 +19,9 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<Track> _tracks = [];
     private readonly ObservableCollection<Playlist> _playlists = [];
     private readonly HashSet<Guid> _syncedTrackIds = [];
+    private readonly List<Track> _ipodTracks = [];
+    private Sink.Services.Ipod.IpodLibrary? _ipodLibrary;
+    private string? _ipodLibraryRoot;
     private LibraryCategory _category = LibraryCategory.Albums;
     private LibrarySource _source = LibrarySource.Music;
     private string? _drilldown;
@@ -101,14 +104,84 @@ public partial class MainWindow : Window
                 _ipodDevice = device;
                 SetIpodConnected(true);
             }
+            if (device.LibraryRoot != _ipodLibraryRoot) LoadIpodLibrary(device.LibraryRoot);
             if (isNew) PlaybackStatus.Text = $"Connected {device.Name}";
             else if (wasManual) PlaybackStatus.Text = $"{device.Name} is connected";
             return;
         }
 
         if (_ipodConnected && _ipodDevice is not null) SetIpodConnected(false);
+        if (_ipodLibraryRoot is not null) LoadIpodLibrary(null);
         if (wasManual) PlaybackStatus.Text = "No iPod found — check the cable, or click the record to simulate one";
     }
+
+    private async void LoadIpodLibrary(string? root)
+    {
+        _ipodLibraryRoot = root;
+        _ipodLibrary = null;
+        _ipodTracks.Clear();
+        if (root is null)
+        {
+            if (_source == LibrarySource.Ipod) RenderLibrary();
+            return;
+        }
+        try
+        {
+            var library = await Task.Run(() => Sink.Services.Ipod.ItunesDbReader.Read(root));
+            if (_ipodLibraryRoot != root) return; // device changed while loading
+            _ipodLibrary = library;
+            foreach (var t in library.Tracks) _ipodTracks.Add(AdaptIpodTrack(t, root));
+            var readableName = library.DeviceName ?? _ipodDevice?.Name ?? "iPod";
+            PlaybackStatus.Text = $"Read {library.Tracks.Count} track{(library.Tracks.Count == 1 ? "" : "s")} from {readableName}";
+            ApplyIpodLibraryChrome(library, readableName);
+        }
+        catch (Exception ex)
+        {
+            PlaybackStatus.Text = $"Couldn't read the iPod database: {ex.Message}";
+        }
+        if (_source == LibrarySource.Ipod) RenderLibrary();
+    }
+
+    private void ApplyIpodLibraryChrome(Sink.Services.Ipod.IpodLibrary library, string name)
+    {
+        if (!_ipodConnected) return;
+        var used = library.Tracks.Sum(t => t.SizeBytes);
+        var lines = new List<string> { name };
+        if (!string.IsNullOrWhiteSpace(library.ModelNumber)) lines.Add($"Model {library.ModelNumber}");
+        if (library.CapacityBytes > 0)
+            lines.Add($"{Bytes(library.CapacityBytes)} · {Bytes(library.CapacityBytes - used)} free");
+        else if (used > 0)
+            lines.Add($"{Bytes(used)} of music");
+        var pl = library.Playlists.Count(p => !p.IsMaster);
+        lines.Add($"{library.Tracks.Count} tracks · {pl} playlist{(pl == 1 ? "" : "s")}");
+        if (!string.IsNullOrWhiteSpace(library.SerialNumber)) lines.Add($"Serial {library.SerialNumber}");
+        IpodButton.ToolTip = string.Join("\n", lines);
+        IpodMenuHeader.Header = library.CapacityBytes > 0 ? $"{name} · {Bytes(library.CapacityBytes)}" : name;
+    }
+
+    // Decimal units — this is how iTunes and Apple state iPod capacity.
+    private static string Bytes(long value)
+    {
+        if (value <= 0) return "0 B";
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        double v = value;
+        var u = 0;
+        while (v >= 1000 && u < units.Length - 1) { v /= 1000; u++; }
+        return $"{v:0.#} {units[u]}";
+    }
+
+    private static Track AdaptIpodTrack(Sink.Services.Ipod.IpodDbTrack t, string root) => new()
+    {
+        Title = t.Title,
+        Artist = string.IsNullOrWhiteSpace(t.Artist) ? "Unknown Artist" : t.Artist,
+        Album = string.IsNullOrWhiteSpace(t.Album) ? "Unknown Album" : t.Album,
+        Genre = string.IsNullOrWhiteSpace(t.Genre) ? "Unknown" : t.Genre,
+        FileName = System.IO.Path.GetFileName(t.IpodPath.Replace(':', '/')),
+        FilePath = t.ResolvePath(root),
+        TrackNumber = t.TrackNumber,
+        Year = t.Year,
+        Duration = t.Duration,
+    };
 
     private void Category_Click(object sender, RoutedEventArgs e)
     {
@@ -164,9 +237,10 @@ public partial class MainWindow : Window
     private void RenderLibrary()
     {
         var query = SearchBox?.Text?.Trim() ?? "";
-        var source = _source == LibrarySource.Ipod
-            ? _tracks.Where(track => _syncedTrackIds.Contains(track.Id)).ToList()
-            : _tracks.ToList();
+        var ipodOnDevice = _source == LibrarySource.Ipod && _ipodLibrary is not null;
+        var source = _source != LibrarySource.Ipod ? _tracks.ToList()
+            : ipodOnDevice ? _ipodTracks.ToList()
+            : _tracks.Where(track => _syncedTrackIds.Contains(track.Id)).ToList();
         IEnumerable<Track> visible = source;
         if (_activePlaylist is not null) visible = visible.Where(track => _activePlaylist.TrackIds.Contains(track.Id));
         if (_drilldown is not null) visible = _category switch
@@ -188,9 +262,7 @@ public partial class MainWindow : Window
             var rows = visible.OrderBy(track => track.Album).ThenBy(track => track.TrackNumber).ToList();
             TracksGrid.ItemsSource = rows;
             ViewTitle.Text = _drilldown ?? _activePlaylist?.Name ?? (_source == LibrarySource.Ipod ? "iPod · Songs" : "Songs");
-            ViewSubtitle.Text = _source == LibrarySource.Ipod && _syncedTrackIds.Count == 0
-                ? "Nothing synced to iPod yet — drag music onto IPOD"
-                : $"{rows.Count} tracks";
+            ViewSubtitle.Text = IpodSubtitle(rows.Count) ?? $"{rows.Count} tracks";
             return;
         }
 
@@ -203,9 +275,21 @@ public partial class MainWindow : Window
         var cards = groups.Where(card => query.Length == 0 || card.Name.Contains(query, StringComparison.OrdinalIgnoreCase)).OrderBy(card => card.Name).ToList();
         GroupsView.ItemsSource = cards;
         ViewTitle.Text = _source == LibrarySource.Ipod ? $"iPod · {_category}" : _category.ToString();
-        ViewSubtitle.Text = _source == LibrarySource.Ipod && _syncedTrackIds.Count == 0
-            ? "Nothing synced to iPod yet"
-            : $"{cards.Count} {_category.ToString().ToLowerInvariant()}";
+        ViewSubtitle.Text = IpodSubtitle(cards.Count) ?? $"{cards.Count} {_category.ToString().ToLowerInvariant()}";
+    }
+
+    private string? IpodSubtitle(int shown)
+    {
+        if (_source != LibrarySource.Ipod) return null;
+        if (_ipodLibrary is not null)
+        {
+            var who = _ipodLibrary.DeviceName ?? _ipodDevice?.Name ?? "iPod";
+            var playlists = _ipodLibrary.Playlists.Count(p => !p.IsMaster);
+            return $"{_ipodLibrary.Tracks.Count} tracks · {playlists} playlist{(playlists == 1 ? "" : "s")} on {who}";
+        }
+        if (_ipodDevice?.RootPath is null && _ipodDevice is not null)
+            return "iPod is Mac-formatted — restore it on Windows to read its library";
+        return _syncedTrackIds.Count == 0 ? "Nothing synced to iPod yet — drag music onto IPOD" : null;
     }
 
     private static GroupCard Card(string name, string detail, string colorSeed)

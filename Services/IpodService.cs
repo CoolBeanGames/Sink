@@ -9,8 +9,12 @@ public sealed record IpodDevice(
     long CapacityBytes,
     long FreeBytes,
     string? Model = null,
-    string? Serial = null)
+    string? Serial = null,
+    string? LibraryRoot = null)
 {
+    /// <summary>True when the iPod's filesystem is reachable and holds an iTunesDB.</summary>
+    public bool CanReadDatabase => LibraryRoot is not null;
+
     private static string Human(long bytes)
     {
         if (bytes <= 0) return "unknown size";
@@ -47,10 +51,12 @@ public sealed record IpodDevice(
                 lines.Add(Model!);
             if (CapacityBytes > 0)
                 lines.Add(FreeBytes > 0 ? $"{CapacityText} · {FreeText} free" : $"{CapacityText} capacity");
-            if (RootPath is not null)
+            if (CanReadDatabase)
+                lines.Add("Library readable");
+            else if (RootPath is not null)
                 lines.Add($"Mounted at {RootPath}");
             else if (CapacityBytes == 0)
-                lines.Add("Capacity unavailable — Windows can't read a Mac-formatted iPod");
+                lines.Add("Mac-formatted — restore on Windows for full access");
             if (!string.IsNullOrWhiteSpace(Serial)) lines.Add($"Serial {Serial}");
             return string.Join("\n", lines);
         }
@@ -77,7 +83,7 @@ public static class IpodService
 
     public static IpodDevice? Detect()
     {
-        var mounted = TryMountedVolume();
+        var mounted = TryMountedVolume() ?? TryOverrideRoot();
         var usb = FindUsbIpod();
 
         var disk = usb is not null || mounted is not null
@@ -85,12 +91,16 @@ public static class IpodService
             : null;
 
         if (mounted is not null)
+        {
+            var libraryRoot = Probe(() => Ipod.ItunesDbReader.DatabaseExists(mounted.RootPath!) ? mounted.RootPath : null);
             return mounted with
             {
                 CapacityBytes = mounted.CapacityBytes > 0 ? mounted.CapacityBytes : disk?.SizeBytes ?? 0,
                 Model = DescribeModel(disk) ?? usb?.Model ?? mounted.Model,
-                Serial = PickSerial(disk?.Serial, usb?.Serial, mounted.Serial)
+                Serial = PickSerial(disk?.Serial, usb?.Serial, mounted.Serial),
+                LibraryRoot = libraryRoot
             };
+        }
 
         if (usb is null && disk is null) return null;
 
@@ -100,6 +110,28 @@ public static class IpodService
             disk?.SizeBytes ?? 0, 0,
             DescribeModel(disk),
             PickSerial(disk?.Serial, usb?.Serial, null));
+    }
+
+    /// <summary>
+    /// Dev / power-user hook: a folder path in <c>%AppData%/Sink/ipod-root.txt</c>
+    /// is treated as a mounted iPod, so the database code can be exercised without
+    /// the physical device.
+    /// </summary>
+    private static IpodDevice? TryOverrideRoot()
+    {
+        try
+        {
+            var pointer = Path.Combine(LibraryStore.Directory, "ipod-root.txt");
+            if (!File.Exists(pointer)) return null;
+            var root = File.ReadAllText(pointer).Trim();
+            if (root.Length == 0 || !Directory.Exists(root)) return null;
+            var label = new DirectoryInfo(root).Name;
+            return new IpodDevice(string.IsNullOrWhiteSpace(label) ? "iPod" : label, root, 0, 0);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string? DescribeModel(IpodDiskProbe.DiskInfo? disk)
