@@ -550,11 +550,10 @@ public partial class MainWindow : Window
         var payload = tracks.ToList();
         _ipodWriting = true;
         StartIpodSync(indefinite: true);
+        var progress = SyncProgress();
         try
         {
-            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.Sync(root, payload,
-                new Progress<(int done, int total, string message)>(p =>
-                    PlaybackStatus.Text = $"{p.message} ({p.done + 1}/{p.total})")));
+            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.Sync(root, payload, progress));
             PlaybackStatus.Text = result.Summary;
         }
         catch (Exception ex)
@@ -570,6 +569,21 @@ public partial class MainWindow : Window
             StopIpodSync();
             LoadIpodLibrary(root);
         }
+    }
+
+    /// <summary>
+    /// A progress reporter that always updates the status line on the UI thread,
+    /// whatever thread <c>Report</c> is called from. <see cref="Progress{T}"/>
+    /// alone isn't enough — it captures whatever context it's constructed on.
+    /// </summary>
+    private IProgress<(int done, int total, string message)> SyncProgress()
+    {
+        void Update((int done, int total, string message) p)
+        {
+            if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(() => Update(p)); return; }
+            PlaybackStatus.Text = $"{p.message} ({p.done + 1}/{p.total})";
+        }
+        return new Progress<(int done, int total, string message)>(Update);
     }
 
     private async void UnsyncTracks(IReadOnlyList<Track> tracks)
