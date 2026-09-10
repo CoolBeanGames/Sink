@@ -322,31 +322,45 @@ public partial class MainWindow
     }
 
     /// <summary>Called from IpodButton_Drop when the payload is a podcast episode.</summary>
-    private void SyncEpisodeToIpod(Guid episodeId)
+    private async void SyncEpisodeToIpod(Guid episodeId)
     {
-        var episode = _podcasts.SelectMany(p => p.Episodes).FirstOrDefault(x => x.Id == episodeId);
-        if (episode is null) return;
-        if (!episode.IsDownloaded)
+        try
         {
-            var show = _podcasts.First(p => p.Episodes.Contains(episode));
-            PodcastStatus.Text = "Downloading before syncing…";
-            _ = DownloadEpisodeAsync(show, episode).ContinueWith(_ =>
-                Dispatcher.Invoke(() => { if (episode.IsDownloaded) PushEpisodeTrack(episode); }));
-            return;
+            var show = _podcasts.FirstOrDefault(p => p.Episodes.Any(x => x.Id == episodeId));
+            var episode = show?.Episodes.FirstOrDefault(x => x.Id == episodeId);
+            if (show is null || episode is null) return;
+
+            if (!episode.IsDownloaded)
+            {
+                PodcastStatus.Text = "Downloading before syncing…";
+                await DownloadEpisodeAsync(show, episode);
+            }
+            if (episode.IsDownloaded) PushEpisodeTrack(show, episode);
+            else PodcastStatus.Text = "Couldn't download that episode to sync";
         }
-        PushEpisodeTrack(episode);
+        catch (Exception ex)
+        {
+            Log.Error("SyncEpisodeToIpod threw", ex);
+            PodcastStatus.Text = $"Couldn't sync that episode: {ex.Message}";
+        }
     }
 
-    private void PushEpisodeTrack(PodcastEpisode episode)
+    private void PushEpisodeTrack(Podcast show, PodcastEpisode episode)
     {
-        var show = _podcasts.First(p => p.Episodes.Contains(episode));
+        if (!_ipodConnected) { PodcastStatus.Text = "Connect an iPod before syncing"; return; }
+        if (_ipodWriting) { PodcastStatus.Text = "iPod is busy…"; return; }
+        if (string.IsNullOrEmpty(episode.LocalPath) || !System.IO.File.Exists(episode.LocalPath))
+        {
+            PodcastStatus.Text = "Episode file is missing";
+            return;
+        }
         var track = new Track
         {
             Title = episode.Title,
             Artist = show.Title,
             Album = show.Title,
             Genre = "Podcast",
-            FileName = Path.GetFileName(episode.LocalPath!),
+            FileName = Path.GetFileName(episode.LocalPath),
             FilePath = episode.LocalPath,
             Duration = episode.Duration,
         };
