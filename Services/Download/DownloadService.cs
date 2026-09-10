@@ -42,14 +42,14 @@ public static partial class DownloadService
         if (root.TryGetProperty("entries", out var entries) && entries.ValueKind == JsonValueKind.Array && entries.GetArrayLength() > 0)
         {
             var count = entries.GetArrayLength();
-            var album = Str(root, "title") ?? Str(root, "playlist_title") ?? "Unknown Album";
+            var album = StripCollectionPrefix(Str(root, "title") ?? Str(root, "playlist_title") ?? "Unknown Album");
             var artist = CleanUploader(Str(root, "uploader") ?? Str(root, "channel") ?? Str(entries[0], "uploader") ?? Str(entries[0], "channel")) ?? "Unknown Artist";
             return new ScannedInfo(album.Trim(), artist.Trim(), album.Trim(), "Unknown", IsPlaylist: true, TrackCount: count);
         }
 
         var title = Str(root, "track") ?? Str(root, "title") ?? "Unknown title";
         var single = Str(root, "artist") ?? Str(root, "creator") ?? CleanUploader(Str(root, "uploader") ?? Str(root, "channel")) ?? "Unknown Artist";
-        var singleAlbum = Str(root, "album") ?? Str(root, "playlist_title") ?? Str(root, "playlist") ?? title;
+        var singleAlbum = StripCollectionPrefix(Str(root, "album") ?? Str(root, "playlist_title") ?? Str(root, "playlist") ?? title);
         var genre = Str(root, "genre") ?? "Unknown";
         return new ScannedInfo(title.Trim(), single.Trim(), singleAlbum.Trim(), genre.Trim(), IsPlaylist: false, TrackCount: 1);
     }
@@ -163,6 +163,14 @@ public static partial class DownloadService
     private static string? Str(JsonElement e, string name) =>
         e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String && v.GetString() is { Length: > 0 } s ? s : null;
 
+    /// <summary>
+    /// YouTube Music names an album's auto-playlist "Album - <name>" (likewise
+    /// "Single - ", "EP - ", "Playlist - "). Drop that leading label so the grid
+    /// shows just the album name.
+    /// </summary>
+    private static string StripCollectionPrefix(string value) =>
+        CollectionPrefix().Replace(value, "").Trim() is { Length: > 0 } s ? s : value.Trim();
+
     private static string? CleanUploader(string? uploader) =>
         string.IsNullOrWhiteSpace(uploader) ? null : uploader.Replace(" - Topic", "", StringComparison.OrdinalIgnoreCase).Trim();
 
@@ -240,4 +248,7 @@ public static partial class DownloadService
 
     [GeneratedRegex(@"Downloading item (\d+) of (\d+)")]
     private static partial Regex PlaylistItemLine();
+
+    [GeneratedRegex(@"^\s*(album|single|ep|playlist)\s*[-–—]\s*", RegexOptions.IgnoreCase)]
+    private static partial Regex CollectionPrefix();
 }

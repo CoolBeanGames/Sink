@@ -176,8 +176,16 @@
                                     <DataGridTextColumn Header="ARTIST" Binding="{Binding Artist}" Width="*"/>
                                     <DataGridTextColumn Header="ALBUM" Binding="{Binding Album}" Width="*"/>
                                     <DataGridTextColumn Header="GENRE" Binding="{Binding Genre}" Width="120"/>
-                                    <DataGridTextColumn Header="LINK" Binding="{Binding Url}" Width="1.4*"/>
-                                    <DataGridTextColumn Header="STATUS" Binding="{Binding StatusText}" Width="150" IsReadOnly="True"/>
+                                    <DataGridTextColumn Header="LINK" Binding="{Binding Url}" Width="1.4*">
+                                        <DataGridTextColumn.ElementStyle>
+                                            <Style TargetType="TextBlock"><Setter Property="Margin" Value="0,0,20,0"/><Setter Property="TextTrimming" Value="CharacterEllipsis"/></Style>
+                                        </DataGridTextColumn.ElementStyle>
+                                    </DataGridTextColumn>
+                                    <DataGridTextColumn Header="STATUS" Binding="{Binding StatusText}" Width="160" IsReadOnly="True">
+                                        <DataGridTextColumn.ElementStyle>
+                                            <Style TargetType="TextBlock"><Setter Property="Margin" Value="12,0,0,0"/></Style>
+                                        </DataGridTextColumn.ElementStyle>
+                                    </DataGridTextColumn>
                                     <DataGridTemplateColumn Width="44" IsReadOnly="True">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
