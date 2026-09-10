@@ -1,4 +1,5 @@
 using System.IO;
+using System.Management;
 
 namespace Sink.Services;
 
@@ -30,7 +31,10 @@ public sealed record IpodDevice(
             var lines = new List<string> { Name };
             if (!string.IsNullOrWhiteSpace(Model)) lines.Add($"Model {Model}");
             if (CapacityBytes > 0) lines.Add($"{CapacityText} · {FreeText} free");
-            lines.Add(CanReadDatabase ? "Library readable" : "iTunes database not found");
+            if (CanReadDatabase) lines.Add("Library readable");
+            else if (LibraryRoot is null && CapacityBytes == 0)
+                lines.Add("Connected, but Windows can't read this iPod — restore it on Windows to sync");
+            else lines.Add("iTunes database not found");
             if (!string.IsNullOrWhiteSpace(Serial)) lines.Add($"Serial {Serial}");
             return string.Join("\n", lines);
         }
@@ -74,7 +78,71 @@ public static class IpodService
             catch (UnauthorizedAccessException) { }
         }
 
-        return null;
+        // No mounted iPod_Control volume. The iPod may still be physically
+        // connected but unreadable by Windows (Mac/HFS+ format, or MTP mode).
+        // Fall back to a USB-device probe so the UI can still show it.
+        return FindUsbIpod();
+    }
+
+    // Apple USB product IDs (VID 05AC) for iPod-family devices.
+    private static readonly Dictionary<string, string> IpodModels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["1201"] = "iPod", ["1203"] = "iPod (3rd gen)", ["1204"] = "iPod mini",
+        ["1205"] = "iPod mini (2nd gen)", ["1207"] = "iPod (4th gen)",
+        ["1209"] = "iPod (5th gen)", ["120a"] = "iPod nano",
+        ["1223"] = "iPod nano (2nd gen)", ["1224"] = "iPod shuffle (2nd gen)",
+        ["1240"] = "iPod nano (3rd gen)", ["1250"] = "iPod nano (4th gen)",
+        ["1260"] = "iPod nano (5th gen)", ["1261"] = "iPod classic",
+        ["1262"] = "iPod nano (6th gen)", ["1263"] = "iPod nano (7th gen)",
+        ["1265"] = "iPod shuffle (4th gen)", ["1266"] = "iPod nano (5th gen)",
+        ["1300"] = "iPod shuffle (3rd gen)", ["1301"] = "iPod touch",
+    };
+
+    /// <summary>
+    /// WMI probe at the USB level: finds an Apple iPod even when its volume is
+    /// not mounted. Bounded so a slow WMI service can't hang the poll.
+    /// </summary>
+    private static IpodDevice? FindUsbIpod()
+    {
+        try
+        {
+            var task = Task.Run(() =>
+            {
+                using var searcher = new ManagementObjectSearcher(
+                    "SELECT Name, DeviceID FROM Win32_PnPEntity WHERE Name LIKE '%iPod%' " +
+                    "OR DeviceID LIKE '%VEN_APPLE&PROD_IPOD%' OR DeviceID LIKE '%VID_05AC&PID_12%'");
+                foreach (var obj in searcher.Get().OfType<ManagementObject>())
+                {
+                    var id = (obj["DeviceID"] as string) ?? "";
+                    var name = (obj["Name"] as string) ?? "";
+                    var model = ModelFromPid(id)
+                        ?? (name.Contains("iPod", StringComparison.OrdinalIgnoreCase) ? name : "iPod");
+                    var serial = ParseSerial(id);
+                    return new IpodDevice(id.Length > 0 ? id : "usb-ipod", model, 0, 0, model, serial);
+                }
+                return null;
+            });
+            return task.Wait(TimeSpan.FromSeconds(6)) ? task.Result : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? ModelFromPid(string deviceId)
+    {
+        var marker = deviceId.IndexOf("PID_", StringComparison.OrdinalIgnoreCase);
+        if (marker < 0 || marker + 8 > deviceId.Length) return null;
+        return IpodModels.GetValueOrDefault(deviceId.Substring(marker + 4, 4));
+    }
+
+    private static string? ParseSerial(string deviceId)
+    {
+        var tail = deviceId.Split('\\').LastOrDefault();
+        if (string.IsNullOrWhiteSpace(tail)) return null;
+        var serial = tail.Split('&')[0].Trim();
+        return serial.Length < 6 ? null : serial;
     }
 
     private static IpodDevice Build(string root, string? labelOverride)
