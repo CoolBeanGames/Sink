@@ -990,7 +990,10 @@ public partial class MainWindow : Window
         if (_source == LibrarySource.Ipod)
             menu.Items.Add(Item("Unsync from iPod", () => UnsyncTracks(tracks)));
         else
+        {
             menu.Items.Add(Item("Sync to iPod", () => SyncTracksToIpod(tracks)));
+            menu.Items.Add(ExcludeFromShuffleItem(tracks));
+        }
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Delete from library", () => DeleteTracks(tracks)));
     }
