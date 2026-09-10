@@ -283,44 +283,60 @@ public partial class MainWindow
         targets = targets.Where(t => !string.IsNullOrWhiteSpace(t.Name)).Distinct().ToList();
         if (targets.Count == 0) return;
 
-        // Mark every row up front so the whole set spins, then work through
-        // them with a little concurrency and per-title retries — one-at-a-time
-        // inline was unreliable for a whole album (task 112).
+        // Mark every row up front so the whole set spins, then translate one at
+        // a time with a short gap between calls. The keyless endpoint throttles
+        // bursts hard, which is what left half an album untranslated (task 120).
         foreach (var target in targets) target.Translating = true;
         SetDownloadStatus(targets.Count > 1 ? $"Translating {targets.Count} titles…" : "Translating…");
 
         var changed = 0;
         var failed = 0;
-        using var throttle = new SemaphoreSlim(2);
-        await Task.WhenAll(targets.Select(async target =>
+        var pending = new List<DownloadNode>();
+        for (var i = 0; i < targets.Count; i++)
         {
-            await throttle.WaitAsync();
+            var target = targets[i];
             try
             {
                 var result = await Translation.ToEnglishAsync(target.Name);
-                if (!result.Ok) { Interlocked.Increment(ref failed); return; }
-                if (result.Changed)
-                {
-                    target.Name = result.Text;
-                    Interlocked.Increment(ref changed);
-                }
+                if (!result.Ok) { failed++; pending.Add(target); }
+                else if (result.Changed) { target.Name = result.Text; changed++; }
             }
             catch (Exception ex)
             {
-                Interlocked.Increment(ref failed);
+                failed++;
+                pending.Add(target);
                 Log.Warn($"Translate failed for \"{target.Name}\": {ex.Message}");
             }
             finally
             {
-                throttle.Release();
                 target.Translating = false;
             }
-        }));
+            if (targets.Count > 1) SetDownloadStatus($"Translating… {i + 1}/{targets.Count}");
+            if (i < targets.Count - 1) await Task.Delay(150);
+        }
+
+        // One more pass over the ones the service refused — usually a transient rate-limit.
+        if (pending.Count > 0)
+        {
+            SetDownloadStatus($"Retrying {pending.Count} title{(pending.Count == 1 ? "" : "s")}…");
+            foreach (var target in pending)
+            {
+                await Task.Delay(500);
+                target.Translating = true;
+                try
+                {
+                    var result = await Translation.ToEnglishAsync(target.Name);
+                    if (result.Ok) { failed--; if (result.Changed) { target.Name = result.Text; changed++; } }
+                }
+                catch (Exception ex) { Log.Warn($"Translate retry failed for \"{target.Name}\": {ex.Message}"); }
+                finally { target.Translating = false; }
+            }
+        }
 
         var message = changed == 0
-            ? "Titles are already English"
+            ? (failed == 0 ? "Titles are already English" : "Couldn't reach the translation service")
             : $"Translated {changed} title{(changed == 1 ? "" : "s")} to English";
-        if (failed > 0) message += $" · {failed} couldn't be reached — try again";
+        if (failed > 0 && changed > 0) message += $" · {failed} still failed — try again";
         SetDownloadStatus(message);
     }
 
@@ -506,6 +522,21 @@ public partial class MainWindow
     }
 
     // ---- Right-click menu ----------------------------------------------
+
+    // A TreeView doesn't select on right-click, so the context menu was acting
+    // on whatever row was previously selected — you'd hit "Translate" on one
+    // track and watch a different row spin. Select the row under the cursor
+    // first (task 120).
+    private void LinksTree_PreviewRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        for (var node = e.OriginalSource as DependencyObject; node is not null; node = VisualTreeHelper.GetParent(node))
+            if (node is TreeViewItem item)
+            {
+                item.IsSelected = true;
+                item.Focus();
+                break;
+            }
+    }
 
     private void LinksTree_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {

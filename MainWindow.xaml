@@ -195,6 +195,7 @@
                                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                       TreeViewItem.Expanded="LinksTree_ItemExpanded"
                                       SelectedItemChanged="LinksTree_SelectedItemChanged"
+                                      PreviewMouseRightButtonDown="LinksTree_PreviewRightButtonDown"
                                       ContextMenuOpening="LinksTree_ContextMenuOpening">
                                 <TreeView.ContextMenu><ContextMenu/></TreeView.ContextMenu>
                                 <TreeView.Resources>
