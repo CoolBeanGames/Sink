@@ -15,7 +15,11 @@ public sealed record ScannedInfo(string Title, string Artist, string Album, stri
 /// </summary>
 public static partial class DownloadService
 {
-    public static string DownloadsDirectory { get; } = Path.Combine(LibraryStore.Directory, "downloads");
+    /// <summary>Finished tracks land in the user's library folder (Settings).</summary>
+    public static string DownloadsDirectory =>
+        string.IsNullOrWhiteSpace(AppSettings.Current.LibraryLocation)
+            ? Path.Combine(LibraryStore.Directory, "downloads")
+            : AppSettings.Current.LibraryLocation;
 
     /// <summary>
     /// Fetches title/artist/album/genre for a link without downloading media.

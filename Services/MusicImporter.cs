@@ -12,9 +12,42 @@ public static partial class MusicImporter
     };
 
     public static IReadOnlyList<Track> Import(IEnumerable<string> droppedPaths)
+        => Import(droppedPaths, AppSettings.Current.ImportMode, AppSettings.Current.LibraryLocation);
+
+    /// <summary>
+    /// Imports audio files, optionally relocating them into <paramref name="libraryDir"/>
+    /// first when <paramref name="mode"/> is Copy or Move.
+    /// </summary>
+    public static IReadOnlyList<Track> Import(IEnumerable<string> droppedPaths, ImportMode mode, string libraryDir)
     {
-        return ExpandPaths(droppedPaths).Distinct(StringComparer.OrdinalIgnoreCase).Select(CreateTrack).ToList();
+        var files = ExpandPaths(droppedPaths).Distinct(StringComparer.OrdinalIgnoreCase);
+        if (mode is ImportMode.Copy or ImportMode.Move)
+            files = files.Select(path => Relocate(path, mode, libraryDir)).ToList();
+        return files.Select(CreateTrack).ToList();
     }
+
+    private static string Relocate(string sourcePath, ImportMode mode, string libraryDir)
+    {
+        try
+        {
+            Directory.CreateDirectory(libraryDir);
+            var target = Path.Combine(libraryDir, Path.GetFileName(sourcePath));
+            for (var i = 2; File.Exists(target) && !PathsEqual(target, sourcePath); i++)
+                target = Path.Combine(libraryDir, $"{Path.GetFileNameWithoutExtension(sourcePath)} ({i}){Path.GetExtension(sourcePath)}");
+            if (PathsEqual(target, sourcePath)) return sourcePath;
+
+            if (mode == ImportMode.Move) File.Move(sourcePath, target);
+            else File.Copy(sourcePath, target, overwrite: false);
+            return target;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return sourcePath; // fall back to referencing in place
+        }
+    }
+
+    private static bool PathsEqual(string a, string b) =>
+        string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
 
     private static IEnumerable<string> ExpandPaths(IEnumerable<string> droppedPaths)
     {
@@ -93,6 +126,33 @@ public static partial class MusicImporter
             Duration = duration,
             ArtworkPath = artworkPath
         };
+    }
+
+    /// <summary>
+    /// Re-reads tags and cover art from a track's file into the existing Track.
+    /// Returns false when the file is gone. Used by "Refresh library".
+    /// </summary>
+    public static bool RefreshTags(Track track)
+    {
+        if (string.IsNullOrWhiteSpace(track.FilePath) || !File.Exists(track.FilePath)) return false;
+        try
+        {
+            using var tag = TagLib.File.Create(track.FilePath);
+            var t = tag.Tag;
+            if (!string.IsNullOrWhiteSpace(t.Title)) track.Title = t.Title.Trim();
+            if (!string.IsNullOrWhiteSpace(t.FirstPerformer)) track.Artist = t.FirstPerformer.Trim();
+            else if (!string.IsNullOrWhiteSpace(t.FirstAlbumArtist)) track.Artist = t.FirstAlbumArtist.Trim();
+            if (!string.IsNullOrWhiteSpace(t.Album)) track.Album = t.Album.Trim();
+            if (!string.IsNullOrWhiteSpace(t.FirstGenre)) track.Genre = t.FirstGenre.Trim();
+            if (t.Track is > 0 and < int.MaxValue) track.TrackNumber = (int)t.Track;
+            if (t.Year is > 0 and < 9999) track.Year = (int)t.Year;
+
+            var picture = t.Pictures?.FirstOrDefault(p => p.Data?.Data?.Length > 0);
+            if (picture is not null)
+                track.ArtworkPath = Artwork.Save($"{track.Album}|{track.Artist}", picture.Data.Data, picture.MimeType);
+        }
+        catch (Exception e) when (e is not OutOfMemoryException) { }
+        return true;
     }
 
     [GeneratedRegex(@"^(\d+)[\s._-]*")]

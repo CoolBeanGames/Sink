@@ -9,8 +9,8 @@ public sealed class Track
     public required string Artist { get; set; }
     public required string Album { get; set; }
     public required string Genre { get; set; }
-    public required string FileName { get; init; }
-    public string? FilePath { get; init; }
+    public required string FileName { get; set; }
+    public string? FilePath { get; set; }
     public int TrackNumber { get; set; }
     public int Year { get; set; }
     public TimeSpan Duration { get; init; }

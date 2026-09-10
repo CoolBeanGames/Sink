@@ -109,7 +109,12 @@ public partial class MainWindow : Window
                 SetIpodConnected(true);
             }
             if (device.LibraryRoot != _ipodLibraryRoot) LoadIpodLibrary(device.LibraryRoot);
-            if (isNew) PlaybackStatus.Text = $"Connected {device.Name}";
+            if (isNew)
+            {
+                PlaybackStatus.Text = $"Connected {device.Name}";
+                if (Services.AppSettings.Current.SyncOnConnect && !_ipodWriting)
+                    SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
+            }
             else if (wasManual) PlaybackStatus.Text = $"{device.Name} is connected";
             return;
         }
