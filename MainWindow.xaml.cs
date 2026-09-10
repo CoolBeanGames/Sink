@@ -367,6 +367,7 @@ public partial class MainWindow : Window
 
     private void PlayTrack(Track track)
     {
+        if (_playingEpisode is not null) StopPodcast(markPlayed: false);
         _mediaPlayer.Stop();
         _mediaPlayer.Close();
         _nowPlaying = track;
@@ -427,6 +428,7 @@ public partial class MainWindow : Window
 
     private void PlayPause_Click(object sender, RoutedEventArgs e)
     {
+        if (_playingEpisode is not null) { TogglePodcastPause(); return; }
         if (_nowPlaying is null) return;
         _isPlaying = !_isPlaying;
         if (_isPlaying) _mediaPlayer.Play(); else _mediaPlayer.Pause();
@@ -434,8 +436,18 @@ public partial class MainWindow : Window
         UpdateRecordSpin();
     }
 
-    private void Previous_Click(object sender, RoutedEventArgs e) => Skip(-1);
-    private void Next_Click(object sender, RoutedEventArgs e) => NextTrack();
+    private void Previous_Click(object sender, RoutedEventArgs e)
+    {
+        if (_playingEpisode is not null) { SkipEpisode(-1); return; }
+        Skip(-1);
+    }
+
+    private void Next_Click(object sender, RoutedEventArgs e)
+    {
+        if (_playingEpisode is not null) { SkipEpisode(1); return; }
+        NextTrack();
+    }
+
     private void NextTrack() => Skip(1);
 
     private void Skip(int direction)
@@ -447,7 +459,13 @@ public partial class MainWindow : Window
 
     private void ProgressSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (_updatingProgress || _nowPlaying is null) return;
+        if (_updatingProgress) return;
+        if (_playingEpisode is not null)
+        {
+            _podcastPlayer.Position = TimeSpan.FromSeconds(e.NewValue);
+            return;
+        }
+        if (_nowPlaying is null) return;
         _simulatedPosition = TimeSpan.FromSeconds(e.NewValue);
         if (!string.IsNullOrWhiteSpace(_nowPlaying.FilePath)) _mediaPlayer.Position = _simulatedPosition;
         UpdatePlayerProgress();
@@ -455,7 +473,8 @@ public partial class MainWindow : Window
 
     private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (_mediaPlayer is not null) _mediaPlayer.Volume = e.NewValue;
+        _mediaPlayer.Volume = e.NewValue;
+        _podcastPlayer.Volume = e.NewValue;
     }
 
     private void IpodButton_Click(object sender, RoutedEventArgs e)
@@ -495,7 +514,8 @@ public partial class MainWindow : Window
     private void UpdateRecordSpin()
     {
         if (_ipodSyncing) return;
-        var shouldSpin = _isPlaying && _nowPlaying is not null;
+        var shouldSpin = (_isPlaying && _nowPlaying is not null)
+                         || (_playingEpisode is not null && !_podcastPaused);
         if (shouldSpin == _recordSpinning) return;
         _recordSpinning = shouldSpin;
         if (shouldSpin)

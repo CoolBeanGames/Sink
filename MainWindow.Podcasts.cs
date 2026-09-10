@@ -26,8 +26,10 @@ public partial class MainWindow
     private bool _podcastViewActive;
 
     private readonly MediaPlayer _podcastPlayer = new();
-    private readonly DispatcherTimer _podcastTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly DispatcherTimer _podcastTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
     private PodcastEpisode? _playingEpisode;
+    private Podcast? _playingShow;
+    private bool _podcastPaused;
     private Point _episodeDragStart;
 
     private const string PodcastDragFormat = "Sink.PodcastEpisode";
@@ -35,12 +37,17 @@ public partial class MainWindow
     private void InitPodcasts()
     {
         _podcasts.AddRange(PodcastStore.Load());
+        _podcastPlayer.Volume = 0.7;
         _podcastPlayer.MediaOpened += (_, _) =>
         {
             if (_playingEpisode is { PositionSeconds: > 1 })
                 _podcastPlayer.Position = TimeSpan.FromSeconds(_playingEpisode.PositionSeconds);
-            if (_playingEpisode is not null && _podcastPlayer.NaturalDuration.HasTimeSpan && _playingEpisode.Duration <= TimeSpan.Zero)
-                _playingEpisode.Duration = _podcastPlayer.NaturalDuration.TimeSpan;
+            if (_playingEpisode is not null && _podcastPlayer.NaturalDuration.HasTimeSpan)
+            {
+                if (_playingEpisode.Duration <= TimeSpan.Zero)
+                    _playingEpisode.Duration = _podcastPlayer.NaturalDuration.TimeSpan;
+                ProgressSlider.Maximum = Math.Max(1, _podcastPlayer.NaturalDuration.TimeSpan.TotalSeconds);
+            }
         };
         _podcastPlayer.MediaEnded += (_, _) => StopPodcast(markPlayed: true);
         _podcastTimer.Tick += (_, _) => PodcastTimer_Tick();
@@ -310,30 +317,82 @@ public partial class MainWindow
     private void EpisodePlay_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not PodcastEpisode episode) return;
-        if (_playingEpisode == episode)
-        {
-            StopPodcast(markPlayed: false);
-            return;
-        }
+        if (_playingEpisode == episode) { TogglePodcastPause(); return; }
+        var show = _podcasts.FirstOrDefault(p => p.Episodes.Contains(episode)) ?? _currentShow;
+        if (show is null) return;
+        PlayEpisode(show, episode);
+    }
+
+    /// <summary>Starts an episode and hands the bottom transport bar over to it.</summary>
+    private void PlayEpisode(Podcast show, PodcastEpisode episode)
+    {
         var uri = episode.IsDownloaded ? new Uri(episode.LocalPath!) : SafeUri(episode.AudioUrl);
         if (uri is null) { PodcastStatus.Text = "That episode has no playable audio"; return; }
 
-        _mediaPlayer.Pause(); // pause any music
+        // Take over from music playback.
+        _mediaPlayer.Stop();
+        _mediaPlayer.Close();
+        _nowPlaying = null;
+        _isPlaying = false;
+        _playbackTimer.Stop();
+
+        _playingShow = show;
         _playingEpisode = episode;
+        _podcastPaused = false;
         _podcastPlayer.Open(uri);
         _podcastPlayer.Play();
         _podcastTimer.Start();
-        PodcastStatus.Text = $"▶  {episode.Title}";
+
+        PlayerTitle.Text = episode.Title;
+        PlayerArtist.Text = show.Title;
+        PlayerArtInitial.Text = string.IsNullOrEmpty(show.Title) ? "🎙" : show.Title[..1].ToUpperInvariant();
+        var art = LoadArtwork(show.ArtworkUrl);
+        PlayerArtImage.Source = art;
+        PlayerArtImage.Visibility = art is null ? Visibility.Collapsed : Visibility.Visible;
+        PlayPauseButton.Content = "Ⅱ";
+        ProgressSlider.Maximum = Math.Max(1, episode.Duration.TotalSeconds);
+        _updatingProgress = true;
+        ProgressSlider.Value = Math.Min(ProgressSlider.Maximum, episode.PositionSeconds);
+        _updatingProgress = false;
+        PlaybackStatus.Text = $"▶  {episode.Title}";
+        PodcastStatus.Text = $"▶  {episode.Title} — {show.Title}";
+        UpdateRecordSpin();
+        RenderPodcasts();
+    }
+
+    private void TogglePodcastPause()
+    {
+        if (_playingEpisode is null) return;
+        _podcastPaused = !_podcastPaused;
+        if (_podcastPaused) _podcastPlayer.Pause(); else _podcastPlayer.Play();
+        PlayPauseButton.Content = _podcastPaused ? "▶" : "Ⅱ";
+        UpdateRecordSpin();
+    }
+
+    private void SkipEpisode(int direction)
+    {
+        if (_playingShow is null || _playingEpisode is null) return;
+        var list = _playingShow.Episodes.OrderByDescending(x => x.Published).ToList();
+        var idx = list.IndexOf(_playingEpisode) + direction;
+        if (idx < 0 || idx >= list.Count) return;
+        PlayEpisode(_playingShow, list[idx]);
     }
 
     private void PodcastTimer_Tick()
     {
         if (_playingEpisode is null) return;
-        if (_podcastPlayer.Position > TimeSpan.Zero) _playingEpisode.PositionSeconds = _podcastPlayer.Position.TotalSeconds;
+        var pos = _podcastPlayer.Position;
+        if (pos > TimeSpan.Zero) _playingEpisode.PositionSeconds = pos.TotalSeconds;
         if (PodcastRules.ShouldMarkPlayed(_playingEpisode) && !_playingEpisode.IsPlayed)
-        {
             _playingEpisode.IsPlayed = true;
-        }
+
+        // Drive the bottom transport bar.
+        var total = TimeSpan.FromSeconds(ProgressSlider.Maximum);
+        _updatingProgress = true;
+        ProgressSlider.Value = Math.Min(ProgressSlider.Maximum, pos.TotalSeconds);
+        _updatingProgress = false;
+        ElapsedText.Text = FormatTime(pos);
+        RemainingText.Text = $"-{FormatTime(total - pos)}";
     }
 
     private void StopPodcast(bool markPlayed)
@@ -344,12 +403,27 @@ public partial class MainWindow
             if (markPlayed) _playingEpisode.IsPlayed = true;
             if (_playingEpisode.IsPlayed && _playingEpisode.IsDownloaded) PodcastRules.DropDownload(_playingEpisode);
             PodcastStore.Save(_podcasts);
-            var show = _podcasts.FirstOrDefault(p => p.Episodes.Contains(_playingEpisode));
+            var show = _playingShow ?? _podcasts.FirstOrDefault(p => p.Episodes.Contains(_playingEpisode));
             if (show is not null) _ = RunAutoDownloadsAsync(show);
         }
         _podcastPlayer.Stop();
         _podcastPlayer.Close();
         _playingEpisode = null;
+        _playingShow = null;
+        _podcastPaused = false;
+
+        // Reset the bottom transport bar.
+        PlayPauseButton.Content = "▶";
+        PlayerTitle.Text = "Choose something to play";
+        PlayerArtist.Text = "Your library is ready";
+        PlayerArtInitial.Text = "♫";
+        PlayerArtImage.Visibility = Visibility.Collapsed;
+        _updatingProgress = true;
+        ProgressSlider.Value = 0;
+        _updatingProgress = false;
+        ElapsedText.Text = "0:00";
+        RemainingText.Text = "-0:00";
+        UpdateRecordSpin();
         RenderPodcasts();
     }
 
