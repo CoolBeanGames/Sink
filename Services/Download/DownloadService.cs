@@ -60,7 +60,8 @@ public static partial class DownloadService
     /// (one for a single track, many for an album / playlist).
     /// </summary>
     public static async Task<IReadOnlyList<string>> DownloadAsync(
-        DownloadItem item, DownloadOptions options, IProgress<double> progress, CancellationToken token = default)
+        DownloadItem item, DownloadOptions options, IProgress<double> progress,
+        IProgress<string>? status = null, CancellationToken token = default)
     {
         System.IO.Directory.CreateDirectory(DownloadsDirectory);
         var workDir = Path.Combine(DownloadsDirectory, "_" + Guid.NewGuid().ToString("N")[..8]);
@@ -86,10 +87,18 @@ public static partial class DownloadService
         args.Add(item.Url);
 
         var current = 0;
+        var source = item.IsPlaylist ? item.Album : item.Title;
+        status?.Report(item.IsPlaylist ? $"Downloading track 1/{total} from {source}" : $"Downloading {source}");
         var (exit, _, stderr) = await RunAsync(args, line =>
         {
             var itemMatch = PlaylistItemLine().Match(line);
-            if (itemMatch.Success && int.TryParse(itemMatch.Groups[1].Value, out var n)) current = n - 1;
+            if (itemMatch.Success && int.TryParse(itemMatch.Groups[1].Value, out var n))
+            {
+                current = n - 1;
+                status?.Report(item.IsPlaylist
+                    ? $"Downloading track {n}/{total} from {source}"
+                    : $"Downloading {source}");
+            }
 
             var pctMatch = ProgressLine().Match(line);
             if (pctMatch.Success && double.TryParse(pctMatch.Groups[1].Value, out var pct))

@@ -117,8 +117,28 @@
                         <Grid>
                             <TextBlock x:Name="DownloadEmptyHint" Text="No links yet — click Add link to paste one." Foreground="#6E7584" FontSize="12" Margin="16,18" HorizontalAlignment="Center"/>
                             <DataGrid x:Name="LinksGrid" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="None"
-                                      Background="Transparent" BorderThickness="0" MaxHeight="260" CanUserAddRows="False" CanUserDeleteRows="False"
-                                      SelectionUnit="Cell" SelectionMode="Single" CellEditEnding="LinksGrid_CellEditEnding">
+                                      Background="Transparent" BorderThickness="0" MaxHeight="420" RowHeight="30" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      SelectionUnit="Cell" SelectionMode="Single" CellEditEnding="LinksGrid_CellEditEnding" VerticalScrollBarVisibility="Auto">
+                                <DataGrid.RowStyle>
+                                    <Style TargetType="DataGridRow">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="BorderBrush" Value="#20252F"/>
+                                        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                        <Setter Property="MinHeight" Value="0"/>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#1B1F28"/></Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </DataGrid.RowStyle>
+                                <DataGrid.CellStyle>
+                                    <Style TargetType="DataGridCell">
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="Padding" Value="10,3"/>
+                                        <Setter Property="Foreground" Value="#BFC4CE"/>
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                                    </Style>
+                                </DataGrid.CellStyle>
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="TITLE / ALBUM" Binding="{Binding Title}" Width="2*" IsReadOnly="True"/>
                                     <DataGridTextColumn Header="ARTIST" Binding="{Binding Artist}" Width="*"/>
@@ -129,7 +149,7 @@
                                     <DataGridTemplateColumn Width="44" IsReadOnly="True">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
-                                                <Button Content="✕" Click="DeleteLink_Click" Background="Transparent" Foreground="#8A93A3" BorderThickness="0" Cursor="Hand" ToolTip="Remove"/>
+                                                <Button Content="✕" Click="DeleteLink_Click" Background="Transparent" Foreground="#8A93A3" BorderThickness="0" Padding="0" FontSize="11" Cursor="Hand" ToolTip="Remove" VerticalAlignment="Center"/>
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>

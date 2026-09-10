@@ -182,7 +182,7 @@ public partial class MainWindow
                 item.State = DownloadState.Downloading;
                 item.Progress = 0;
                 item.StatusText = "Starting…";
-                SetDownloadStatus($"Downloading {item.Title} ({index + 1}/{queue.Count})");
+                var linkLabel = queue.Count > 1 ? $"  (link {index + 1}/{queue.Count})" : "";
 
                 try
                 {
@@ -192,7 +192,8 @@ public partial class MainWindow
                         item.StatusText = $"Downloading {p * 100:0}%";
                         UpdateAggregateProgress(queue);
                     });
-                    var paths = await DownloadService.DownloadAsync(item, options, progress, token);
+                    var status = new Progress<string>(s => SetDownloadStatus(s + linkLabel));
+                    var paths = await DownloadService.DownloadAsync(item, options, progress, status, token);
 
                     item.State = DownloadState.Importing;
                     item.StatusText = "Importing…";
