@@ -254,6 +254,59 @@ public partial class MainWindow
         if (_currentShow is not null) _ = RunAutoDownloadsAsync(_currentShow);
     }
 
+    // ---- Show-level bulk actions (task 76) ------------------------------
+
+    private void MarkAllPlayed_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentShow is null) return;
+        var changed = 0;
+        foreach (var episode in _currentShow.Episodes)
+        {
+            if (episode.IsPlayed) continue;
+            episode.IsPlayed = true;
+            episode.PositionSeconds = episode.Duration.TotalSeconds;
+            if (episode.IsDownloaded) PodcastRules.DropDownload(episode);
+            changed++;
+        }
+        if (_playingEpisode is not null && _currentShow.Episodes.Contains(_playingEpisode)) StopPodcast(markPlayed: true);
+        PodcastStore.Save(_podcasts);
+        RenderPodcasts();
+        UpdatePodcastSidebarDot();
+        _ = RunAutoDownloadsAsync(_currentShow);
+        PodcastStatus.Text = changed > 0 ? $"Marked {changed} episode{(changed == 1 ? "" : "s")} played" : "All episodes already played";
+    }
+
+    private async void DownloadAllEpisodes_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentShow is null) return;
+        var pending = _currentShow.Episodes.Where(ep => !ep.IsPlayed && !ep.IsDownloaded).ToList();
+        if (pending.Count == 0) { PodcastStatus.Text = "Nothing to download"; return; }
+        var done = 0;
+        foreach (var episode in pending)
+        {
+            PodcastStatus.Text = $"Downloading {done + 1}/{pending.Count} — {episode.Title}";
+            await DownloadEpisodeAsync(_currentShow, episode);
+            if (episode.IsDownloaded) done++;
+            RenderPodcasts();
+        }
+        PodcastStatus.Text = $"Downloaded {done} of {pending.Count} episode{(pending.Count == 1 ? "" : "s")}";
+    }
+
+    private void DeleteAllDownloads_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentShow is null) return;
+        var removed = 0;
+        foreach (var episode in _currentShow.Episodes.Where(ep => ep.IsDownloaded).ToList())
+        {
+            if (_playingEpisode == episode) StopPodcast(markPlayed: false);
+            PodcastRules.DropDownload(episode);
+            removed++;
+        }
+        PodcastStore.Save(_podcasts);
+        RenderPodcasts();
+        PodcastStatus.Text = removed > 0 ? $"Deleted {removed} download{(removed == 1 ? "" : "s")}" : "No downloads to delete";
+    }
+
     private void EpisodePlay_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not PodcastEpisode episode) return;
