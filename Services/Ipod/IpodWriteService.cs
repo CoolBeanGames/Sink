@@ -49,12 +49,16 @@ public static class IpodWriteService
         try { ipod = IpodReader.Open(root); ipod.AssertIsWritable(); }
         catch (Exception ex) { return new IpodSyncResult(0, 0, skipped, ex.Message); }
 
-        var backup = BackupDatabase(root);
-        IPodBackup.EnableBackups = false;
-        ipod.AcquireLock();
+        string? backup = null;
+        var locked = false;
         int added = 0, present = 0;
         try
         {
+            backup = BackupDatabase(root);
+            IPodBackup.EnableBackups = false;
+            ipod.AcquireLock();
+            locked = true;
+
             for (var i = 0; i < eligible.Count; i++)
             {
                 var src = eligible[i];
@@ -77,12 +81,12 @@ public static class IpodWriteService
         }
         catch (Exception ex)
         {
-            TryRestore(backup);
+            if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
             return new IpodSyncResult(added, present, skipped, ex.Message);
         }
         finally
         {
-            try { ipod.ReleaseLock(); } catch { }
+            if (locked) { try { ipod.ReleaseLock(); } catch { } }
         }
     }
 
@@ -98,12 +102,16 @@ public static class IpodWriteService
         try { ipod = IpodReader.Open(root); ipod.AssertIsWritable(); }
         catch (Exception ex) { return new IpodSyncResult(0, 0, 0, ex.Message); }
 
-        var backup = BackupDatabase(root);
-        IPodBackup.EnableBackups = false;
-        ipod.AcquireLock();
+        string? backup = null;
+        var locked = false;
         var removed = 0;
         try
         {
+            backup = BackupDatabase(root);
+            IPodBackup.EnableBackups = false;
+            ipod.AcquireLock();
+            locked = true;
+
             var toRemove = new List<CwTrack>();
             foreach (var track in ipod.Tracks)
                 if (targets.Contains(Path.GetFullPath(IpodReader.ResolvePath(root, track.FilePath))))
@@ -115,12 +123,12 @@ public static class IpodWriteService
         }
         catch (Exception ex)
         {
-            TryRestore(backup);
+            if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
             return new IpodSyncResult(0, 0, 0, ex.Message);
         }
         finally
         {
-            try { ipod.ReleaseLock(); } catch { }
+            if (locked) { try { ipod.ReleaseLock(); } catch { } }
         }
     }
 
@@ -137,12 +145,16 @@ public static class IpodWriteService
         try { ipod = IpodReader.Open(root); ipod.AssertIsWritable(); }
         catch (Exception) { return 0; }
 
-        var backup = BackupDatabase(root);
-        IPodBackup.EnableBackups = false;
-        ipod.AcquireLock();
+        string? backup = null;
+        var locked = false;
         var updated = 0;
         try
         {
+            backup = BackupDatabase(root);
+            IPodBackup.EnableBackups = false;
+            ipod.AcquireLock();
+            locked = true;
+
             foreach (var track in ipod.Tracks)
             {
                 var name = Path.GetFileName(IpodReader.ResolvePath(root, track.FilePath));
@@ -156,12 +168,12 @@ public static class IpodWriteService
         }
         catch (Exception)
         {
-            TryRestore(backup);
+            if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
             return 0;
         }
         finally
         {
-            try { ipod.ReleaseLock(); } catch { }
+            if (locked) { try { ipod.ReleaseLock(); } catch { } }
         }
     }
 
@@ -214,7 +226,7 @@ public static class IpodWriteService
             foreach (var old in new DirectoryInfo(dir).GetFiles("*.backup").OrderByDescending(f => f.CreationTimeUtc).Skip(10))
                 try { old.Delete(); } catch { }
         }
-        catch (IOException) { return ""; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return ""; }
         return backup + "|" + source;
     }
 

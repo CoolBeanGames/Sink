@@ -555,6 +555,12 @@ public partial class MainWindow : Window
                     PlaybackStatus.Text = $"{p.message} ({p.done + 1}/{p.total})")));
             PlaybackStatus.Text = result.Summary;
         }
+        catch (Exception ex)
+        {
+            // An async-void handler must never let an exception reach the
+            // dispatcher — that takes the whole app down.
+            PlaybackStatus.Text = $"iPod sync failed: {ex.Message}";
+        }
         finally
         {
             _ipodWriting = false;
@@ -586,6 +592,10 @@ public partial class MainWindow : Window
         {
             var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.Remove(root, paths));
             PlaybackStatus.Text = result.Summary;
+        }
+        catch (Exception ex)
+        {
+            PlaybackStatus.Text = $"iPod update failed: {ex.Message}";
         }
         finally
         {
