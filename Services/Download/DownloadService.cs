@@ -37,23 +37,54 @@ public static partial class DownloadService
         var info = await ScanRawAsync(url, token).ConfigureAwait(false);
         if (info.Albums is { Count: > 0 }) return info;
 
-        // A YouTube Music artist handle (music.youtube.com/@name) resolves to the
-        // artist's *Videos* tab by default, so it looks like a 39-track "album".
-        // Re-scan through the canonical channel URL, which lists the discography.
-        if (ArtistUrl().IsMatch(url) && info.IsPlaylist)
+        // A YouTube Music artist handle (music.youtube.com/@name) resolves to a
+        // plain YouTube channel — its "Videos" / "Shorts" tabs, not the music
+        // discography — so it looks like a tiny "album". When the link is an
+        // artist/channel (or the scan came back as nothing but channel tabs),
+        // retry against the channel's Releases / Playlists tabs, which do list
+        // the albums.
+        var looksLikeArtist = ArtistUrl().IsMatch(url)
+            || (info.IsPlaylist && info.TrackTitles is { Count: > 0 } && info.TrackTitles.All(IsChannelTabName));
+        if (!looksLikeArtist) return info;
+
+        foreach (var candidate in await ArtistDiscographyUrlsAsync(url, token).ConfigureAwait(false))
         {
-            var channelUrl = await ResolveChannelUrlAsync(url, token).ConfigureAwait(false);
-            if (channelUrl is not null && !string.Equals(channelUrl, url, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(candidate, url, StringComparison.OrdinalIgnoreCase)) continue;
+            try
             {
-                try
-                {
-                    var retry = await ScanRawAsync(channelUrl, token).ConfigureAwait(false);
-                    if (retry.Albums is { Count: > 0 }) return retry;
-                }
-                catch (Exception e) when (e is InvalidOperationException) { }
+                var retry = await ScanRawAsync(candidate, token).ConfigureAwait(false);
+                if (retry.Albums is { Count: > 0 })
+                    return retry;
             }
+            catch (Exception e) when (e is InvalidOperationException) { }
         }
         return info;
+    }
+
+    /// <summary>Candidate URLs that list an artist's albums, best first.</summary>
+    private static async Task<IReadOnlyList<string>> ArtistDiscographyUrlsAsync(string url, CancellationToken token)
+    {
+        var urls = new List<string>();
+        var handle = HandleName().Match(url);
+        if (handle.Success)
+        {
+            var h = handle.Groups[1].Value;
+            urls.Add($"https://www.youtube.com/@{h}/releases");
+            urls.Add($"https://www.youtube.com/@{h}/playlists");
+        }
+
+        // A bare /channel/UC… link, or a handle whose Releases tab was empty:
+        // fall back to the resolved channel id.
+        var id = ChannelId().Match(url) is { Success: true } cm
+            ? cm.Groups[1].Value
+            : await ResolveChannelIdAsync(url, token).ConfigureAwait(false);
+        if (!string.IsNullOrEmpty(id))
+        {
+            urls.Add($"https://www.youtube.com/channel/{id}/releases");
+            urls.Add($"https://www.youtube.com/channel/{id}/playlists");
+            urls.Add($"https://music.youtube.com/channel/{id}");
+        }
+        return urls.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     private static async Task<ScannedInfo> ScanRawAsync(string url, CancellationToken token)
@@ -227,11 +258,8 @@ public static partial class DownloadService
     private static bool IsChannelTabName(string title) => title.Trim() is
         "Videos" or "Shorts" or "Live" or "Podcasts" or "Playlists" or "Releases" or "Community" or "Home" or "Store";
 
-    /// <summary>
-    /// Asks yt-dlp for a channel/handle URL's canonical channel id (no entries
-    /// resolved) and returns the YouTube Music artist URL for it.
-    /// </summary>
-    private static async Task<string?> ResolveChannelUrlAsync(string url, CancellationToken token)
+    /// <summary>Asks yt-dlp for a channel/handle URL's canonical UC… channel id (no entries resolved).</summary>
+    private static async Task<string?> ResolveChannelIdAsync(string url, CancellationToken token)
     {
         try
         {
@@ -239,11 +267,10 @@ public static partial class DownloadService
                 ["-J", "--flat-playlist", "--playlist-items", "0", "--no-warnings", url], null, token).ConfigureAwait(false);
             if (exit != 0) return null;
             using var doc = JsonDocument.Parse(stdout);
-            var id = Str(doc.RootElement, "channel_id") ?? Str(doc.RootElement, "uploader_id") ?? Str(doc.RootElement, "id");
-            if (string.IsNullOrWhiteSpace(id)) return null;
-            return id.StartsWith("UC", StringComparison.Ordinal)
-                ? $"https://music.youtube.com/channel/{id}"
-                : $"https://music.youtube.com/{id}";
+            var r = doc.RootElement;
+            var id = Str(r, "channel_id") ?? Str(r, "uploader_id")
+                     ?? (Str(r, "id") is { } s && s.StartsWith("UC", StringComparison.Ordinal) ? s : null);
+            return string.IsNullOrWhiteSpace(id) ? null : id;
         }
         catch (Exception e) when (e is InvalidOperationException or JsonException)
         {
@@ -359,4 +386,10 @@ public static partial class DownloadService
 
     [GeneratedRegex(@"(youtube\.com|music\.youtube\.com)/(@|channel/|c/|user/|artist/)", RegexOptions.IgnoreCase)]
     private static partial Regex ArtistUrl();
+
+    [GeneratedRegex(@"/@([A-Za-z0-9._-]+)")]
+    private static partial Regex HandleName();
+
+    [GeneratedRegex(@"/channel/(UC[A-Za-z0-9_-]+)")]
+    private static partial Regex ChannelId();
 }
