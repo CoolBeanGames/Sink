@@ -1,7 +1,6 @@
 bin/
 obj/
 .vs/
-dist/
 publish/
-node_modules/
 *.log
+*.zip
