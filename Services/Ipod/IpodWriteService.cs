@@ -44,10 +44,11 @@ public static class IpodWriteService
         var eligible = tracks.Where(t => IsSyncable(t.FilePath) && !t.ExcludedFromShuffle).ToList();
         var skipped = tracks.Count - eligible.Count;
         if (eligible.Count == 0) return new IpodSyncResult(0, 0, skipped, null);
+        Log.Info($"iPod sync: {eligible.Count} eligible track(s), {skipped} skipped, root {root}");
 
         IPod ipod;
         try { ipod = IpodReader.Open(root); ipod.AssertIsWritable(); }
-        catch (Exception ex) { return new IpodSyncResult(0, 0, skipped, ex.Message); }
+        catch (Exception ex) { Log.Error("iPod sync: open failed", ex); return new IpodSyncResult(0, 0, skipped, ex.Message); }
 
         string? backup = null;
         var locked = false;
@@ -81,6 +82,7 @@ public static class IpodWriteService
         }
         catch (Exception ex)
         {
+            Log.Error("iPod sync failed", ex);
             if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
             return new IpodSyncResult(added, present, skipped, ex.Message);
         }
@@ -98,9 +100,10 @@ public static class IpodWriteService
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (targets.Count == 0) return new IpodSyncResult(0, 0, 0, null);
 
+        Log.Info($"iPod remove: {targets.Count} target file(s), root {root}");
         IPod ipod;
         try { ipod = IpodReader.Open(root); ipod.AssertIsWritable(); }
-        catch (Exception ex) { return new IpodSyncResult(0, 0, 0, ex.Message); }
+        catch (Exception ex) { Log.Error("iPod remove: open failed", ex); return new IpodSyncResult(0, 0, 0, ex.Message); }
 
         string? backup = null;
         var locked = false;
@@ -123,6 +126,7 @@ public static class IpodWriteService
         }
         catch (Exception ex)
         {
+            Log.Error("iPod remove failed", ex);
             if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
             return new IpodSyncResult(0, 0, 0, ex.Message);
         }
@@ -166,8 +170,9 @@ public static class IpodWriteService
             if (updated > 0) ipod.SaveChanges();
             return updated;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Log.Error("iPod podcast-position write failed", ex);
             if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
             return 0;
         }

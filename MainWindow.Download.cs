@@ -112,6 +112,7 @@ public partial class MainWindow
         {
             item.State = DownloadState.Failed;
             item.StatusText = "Couldn't scan";
+            Log.Error($"yt-dlp scan failed for {item.Url}", ex);
             SetDownloadStatus($"Scan failed for {item.Url}: {ex.Message}");
         }
         UpdateDownloadButtonState();

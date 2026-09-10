@@ -112,6 +112,7 @@ public partial class MainWindow : Window
             if (device.LibraryRoot != _ipodLibraryRoot) LoadIpodLibrary(device.LibraryRoot);
             if (isNew)
             {
+                Services.Log.Info($"iPod connected: {device.Name} ({device.LibraryRoot ?? "no library root"})");
                 PlaybackStatus.Text = $"Connected {device.Name}";
                 if (Services.AppSettings.Current.SyncOnConnect && !_ipodWriting)
                     SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
@@ -148,6 +149,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            Services.Log.Error("Reading iPod database failed", ex);
             PlaybackStatus.Text = $"Couldn't read the iPod database: {ex.Message}";
         }
         if (_source == LibrarySource.Ipod) RenderLibrary();
@@ -559,6 +561,7 @@ public partial class MainWindow : Window
         {
             // An async-void handler must never let an exception reach the
             // dispatcher — that takes the whole app down.
+            Services.Log.Error("SyncTracksToDevice threw", ex);
             PlaybackStatus.Text = $"iPod sync failed: {ex.Message}";
         }
         finally
@@ -595,6 +598,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            Services.Log.Error("UnsyncTracks threw", ex);
             PlaybackStatus.Text = $"iPod update failed: {ex.Message}";
         }
         finally

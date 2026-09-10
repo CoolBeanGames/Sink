@@ -152,6 +152,7 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
+            Log.Error($"Podcast feed load failed: {result.FeedUrl}", ex);
             PodcastStatus.Text = $"Couldn't load that feed: {ex.Message}";
         }
     }
@@ -230,6 +231,7 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
+            Log.Error($"Podcast episode download failed: {episode.Title}", ex);
             PodcastStatus.Text = $"Download failed: {ex.Message}";
         }
     }
