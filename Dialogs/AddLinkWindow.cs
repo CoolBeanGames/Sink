@@ -11,12 +11,15 @@ public sealed class AddLinkWindow : SinkDialog
 {
     private readonly TextBox _link = new()
     {
-        Height = 34,
+        Height = 36,
+        MinWidth = 360,
         Padding = new Thickness(10, 7, 10, 7),
+        FontSize = 13,
         Foreground = Hex("#F4F6FA"),
         Background = Hex("#0F1218"),
         BorderBrush = Hex("#353C49"),
         CaretBrush = Hex("#F4F6FA"),
+        HorizontalAlignment = HorizontalAlignment.Stretch,
         VerticalContentAlignment = VerticalAlignment.Center,
     };
 
@@ -24,8 +27,8 @@ public sealed class AddLinkWindow : SinkDialog
 
     public AddLinkWindow()
     {
-        Width = 460;
-        Height = 210;
+        Width = 470;
+        Height = 240;
         Title = "Add link";
 
         _link.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) Accept(); };

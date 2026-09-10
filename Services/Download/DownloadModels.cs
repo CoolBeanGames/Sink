@@ -20,6 +20,8 @@ public sealed class DownloadItem : INotifyPropertyChanged
     private DownloadState _state = DownloadState.Pending;
     private double _progress;
     private string _statusText = "Waiting to scan";
+    private bool _isPlaylist;
+    private int _trackCount;
 
     public string Url { get => _url; set => Set(ref _url, value); }
     public string Title { get => _title; set => Set(ref _title, value); }
@@ -37,6 +39,12 @@ public sealed class DownloadItem : INotifyPropertyChanged
     public double Progress { get => _progress; set => Set(ref _progress, value); }
 
     public string StatusText { get => _statusText; set => Set(ref _statusText, value); }
+
+    /// <summary>True when the link is a playlist / album — one row, many tracks.</summary>
+    public bool IsPlaylist { get => _isPlaylist; set => Set(ref _isPlaylist, value); }
+
+    /// <summary>Number of tracks the link resolves to (1 for a single video).</summary>
+    public int TrackCount { get => _trackCount; set => Set(ref _trackCount, value); }
 
     public bool IsFinished => _state is DownloadState.Done or DownloadState.Failed;
 
