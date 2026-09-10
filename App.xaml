@@ -39,20 +39,65 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- Right-click menu: dark rounded card, no icon gutter, quiet hover -->
         <Style TargetType="ContextMenu">
-            <Setter Property="Background" Value="#1D222C"/>
-            <Setter Property="Foreground" Value="#F4F6FA"/>
-            <Setter Property="BorderBrush" Value="#363D4B"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="4"/>
+            <Setter Property="Foreground" Value="#E9EBF1"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="HasDropShadow" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="#161A22" BorderBrush="#2E3644" BorderThickness="1" CornerRadius="11" Padding="5">
+                            <Border.Effect><DropShadowEffect BlurRadius="22" ShadowDepth="5" Direction="270" Opacity="0.45" Color="#000000"/></Border.Effect>
+                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="Separator" x:Key="{x:Static MenuItem.SeparatorStyleKey}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Separator">
+                        <Rectangle Height="1" Margin="9,5" Fill="#2A313D"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style TargetType="MenuItem">
-            <Setter Property="Foreground" Value="#E4E7EE"/>
-            <Setter Property="Padding" Value="9,5"/>
-            <Style.Triggers>
-                <Trigger Property="IsHighlighted" Value="True"><Setter Property="Background" Value="#302B57"/></Trigger>
-                <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="#6B7280"/></Trigger>
-            </Style.Triggers>
+            <Setter Property="Foreground" Value="#E9EBF1"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="Chrome" Background="Transparent" CornerRadius="7" Padding="11,0" Margin="0,1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter VerticalAlignment="Center" ContentSource="Header" RecognizesAccessKey="True"/>
+                                <Path x:Name="SubArrow" Grid.Column="1" Data="M0,0 L4,4 L0,8 Z" Fill="#8A93A3" VerticalAlignment="Center" Margin="16,0,0,0" Visibility="Collapsed"/>
+                                <Popup x:Name="PART_Popup" AllowsTransparency="True" Placement="Right" HorizontalOffset="-2" VerticalOffset="-6"
+                                       IsOpen="{TemplateBinding IsSubmenuOpen}" Focusable="False" PopupAnimation="Fade">
+                                    <Border Background="#161A22" BorderBrush="#2E3644" BorderThickness="1" CornerRadius="11" Padding="5">
+                                        <Border.Effect><DropShadowEffect BlurRadius="22" ShadowDepth="5" Direction="270" Opacity="0.45" Color="#000000"/></Border.Effect>
+                                        <StackPanel IsItemsHost="True"/>
+                                    </Border>
+                                </Popup>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Role" Value="SubmenuHeader"><Setter TargetName="SubArrow" Property="Visibility" Value="Visible"/></Trigger>
+                            <Trigger Property="Role" Value="TopLevelHeader"><Setter TargetName="SubArrow" Property="Visibility" Value="Visible"/></Trigger>
+                            <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Chrome" Property="Background" Value="#2C2A50"/></Trigger>
+                            <Trigger Property="IsChecked" Value="True"><Setter TargetName="Chrome" Property="Background" Value="#241F3E"/></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="#6B7280"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style x:Key="DialogTextBoxStyle" TargetType="TextBox">
             <Setter Property="Height" Value="34"/>
@@ -108,6 +153,93 @@
             <Setter Property="Foreground" Value="White"/><Setter Property="Background" Value="#6559CE"/><Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="14,9"/><Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" CornerRadius="9" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center"/></Border></ControlTemplate></Setter.Value></Setter>
+        </Style>
+
+        <!-- Album / artist / genre card: rounded chrome, no square default-button highlight -->
+        <Style x:Key="CardButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome" Background="Transparent" BorderBrush="Transparent" BorderThickness="1.5" CornerRadius="14" Padding="6">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="#161A22"/></Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="#8B7CFF"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Circular transport play/pause button -->
+        <Style x:Key="PlayButtonStyle" TargetType="Button">
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+            <Setter Property="Background" Value="#8B7CFF"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Width" Value="38"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Ellipse x:Name="Disc" Fill="{TemplateBinding Background}"/>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Disc" Property="Fill" Value="#9C8FFF"/></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="Disc" Property="Fill" Value="#7A6BEE"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Slim, minimal scrollbars -->
+        <Style TargetType="ScrollBar">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Width" Value="10"/>
+            <Setter Property="MinWidth" Value="10"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="Transparent">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True" Orientation="{TemplateBinding Orientation}">
+                                <Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Opacity="0" Focusable="False"/></Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Opacity="0" Focusable="False"/></Track.IncreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb>
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border x:Name="T" Background="#333A47" CornerRadius="5" Margin="2"/>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="T" Property="Background" Value="#454E5E"/></Trigger>
+                                                    <Trigger Property="IsDragging" Value="True"><Setter TargetName="T" Property="Background" Value="#8B7CFF"/></Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Orientation" Value="Horizontal">
+                                <Setter Property="Height" Value="10"/>
+                                <Setter Property="MinHeight" Value="10"/>
+                                <Setter Property="Width" Value="Auto"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Application.Resources>
 </Application>

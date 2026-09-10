@@ -9,7 +9,11 @@
     <AssemblyName>Sink</AssemblyName>
     <RootNamespace>Sink</RootNamespace>
     <Version>0.6.0</Version>
+    <ApplicationIcon>Assets\sink.ico</ApplicationIcon>
   </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="Assets\sink.ico" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Clickwheel" Version="0.1.1" />
     <PackageReference Include="SixLabors.ImageSharp" Version="2.1.13" />
