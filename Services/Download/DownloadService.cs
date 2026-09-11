@@ -298,16 +298,20 @@ public static partial class DownloadService
                 Log.Warn($"Track {trackNode.Index} \"{trackNode.Name}\" of {album} did not download: {trackNode.StatusText}");
             }
         }
-        try { System.IO.Directory.Delete(workDir, recursive: true); } catch (IOException) { }
-
         progress.Report(1);
         if (finished.Count == 0)
         {
             var reason = FirstError(stderr) ?? "yt-dlp produced no audio";
             foreach (var t in trackNodes) { t.State = DownloadState.Failed; t.StatusText = reason; }
-            Log.Error($"Download failed for {node.Name} ({node.Url}): {reason}");
+            // No line in stderr started with "ERROR", yet nothing came out — log
+            // everything we have (exit code, leftover files, full stderr) since
+            // the short "reason" alone hasn't been enough to explain this before.
+            var leftover = string.Join(", ", SafeListFiles(workDir));
+            Log.Error($"Download failed for {node.Name} ({node.Url}): {reason} — exit {exit}, workDir files: [{leftover}]\nstderr:\n{stderr}");
+            try { System.IO.Directory.Delete(workDir, recursive: true); } catch (IOException) { }
             throw new InvalidOperationException(reason);
         }
+        try { System.IO.Directory.Delete(workDir, recursive: true); } catch (IOException) { }
         if (exit != 0 && isPlaylist && finished.Count < titleOrder.Count)
         {
             var reason = FirstError(stderr) ?? "yt-dlp reported an error on one or more tracks";
@@ -461,6 +465,13 @@ public static partial class DownloadService
     private static string? CleanUploader(string? uploader) =>
         string.IsNullOrWhiteSpace(uploader) ? null : uploader.Replace(" - Topic", "", StringComparison.OrdinalIgnoreCase).Trim();
 
+    private static IReadOnlyList<string> SafeListFiles(string dir)
+    {
+        try { return System.IO.Directory.EnumerateFiles(dir).Select(Path.GetFileName).Where(n => n is not null).Select(n => n!).ToList(); }
+        catch (IOException) { return []; }
+        catch (UnauthorizedAccessException) { return []; }
+    }
+
     private static string? FirstError(string stderr)
     {
         var raw = stderr
@@ -507,11 +518,20 @@ public static partial class DownloadService
     /// </summary>
     private static IReadOnlyList<string> CookieArgs()
     {
+        if (_cookiesKnownBroken) return [];
         var choice = (AppSettings.Current.YouTubeCookies ?? "auto").Trim().ToLowerInvariant();
         if (choice is "none" or "off" or "") return [];
         var browser = choice == "auto" ? DetectInstalledBrowser() : choice;
         return browser is null ? [] : ["--cookies-from-browser", browser];
     }
+
+    /// <summary>
+    /// Set once cookie extraction fails in a way that won't fix itself mid-session
+    /// (DPAPI can't decrypt Chrome/Edge's App-Bound-encrypted cookie store —
+    /// yt-dlp#10927). Skips the cookie attempt on every later call instead of
+    /// paying for — and failing — it again on every single scan and download.
+    /// </summary>
+    private static bool _cookiesKnownBroken;
 
     /// <summary>The yt-dlp browser name for the first browser profile folder that exists, or null.</summary>
     private static string? DetectInstalledBrowser()
@@ -559,6 +579,7 @@ public static partial class DownloadService
         var result = await RunProcessAsync(cookieArgs.Concat(arguments).ToList(), onLine, token).ConfigureAwait(false);
         if (result.exit == 0 || !LooksLikeCookieProblem(result.stderr)) return result;
 
+        if (result.stderr.Contains("dpapi", StringComparison.OrdinalIgnoreCase)) _cookiesKnownBroken = true;
         Log.Warn($"yt-dlp couldn't read browser cookies, retrying without them: {FirstError(result.stderr)}");
         return await RunProcessAsync(arguments, onLine, token).ConfigureAwait(false);
     }
