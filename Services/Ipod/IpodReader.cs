@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using Clickwheel;
 using CwMediaType = Clickwheel.Parsers.iTunesDB.MediaType;
@@ -37,11 +38,23 @@ public static class IpodReader
 
         string xml;
         try { xml = DeviceSysInfoReader.Read(ipodRoot); }
-        catch (Exception ex)
+        catch (Exception directEx)
         {
-            throw new InvalidOperationException(
-                "This iPod is missing its SysInfoExtended file. Connect it once in Apple iTunes, " +
-                "or run Sink as administrator, to let Sink read the device.", ex);
+            // The SCSI INQUIRY this needs is routinely denied to a non-elevated
+            // process even though opening the physical drive handle itself
+            // succeeds — a prior, confirmed-working iteration of this app
+            // (hTunes) always did this step via a one-shot elevated relaunch
+            // rather than in-process for exactly that reason. Do the same
+            // instead of leaving every non-admin launch unable to write a
+            // usable database to a fresh/never-elevated iPod.
+            if (!TryGenerateElevated(ipodRoot, out var elevatedEx))
+            {
+                throw new InvalidOperationException(
+                    "This iPod needs a one-time administrator permission to read its device info. " +
+                    "Accept the prompt, connect it once in Apple iTunes, or run Sink as administrator.",
+                    elevatedEx ?? directEx);
+            }
+            return;
         }
         try
         {
@@ -49,6 +62,28 @@ public static class IpodReader
             File.WriteAllText(path, xml);
         }
         catch (IOException) { }
+    }
+
+    private static bool TryGenerateElevated(string ipodRoot, out Exception? error)
+    {
+        error = null;
+        var executable = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(executable)) return false;
+        var start = new ProcessStartInfo(executable) { UseShellExecute = true, Verb = "runas" };
+        start.ArgumentList.Add("--prepare-ipod");
+        start.ArgumentList.Add(ipodRoot);
+        try
+        {
+            using var process = Process.Start(start);
+            process?.WaitForExit();
+            var path = Path.Combine(ipodRoot, "iPod_Control", "Device", "SysInfoExtended");
+            return process?.ExitCode == 0 && File.Exists(path) && new FileInfo(path).Length > 0;
+        }
+        catch (Exception ex)
+        {
+            error = ex; // includes Win32Exception code 1223 when the UAC prompt is declined
+            return false;
+        }
     }
 
     public static IpodLibrary Read(string ipodRoot)
