@@ -30,8 +30,13 @@ public partial class MainWindow
         LinksTree.ItemsSource = _rootNodes;
         _rootNodes.CollectionChanged += (_, _) => RefreshDownloadChrome();
         _previewPlayer.MediaEnded += (_, _) => StopPreview("finished");
+        foreach (var node in DownloadQueueStore.Load()) _rootNodes.Add(node);
         RefreshDownloadChrome();
     }
+
+    /// <summary>Persists every root-level failed link so it survives a restart (task 135).</summary>
+    private void SaveFailedDownloadQueue() =>
+        DownloadQueueStore.Save(_rootNodes.Where(n => n.State == DownloadState.Failed));
 
     // ---- View switching -------------------------------------------------
 
@@ -136,6 +141,7 @@ public partial class MainWindow
             probe.StatusText = $"Couldn't scan — {Shorten(ex.Message)}";
             Log.Error($"yt-dlp scan failed for {url}", ex);
             SetDownloadStatus($"Scan failed for {url}: {ex.Message} (see Settings ▸ Open logs)");
+            SaveFailedDownloadQueue();
         }
         UpdateDownloadButtonState();
     }
@@ -398,6 +404,7 @@ public partial class MainWindow
         else node.Parent.Children.Remove(node);
         if (_previewNode is not null && !_rootNodes.SelectMany(n => n.SelfAndDescendants()).Contains(_previewNode))
             StopPreview("removed");
+        SaveFailedDownloadQueue();
     }
 
     // ---- Arrow-key navigation between the inline metadata fields (task 104) ----
@@ -918,6 +925,7 @@ public partial class MainWindow
                 : $"Finished — {done} done, {failed} failed, imported {imported} track{(imported == 1 ? "" : "s")}");
 
             if (done > 0) PruneSucceeded();
+            SaveFailedDownloadQueue();
             RefreshDownloadChrome();
         }
     }
