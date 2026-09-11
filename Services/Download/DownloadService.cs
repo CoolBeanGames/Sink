@@ -277,13 +277,18 @@ public static partial class DownloadService
                 : (trackNode.TitleEdited ? trackNode.Title.Trim() : null);
             var trackNo = trackNode.TrackNumber > 0 ? trackNode.TrackNumber
                 : (options.NumberTracks && isPlaylist && trackNode.Index > 0 ? trackNode.Index : 0);
-            // A mixed playlist's tracks carry their own (editable) artist/album
-            // instead of the shared container values — forcing every track to
-            // the playlist's own name as its Album is exactly what task 151
-            // fixed. Blank falls through to whatever yt-dlp itself embedded.
+            // A mixed playlist's tracks carry their own (editable) artist/album/
+            // genre instead of the shared container values — forcing every
+            // track to the playlist's own name as its Album is exactly what
+            // task 151 fixed, and per-track Genre is the same idea (task 154):
+            // yt-dlp never reports a real genre, so it's always left for the
+            // user to fill in, and a mixed playlist can't share one value
+            // across tracks the way a genuine single-artist album can. Blank
+            // falls through to whatever yt-dlp itself embedded.
             var trackArtist = node.IsMixedPlaylist ? FirstReal(trackNode.Artist) ?? "" : artist;
             var trackAlbum = node.IsMixedPlaylist ? trackNode.Album : album;
-            ApplyTags(finalPath, trackArtist, trackAlbum, genre, title, trackNo, artBytes);
+            var trackGenre = node.IsMixedPlaylist ? trackNode.Genre : genre;
+            ApplyTags(finalPath, trackArtist, trackAlbum, trackGenre, title, trackNo, artBytes);
 
             if (trackNode.Kind == DownloadKind.Track) OnUi(() => trackNode.State = DownloadState.Done);
             finalized.Add(key);

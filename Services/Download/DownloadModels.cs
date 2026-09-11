@@ -157,7 +157,8 @@ public sealed class DownloadNode : INotifyPropertyChanged
                               || (Kind == DownloadKind.Track && Parent?.IsMixedPlaylist == true);
     public bool ShowAlbum => Kind == DownloadKind.Single || (Kind == DownloadKind.Track && Parent?.IsMixedPlaylist == true);
     public bool ShowGenre => Kind is DownloadKind.Single or DownloadKind.Artist
-                             || (Kind == DownloadKind.Album && Parent is null);
+                             || (Kind == DownloadKind.Album && Parent is null)
+                             || (Kind == DownloadKind.Track && Parent?.IsMixedPlaylist == true);
 
     /// <summary>Include toggle. Null = children disagree.</summary>
     public bool? Enabled

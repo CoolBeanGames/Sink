@@ -23,6 +23,10 @@ public sealed class DownloadNodeData
     /// <summary>Whether this track already finished downloading before its album was saved as failed —
     /// preserved so a reloaded retry re-downloads only what's left instead of duplicating it (task 153).</summary>
     public bool Done { get; set; }
+    /// <summary>Was missing entirely before (task 154): without it, a reload after a restart lost the
+    /// "mixed playlist" flag, silently reverting every track back to the shared album Artist/Album/Genre
+    /// on retry instead of each track's own edited values.</summary>
+    public bool IsMixedPlaylist { get; set; }
     public List<DownloadNodeData> Children { get; set; } = [];
 }
 
@@ -86,6 +90,7 @@ public static class DownloadQueueStore
         ScannedTitle = node.ScannedTitle,
         Scanned = node.Scanned,
         Done = node.State == DownloadState.Done,
+        IsMixedPlaylist = node.IsMixedPlaylist,
         Children = node.Children.Select(ToData).ToList(),
     };
 
@@ -93,6 +98,7 @@ public static class DownloadQueueStore
     {
         var node = new DownloadNode(data.Kind)
         {
+            IsMixedPlaylist = data.IsMixedPlaylist,
             Url = data.Url,
             Title = data.Title,
             Artist = data.Artist,
