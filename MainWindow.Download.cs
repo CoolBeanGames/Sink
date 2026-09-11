@@ -39,18 +39,19 @@ public partial class MainWindow
     // ---- Per-row "busy" spinner --------------------------------------
     //
     // Used to be a XAML DataTrigger + Storyboard with RepeatBehavior=Forever
-    // inside the (virtualized) tree's HierarchicalDataTemplate. A recycled
-    // container reused for a different row while that forever-repeating
-    // storyboard was still attached could leave WPF's animation clock
-    // pointing at a transform it now treats as frozen, throwing "Cannot
-    // animate ... on an immutable object instance" — repeatedly, once per
-    // frame, which is what produced a wall of cascading error dialogs and
-    // eventually crashed the app outright. Every other spinner in this app
-    // already drives its animation from code-behind instead of a shared
-    // XAML storyboard; do the same here.
+    // inside the (virtualized) tree's HierarchicalDataTemplate. Switching
+    // that to a code-behind BeginAnimation wasn't enough on its own — the
+    // <RotateTransform/> declared inline in the template is itself sealed by
+    // WPF's template-sharing/virtualization machinery, so animating it
+    // (Storyboard or BeginAnimation, doesn't matter) throws "Cannot animate
+    // the 'Angle' property ... because the object is sealed or frozen" every
+    // time a recycled container gets Loaded. Never touch the template's own
+    // transform: assign a fresh, definitely-unfrozen RotateTransform we
+    // created ourselves the moment the row loads, and animate that instead.
     private void TrackSpinner_Loaded(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: DownloadNode node } grid) return;
+        grid.RenderTransform = new RotateTransform();
         PropertyChangedEventHandler handler = (_, args) =>
         {
             if (args.PropertyName is nameof(DownloadNode.IsBusy) or null) UpdateTrackSpinner(grid, node);
@@ -64,6 +65,12 @@ public partial class MainWindow
     {
         if (sender is not FrameworkElement { DataContext: DownloadNode node } grid) return;
         if (grid.Tag is PropertyChangedEventHandler handler) node.PropertyChanged -= handler;
+        // Safe to stop here (unlike the template's own transform): Loaded
+        // always replaces RenderTransform with one of our own instances
+        // before this could ever fire, so it's never the frozen one — and
+        // stopping it means a RepeatBehavior.Forever clock isn't left
+        // ticking in the background for a container that's just been
+        // recycled away.
         if (grid.RenderTransform is RotateTransform rt) rt.BeginAnimation(RotateTransform.AngleProperty, null);
     }
 
