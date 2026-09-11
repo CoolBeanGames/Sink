@@ -2,6 +2,7 @@ using System.IO;
 using Clickwheel;
 using Clickwheel.Exceptions;
 using Sink.Models;
+using Sink.Services;
 using CwTrack = Clickwheel.Parsers.iTunesDB.Track;
 
 namespace Sink.Services.Ipod;
@@ -77,6 +78,7 @@ public static class IpodWriteService
             {
                 progress?.Report((eligible.Count, eligible.Count, "Updating the iPod database"));
                 ipod.SaveChanges();
+                DriveEject.Flush(root); // force the write out of the OS cache — a quick eject right after used to lose it (task 144)
             }
             return new IpodSyncResult(added, present, skipped, null);
         }
@@ -157,6 +159,7 @@ public static class IpodWriteService
             {
                 progress?.Report((eligible.Count, eligible.Count, "Updating the iPod database"));
                 ipod.SaveChanges();
+                DriveEject.Flush(root);
             }
             return new IpodSyncResult(added, present, skipped, null);
         }
@@ -201,7 +204,7 @@ public static class IpodWriteService
                     toRemove.Add(track);
             foreach (var track in toRemove)
                 if (ipod.Tracks.Remove(track)) removed++;
-            if (removed > 0) ipod.SaveChanges();
+            if (removed > 0) { ipod.SaveChanges(); DriveEject.Flush(root); }
             return new IpodSyncResult(0, 0, 0, null, Removed: removed);
         }
         catch (Exception ex)
@@ -247,7 +250,7 @@ public static class IpodWriteService
                 IpodBookmarks.SetMs(track, ms);
                 updated++;
             }
-            if (updated > 0) ipod.SaveChanges();
+            if (updated > 0) { ipod.SaveChanges(); DriveEject.Flush(root); }
             return updated;
         }
         catch (Exception ex)

@@ -1005,6 +1005,11 @@ public partial class MainWindow : Window
 
     private void EjectIpod_Click(object sender, RoutedEventArgs e)
     {
+        // A sync still has files open on the volume — locking it for eject
+        // would fail anyway, but refuse up front rather than tearing down
+        // the connected state under an in-flight write (task 144).
+        if (_ipodWriting) { PlaybackStatus.Text = "iPod is busy — wait for the sync to finish before ejecting"; return; }
+
         var root = _ipodDevice?.LibraryRoot;
         _ejectedIpodKey = _ipodDevice?.Key;
         _ignoreUnreadableIpod = true; // the drive going unreadable right after this is our own eject, not a ghost reconnect
