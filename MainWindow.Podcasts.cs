@@ -499,7 +499,7 @@ public partial class MainWindow
             FilePath = episode.LocalPath,
             Duration = episode.Duration,
         };
-        SyncTracksToDevice([track]);
+        _ = SyncTracksToDevice([track]);
         PodcastStatus.Text = $"Syncing {episode.Title} to iPod";
     }
 

@@ -35,11 +35,13 @@ public partial class MainWindow : Window
     private bool _updatingProgress;
     private bool _ipodConnected;
     private bool _ipodSyncing;
+    private string? _ejectedIpodKey;
     private bool _recordSpinning;
     private IpodDevice? _ipodDevice;
     private readonly DispatcherTimer _ipodPollTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private Point _trackDragStart;
     private const string TrackDragFormat = "Sink.TrackIds";
+    private const string PlaylistDragFormat = "Sink.PlaylistId";
 
     public MainWindow()
     {
@@ -159,6 +161,16 @@ public partial class MainWindow : Window
 
         if (device is not null)
         {
+            // The user explicitly ejected this exact device: it is still
+            // physically plugged in, so every poll re-detects it. Don't let
+            // that silently undo the eject — require it to actually be
+            // unplugged (or a manual reconnect) before reconnecting.
+            if (device.Key == _ejectedIpodKey)
+            {
+                if (wasManual) PlaybackStatus.Text = "iPod ejected — unplug it or click the record to reconnect";
+                return;
+            }
+
             var isNew = !_ipodConnected || _ipodDevice?.Key != device.Key;
             var changed = isNew || _ipodDevice?.Tooltip != device.Tooltip;
             if (changed)
@@ -172,12 +184,13 @@ public partial class MainWindow : Window
                 Services.Log.Info($"iPod connected: {device.Name} ({device.LibraryRoot ?? "no library root"})");
                 PlaybackStatus.Text = $"Connected {device.Name}";
                 if (Services.AppSettings.Current.SyncOnConnect && !_ipodWriting)
-                    SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
+                    _ = SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
             }
             else if (wasManual) PlaybackStatus.Text = $"{device.Name} is connected";
             return;
         }
 
+        _ejectedIpodKey = null; // physically gone now; a future reconnect is a fresh plug-in
         if (_ipodConnected && _ipodDevice is not null) SetIpodConnected(false);
         if (_ipodLibraryRoot is not null) LoadIpodLibrary(null);
         if (wasManual) PlaybackStatus.Text = "No iPod found — check the cable, or click the record to simulate one";
@@ -606,6 +619,7 @@ public partial class MainWindow : Window
     private void IpodButton_Click(object sender, RoutedEventArgs e)
     {
         if (_ipodConnected) return;
+        _ejectedIpodKey = null; // a manual click always overrides a prior eject
         SetIpodConnected(true);
     }
 
@@ -687,11 +701,14 @@ public partial class MainWindow : Window
         PollForIpod(manual: true);
     }
 
-    private void SyncIpod_Click(object sender, RoutedEventArgs e)
+    private async void SyncIpod_Click(object sender, RoutedEventArgs e)
     {
         var header = (sender as MenuItem)?.Header as string ?? "";
         if (header is "Sync all" or "Sync music")
-            SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
+        {
+            await SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
+            await SyncAllPlaylistsToDevice();
+        }
         else
             StartIpodSync();
     }
@@ -699,7 +716,7 @@ public partial class MainWindow : Window
     private bool _ipodWriting;
 
     /// <summary>Syncs tracks to the connected iPod — really writes the iTunesDB when the device is readable, otherwise stages them in the pending list.</summary>
-    private async void SyncTracksToDevice(IReadOnlyList<Track> tracks)
+    private async Task SyncTracksToDevice(IReadOnlyList<Track> tracks)
     {
         if (_ipodWriting) { PlaybackStatus.Text = "iPod is busy…"; return; }
         var root = _ipodDevice?.LibraryRoot;
@@ -730,6 +747,67 @@ public partial class MainWindow : Window
         {
             _ipodWriting = false;
             StopIpodSync();
+            LoadIpodLibrary(root);
+        }
+    }
+
+    /// <summary>Syncs one playlist's tracks to the connected iPod, and (when the device's database is writable) also creates/updates the matching on-device playlist.</summary>
+    private async Task SyncPlaylistToDevice(Playlist playlist)
+    {
+        var tracks = _tracks.Where(t => playlist.TrackIds.Contains(t.Id) && !t.ExcludedFromShuffle).ToList();
+        if (tracks.Count == 0) { PlaybackStatus.Text = $"\"{playlist.Name}\" has no syncable tracks"; return; }
+        if (_ipodWriting) { PlaybackStatus.Text = "iPod is busy…"; return; }
+        var root = _ipodDevice?.LibraryRoot;
+        if (root is null)
+        {
+            MarkSynced(tracks.Select(t => t.Id), announce: true);
+            if (_ipodConnected) StartIpodSync();
+            return;
+        }
+
+        _ipodWriting = true;
+        StartIpodSync(indefinite: true);
+        var progress = SyncProgress();
+        try
+        {
+            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks, progress));
+            PlaybackStatus.Text = result.Summary;
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Error("SyncPlaylistToDevice threw", ex);
+            PlaybackStatus.Text = $"iPod sync failed: {ex.Message}";
+        }
+        finally
+        {
+            _ipodWriting = false;
+            StopIpodSync();
+            LoadIpodLibrary(root);
+        }
+    }
+
+    /// <summary>Pushes every playlist's membership onto the device's iTunesDB. No-op when the device isn't writable — there is nowhere to record a playlist without one.</summary>
+    private async Task SyncAllPlaylistsToDevice()
+    {
+        var root = _ipodDevice?.LibraryRoot;
+        if (root is null || _ipodWriting) return;
+        _ipodWriting = true;
+        try
+        {
+            foreach (var playlist in _playlists.ToList())
+            {
+                var tracks = _tracks.Where(t => playlist.TrackIds.Contains(t.Id) && !t.ExcludedFromShuffle).ToList();
+                if (tracks.Count == 0) continue;
+                await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks));
+            }
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Error("SyncAllPlaylistsToDevice threw", ex);
+        }
+        finally
+        {
+            _ipodWriting = false;
             LoadIpodLibrary(root);
         }
     }
@@ -803,7 +881,7 @@ public partial class MainWindow : Window
 
     private void IpodNav_DragOver(object sender, DragEventArgs e)
     {
-        var canSync = e.Data.GetDataPresent(TrackDragFormat);
+        var canSync = e.Data.GetDataPresent(TrackDragFormat) || e.Data.GetDataPresent(PlaylistDragFormat);
         e.Effects = canSync ? DragDropEffects.Copy : DragDropEffects.None;
         if (canSync && sender is Button button) button.Tag = "Active";
         e.Handled = true;
@@ -817,9 +895,16 @@ public partial class MainWindow : Window
     private void IpodNav_Drop(object sender, DragEventArgs e)
     {
         IpodNav_DragLeave(sender, e);
+        if (e.Data.GetData(PlaylistDragFormat) is string playlistIdText && Guid.TryParse(playlistIdText, out var playlistId))
+        {
+            e.Handled = true;
+            var playlist = _playlists.FirstOrDefault(p => p.Id == playlistId);
+            if (playlist is not null) _ = SyncPlaylistToDevice(playlist);
+            return;
+        }
         if (e.Data.GetData(TrackDragFormat) is not Guid[] trackIds) return;
         e.Handled = true;
-        SyncTracksToDevice(_tracks.Where(t => trackIds.Contains(t.Id) && !t.ExcludedFromShuffle).ToList());
+        _ = SyncTracksToDevice(_tracks.Where(t => trackIds.Contains(t.Id) && !t.ExcludedFromShuffle).ToList());
     }
 
     private void StartIpodSync(bool indefinite = false)
@@ -850,11 +935,15 @@ public partial class MainWindow : Window
         UpdateRecordSpin();
     }
 
-    private void EjectIpod_Click(object sender, RoutedEventArgs e) => SetIpodConnected(false);
+    private void EjectIpod_Click(object sender, RoutedEventArgs e)
+    {
+        _ejectedIpodKey = _ipodDevice?.Key;
+        SetIpodConnected(false);
+    }
 
     private void IpodButton_DragOver(object sender, DragEventArgs e)
     {
-        var canSync = _ipodConnected && (e.Data.GetDataPresent(TrackDragFormat) || e.Data.GetDataPresent(PodcastDragFormat));
+        var canSync = _ipodConnected && (e.Data.GetDataPresent(TrackDragFormat) || e.Data.GetDataPresent(PodcastDragFormat) || e.Data.GetDataPresent(PlaylistDragFormat));
         e.Effects = canSync ? DragDropEffects.Copy : DragDropEffects.None;
         if (canSync) RecordLabel.Fill = new SolidColorBrush(Color.FromRgb(92, 89, 206));
         e.Handled = true;
@@ -874,6 +963,14 @@ public partial class MainWindow : Window
             SyncEpisodeToIpod(episodeId);
             return;
         }
+        if (e.Data.GetData(PlaylistDragFormat) is string playlistIdText && Guid.TryParse(playlistIdText, out var playlistId))
+        {
+            e.Handled = true;
+            if (!_ipodConnected) { PlaybackStatus.Text = "Connect an iPod before syncing"; return; }
+            var playlist = _playlists.FirstOrDefault(p => p.Id == playlistId);
+            if (playlist is not null) _ = SyncPlaylistToDevice(playlist);
+            return;
+        }
         if (e.Data.GetData(TrackDragFormat) is not Guid[] trackIds) return;
         e.Handled = true;
         if (!_ipodConnected)
@@ -883,7 +980,7 @@ public partial class MainWindow : Window
         }
         var syncable = _tracks.Where(track => trackIds.Contains(track.Id) && !track.ExcludedFromShuffle).ToList();
         if (syncable.Count == 0) { PlaybackStatus.Text = "Nothing to sync"; return; }
-        SyncTracksToDevice(syncable);
+        _ = SyncTracksToDevice(syncable);
     }
 
     private void TracksGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) => _trackDragStart = e.GetPosition(TracksGrid);
@@ -921,6 +1018,19 @@ public partial class MainWindow : Window
         var data = new DataObject();
         data.SetData(TrackDragFormat, ids);
         DragDrop.DoDragDrop(GroupsView, data, DragDropEffects.Copy);
+    }
+
+    private void PlaylistItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) => _trackDragStart = e.GetPosition(PlaylistList);
+
+    private void PlaylistItem_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+        if (sender is not ListBoxItem { DataContext: Playlist playlist }) return;
+        var position = e.GetPosition(PlaylistList);
+        if (Math.Abs(position.X - _trackDragStart.X) < SystemParameters.MinimumHorizontalDragDistance && Math.Abs(position.Y - _trackDragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        var data = new DataObject();
+        data.SetData(PlaylistDragFormat, playlist.Id.ToString());
+        DragDrop.DoDragDrop(PlaylistList, data, DragDropEffects.Copy);
     }
 
     private void PlaylistItem_DragOver(object sender, DragEventArgs e)
@@ -1150,7 +1260,7 @@ public partial class MainWindow : Window
     {
         var syncable = tracks.Where(t => !t.ExcludedFromShuffle).ToList();
         if (syncable.Count == 0) { PlaybackStatus.Text = "Nothing to sync"; return; }
-        SyncTracksToDevice(syncable);
+        _ = SyncTracksToDevice(syncable);
     }
 
     private void EditMetadata(IReadOnlyList<Track> tracks)

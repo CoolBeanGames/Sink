@@ -92,6 +92,86 @@ public static class IpodWriteService
         }
     }
 
+    /// <summary>
+    /// Syncs a playlist's tracks to the iPod (same as <see cref="Sync"/>) and also
+    /// creates/updates a same-named on-device playlist containing them, so it
+    /// shows up as a playlist in iTunes/on the device rather than just loose
+    /// tracks in the library.
+    /// </summary>
+    public static IpodSyncResult SyncPlaylist(
+        string root,
+        string playlistName,
+        IReadOnlyList<Track> tracks,
+        IProgress<(int done, int total, string message)>? progress = null)
+    {
+        var eligible = tracks.Where(t => IsSyncable(t.FilePath) && !t.ExcludedFromShuffle).ToList();
+        var skipped = tracks.Count - eligible.Count;
+        if (eligible.Count == 0) return new IpodSyncResult(0, 0, skipped, null);
+        Log.Info($"iPod playlist sync: \"{playlistName}\", {eligible.Count} eligible track(s), root {root}");
+
+        IPod ipod;
+        try { ipod = IpodReader.Open(root); ipod.AssertIsWritable(); }
+        catch (Exception ex) { Log.Error("iPod playlist sync: open failed", ex); return new IpodSyncResult(0, 0, skipped, ex.Message); }
+
+        string? backup = null;
+        var locked = false;
+        int added = 0, present = 0;
+        var changedDb = false;
+        try
+        {
+            backup = BackupDatabase(root);
+            IPodBackup.EnableBackups = false;
+            ipod.AcquireLock();
+            locked = true;
+
+            var playlist = ipod.Playlists.GetPlaylistByName(playlistName) ?? ipod.Playlists.Add(playlistName);
+
+            for (var i = 0; i < eligible.Count; i++)
+            {
+                var src = eligible[i];
+                progress?.Report((i, eligible.Count, $"Copying {src.Title}"));
+                CwTrack? onDevice;
+                try
+                {
+                    onDevice = ipod.Tracks.Add(NewTrackFrom(src));
+                    added++;
+                    changedDb = true;
+                }
+                catch (TrackAlreadyExistsException)
+                {
+                    present++;
+                    var target = Path.GetFullPath(src.FilePath!);
+                    onDevice = ipod.Tracks.Find(t =>
+                        string.Equals(Path.GetFullPath(IpodReader.ResolvePath(root, t.FilePath)), target, StringComparison.OrdinalIgnoreCase));
+                }
+                catch (OutOfDiskSpaceException) { skipped += eligible.Count - i; break; }
+
+                if (onDevice is not null && !playlist.ContainsTrack(onDevice))
+                {
+                    playlist.AddTrack(onDevice);
+                    changedDb = true;
+                }
+            }
+
+            if (changedDb)
+            {
+                progress?.Report((eligible.Count, eligible.Count, "Updating the iPod database"));
+                ipod.SaveChanges();
+            }
+            return new IpodSyncResult(added, present, skipped, null);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("iPod playlist sync failed", ex);
+            if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
+            return new IpodSyncResult(added, present, skipped, ex.Message);
+        }
+        finally
+        {
+            if (locked) { try { ipod.ReleaseLock(); } catch { } }
+        }
+    }
+
     public static IpodSyncResult Remove(string root, IReadOnlyCollection<string> absoluteFilePaths)
     {
         var targets = absoluteFilePaths
