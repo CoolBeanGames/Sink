@@ -489,18 +489,31 @@ public partial class MainWindow
             PodcastStatus.Text = "Episode file is missing";
             return;
         }
-        var track = new Track
-        {
-            Title = episode.Title,
-            Artist = show.Title,
-            Album = show.Title,
-            Genre = "Podcast",
-            FileName = Path.GetFileName(episode.LocalPath),
-            FilePath = episode.LocalPath,
-            Duration = episode.Duration,
-        };
-        _ = SyncTracksToDevice([track]);
+        _ = SyncTracksToDevice([EpisodeTrack(show, episode)]);
         PodcastStatus.Text = $"Syncing {episode.Title} to iPod";
+    }
+
+    private static Track EpisodeTrack(Podcast show, PodcastEpisode episode) => new()
+    {
+        Title = episode.Title,
+        Artist = show.Title,
+        Album = show.Title,
+        Genre = "Podcast",
+        FileName = Path.GetFileName(episode.LocalPath!),
+        FilePath = episode.LocalPath,
+        Duration = episode.Duration,
+    };
+
+    /// <summary>Pushes every downloaded episode across all subscribed shows onto the device (task 137 — "Sync podcasts" did nothing but spin the indicator).</summary>
+    private async Task SyncAllPodcastsToDevice()
+    {
+        if (!_ipodConnected) { PodcastStatus.Text = "Connect an iPod before syncing"; return; }
+        var tracks = _podcasts
+            .SelectMany(show => show.Episodes.Where(e => e.IsDownloaded).Select(e => EpisodeTrack(show, e)))
+            .ToList();
+        if (tracks.Count == 0) { PodcastStatus.Text = "No downloaded episodes to sync"; return; }
+        PodcastStatus.Text = $"Syncing {tracks.Count} episode{(tracks.Count == 1 ? "" : "s")} to iPod";
+        await SyncTracksToDevice(tracks);
     }
 
     // ---- Auto-download rules (task 62) ----------------------------------

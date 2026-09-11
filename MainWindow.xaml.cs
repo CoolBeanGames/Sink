@@ -709,7 +709,9 @@ public partial class MainWindow : Window
             await SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
             await SyncAllPlaylistsToDevice();
         }
-        else
+        if (header is "Sync all" or "Sync podcasts")
+            await SyncAllPodcastsToDevice();
+        if (header is not ("Sync all" or "Sync music" or "Sync podcasts"))
             StartIpodSync();
     }
 
