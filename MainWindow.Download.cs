@@ -102,6 +102,7 @@ public partial class MainWindow
     private void ShowDownloadSource_Click(object sender, RoutedEventArgs e)
     {
         ExitPodcastView(); // was left showing underneath — task 122
+        ExitTagsView();
         _downloadViewActive = true;
         MusicPage.Visibility = Visibility.Collapsed;
         DownloadPage.Visibility = Visibility.Visible;

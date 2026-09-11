@@ -83,6 +83,7 @@ public partial class MainWindow : Window
         InitDownloadPage();
         InitPodcasts();
         InitNotifications();
+        InitTagsPage();
         _ipodPollTimer.Tick += (_, _) => PollForIpod();
         _ipodPollTimer.Start();
         Loaded += (_, _) => PollForIpod();
@@ -368,6 +369,7 @@ public partial class MainWindow : Window
     {
         ExitDownloadView();
         ExitPodcastView();
+        ExitTagsView();
         var music = _source == LibrarySource.Music;
         MusicNav.Visibility = music ? Visibility.Visible : Visibility.Collapsed;
         IpodNav.Visibility = music ? Visibility.Collapsed : Visibility.Visible;

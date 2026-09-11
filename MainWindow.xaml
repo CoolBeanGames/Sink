@@ -29,6 +29,16 @@
             </Setter>
         </Style>
         <Style x:Key="EyebrowStyle" TargetType="TextBlock"><Setter Property="Foreground" Value="#7D8493"/><Setter Property="FontSize" Value="10"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+        <Style x:Key="TagsFieldStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#D8DCE4"/>
+            <Setter Property="CaretBrush" Value="#F4F6FA"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
         <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#12151C"/><Setter Property="Foreground" Value="#747B8A"/><Setter Property="BorderBrush" Value="#262C38"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="Padding" Value="12,10"/><Setter Property="FontSize" Value="10"/></Style>
         <Style TargetType="DataGridCell"><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="12,9"/><Setter Property="Foreground" Value="#BFC4CE"/><Setter Property="Background" Value="Transparent"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/></Style>
         <Style TargetType="DataGridRow"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="#20252F"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="MinHeight" Value="48"/><Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#1B1F28"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#2B2850"/><Setter Property="Foreground" Value="#F4F6FA"/></Trigger></Style.Triggers></Style>
@@ -148,6 +158,12 @@
                                 <Grid.RenderTransform><RotateTransform/></Grid.RenderTransform>
                                 <Ellipse Stroke="#8B7CFF" StrokeThickness="1.7" StrokeDashArray="3.1 1.5" StrokeDashCap="Round"/>
                             </Grid>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="TagsHeaderButton" Click="ShowTagsSource_Click" Style="{StaticResource SectionHeaderButtonStyle}" Margin="0,4,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="#" FontSize="15" FontWeight="Bold" Foreground="#8B7CFF" Width="15" Margin="0,0,7,0" TextAlignment="Center"/>
+                            <TextBlock Text="TAGS" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>
@@ -383,6 +399,79 @@
 
             <Border Grid.Row="5" Margin="0,16,0,0" Background="#161A22" BorderBrush="#2A303C" BorderThickness="1" CornerRadius="9" Padding="13,8">
                 <TextBlock x:Name="DownloadStatusBar" Text="Ready" Foreground="#9AA0AE" FontSize="11" TextTrimming="CharacterEllipsis"/>
+            </Border>
+        </Grid>
+
+        <Grid x:Name="TagsPage" Grid.Column="1" Margin="38,32,38,30" Visibility="Collapsed">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <Grid>
+                <StackPanel>
+                    <TextBlock Text="LIBRARY" Style="{StaticResource EyebrowStyle}"/>
+                    <TextBlock Text="Tags" FontSize="34" FontWeight="SemiBold" Margin="0,4,0,2"/>
+                    <TextBlock x:Name="TagsSubtitle" Foreground="#7D8493" FontSize="12"/>
+                </StackPanel>
+                <Border Width="260" Height="39" HorizontalAlignment="Right" VerticalAlignment="Top" Background="#12151C" BorderBrush="#262C38" BorderThickness="1" CornerRadius="10" Padding="12,7">
+                    <DockPanel>
+                        <TextBlock Text="⌕" Foreground="#747B8B" Margin="0,0,8,0"/>
+                        <TextBox x:Name="TagsSearchBox" TextChanged="TagsSearchBox_TextChanged" Background="Transparent" BorderThickness="0" Foreground="#F4F6FA" CaretBrush="#F4F6FA"/>
+                    </DockPanel>
+                </Border>
+            </Grid>
+            <Border Grid.Row="1" Margin="0,28,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#12151C">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <Border x:Name="TagsSelectionBar" Grid.Row="0" Visibility="Collapsed" Background="Transparent" BorderBrush="#262C38" BorderThickness="0,0,0,1" Padding="15,9">
+                        <DockPanel>
+                            <Button Content="Clear" DockPanel.Dock="Right" Click="TagsClearSelection_Click" Background="Transparent" Foreground="#9D91FF" BorderThickness="0"/>
+                            <TextBlock x:Name="TagsSelectionText" Foreground="#7D8493" FontSize="11" VerticalAlignment="Center"/>
+                        </DockPanel>
+                    </Border>
+                    <DataGrid x:Name="TagsGrid" Grid.Row="1" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="None"
+                              Background="Transparent" BorderThickness="0" CanUserSortColumns="True" CanUserAddRows="False"
+                              SelectionMode="Extended" SelectionUnit="FullRow"
+                              SelectionChanged="TagsGrid_SelectionChanged" ContextMenuOpening="TagsGrid_ContextMenuOpening"
+                              PreviewKeyDown="TagsGrid_PreviewKeyDown">
+                        <DataGrid.ContextMenu><ContextMenu/></DataGrid.ContextMenu>
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="#" Width="48" SortMemberPath="TrackNumber">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding TrackNumber, UpdateSourceTrigger=LostFocus}" Style="{StaticResource TagsFieldStyle}" LostFocus="TagsField_LostFocus"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="TITLE" Width="2*" SortMemberPath="Title">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Title, UpdateSourceTrigger=LostFocus}" Style="{StaticResource TagsFieldStyle}" LostFocus="TagsField_LostFocus"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="ARTIST" Width="*" SortMemberPath="Artist">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Artist, UpdateSourceTrigger=LostFocus}" Style="{StaticResource TagsFieldStyle}" LostFocus="TagsField_LostFocus"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="ALBUM" Width="*" SortMemberPath="Album">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Album, UpdateSourceTrigger=LostFocus}" Style="{StaticResource TagsFieldStyle}" LostFocus="TagsField_LostFocus"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="GENRE" Width="110" SortMemberPath="Genre">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Genre, UpdateSourceTrigger=LostFocus}" Style="{StaticResource TagsFieldStyle}" LostFocus="TagsField_LostFocus"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="TIME" Binding="{Binding DurationText}" Width="70" IsReadOnly="True"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
             </Border>
         </Grid>
 
