@@ -153,6 +153,20 @@ public static partial class DownloadService
         var workDir = Path.Combine(DownloadsDirectory, "_" + Guid.NewGuid().ToString("N")[..8]);
         System.IO.Directory.CreateDirectory(workDir);
 
+        // yt-dlp's Process.OutputDataReceived (and anything after the
+        // ConfigureAwait(false) below) fires on a thread-pool thread, not the
+        // UI thread — but MarkTrackProgress/FinalizeTrack mutate WPF-bound
+        // DownloadNode properties. Left undispatched, a failed download's
+        // foreach over every track threw repeatedly off-thread, which .NET
+        // treats as fatal and took the whole app down instead of just
+        // surfacing an error (task 145).
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        void OnUi(Action action)
+        {
+            if (dispatcher is null || dispatcher.CheckAccess()) action();
+            else dispatcher.Invoke(action);
+        }
+
         var isPlaylist = node.Kind == DownloadKind.Album;
         var artist = FirstReal(node.Artist, node.Parent?.Artist) ?? "Unknown Artist";
         var album = node.Album;
@@ -231,7 +245,7 @@ public static partial class DownloadService
                 : (options.NumberTracks && isPlaylist && trackNode.Index > 0 ? trackNode.Index : 0);
             ApplyTags(finalPath, artist, album, genre, title, trackNo, artBytes);
 
-            if (trackNode.Kind == DownloadKind.Track) trackNode.State = DownloadState.Done;
+            if (trackNode.Kind == DownloadKind.Track) OnUi(() => trackNode.State = DownloadState.Done);
             finalized.Add(key);
             finished.Add(finalPath);
             onTrackFile?.Report(finalPath);
@@ -250,16 +264,12 @@ public static partial class DownloadService
                 var t = titleOrder[i];
                 if (t.State is DownloadState.Done or DownloadState.Failed) continue;
                 if (!FinalizeTrack(t))
-                {
-                    t.State = DownloadState.Failed;
-                    t.StatusText = "yt-dlp skipped this track";
-                }
+                    OnUi(() => { t.State = DownloadState.Failed; t.StatusText = "yt-dlp skipped this track"; });
             }
             if (itemIndex1Based - 1 < titleOrder.Count)
             {
                 var next = titleOrder[itemIndex1Based - 1];
-                next.State = DownloadState.Downloading;
-                next.StatusText = "Downloading…";
+                OnUi(() => { next.State = DownloadState.Downloading; next.StatusText = "Downloading…"; });
             }
         }
 
@@ -279,7 +289,10 @@ public static partial class DownloadService
             {
                 progress.Report(Math.Clamp((current + pct / 100.0) / total, 0, 1));
                 if (isPlaylist && current >= 0 && current < titleOrder.Count)
-                    titleOrder[current].Progress = pct / 100.0;
+                {
+                    var track = titleOrder[current];
+                    OnUi(() => track.Progress = pct / 100.0);
+                }
             }
         }, token).ConfigureAwait(false);
 
@@ -293,16 +306,16 @@ public static partial class DownloadService
             if (finalized.Contains(key)) continue;
             if (!FinalizeTrack(trackNode) && trackNode.Kind == DownloadKind.Track)
             {
-                trackNode.State = DownloadState.Failed;
-                trackNode.StatusText = FirstError(stderr) ?? "yt-dlp skipped this track";
-                Log.Warn($"Track {trackNode.Index} \"{trackNode.Name}\" of {album} did not download: {trackNode.StatusText}");
+                var failureText = FirstError(stderr) ?? "yt-dlp skipped this track";
+                OnUi(() => { trackNode.State = DownloadState.Failed; trackNode.StatusText = failureText; });
+                Log.Warn($"Track {trackNode.Index} \"{trackNode.Name}\" of {album} did not download: {failureText}");
             }
         }
         progress.Report(1);
         if (finished.Count == 0)
         {
             var reason = FirstError(stderr) ?? "yt-dlp produced no audio";
-            foreach (var t in trackNodes) { t.State = DownloadState.Failed; t.StatusText = reason; }
+            OnUi(() => { foreach (var t in trackNodes) { t.State = DownloadState.Failed; t.StatusText = reason; } });
             // No line in stderr started with "ERROR", yet nothing came out — log
             // everything we have (exit code, leftover files, full stderr) since
             // the short "reason" alone hasn't been enough to explain this before.
