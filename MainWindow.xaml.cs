@@ -184,7 +184,7 @@ public partial class MainWindow : Window
                 Services.Log.Info($"iPod connected: {device.Name} ({device.LibraryRoot ?? "no library root"})");
                 PlaybackStatus.Text = $"Connected {device.Name}";
                 if (Services.AppSettings.Current.SyncOnConnect && !_ipodWriting)
-                    _ = SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
+                    _ = SyncOnConnectAsync();
             }
             else if (wasManual) PlaybackStatus.Text = $"{device.Name} is connected";
             return;
@@ -716,6 +716,13 @@ public partial class MainWindow : Window
     }
 
     private bool _ipodWriting;
+
+    /// <summary>Auto-sync on connect (task 138 — only tracks were pushed, playlist membership never followed).</summary>
+    private async Task SyncOnConnectAsync()
+    {
+        await SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
+        await SyncAllPlaylistsToDevice();
+    }
 
     /// <summary>Syncs tracks to the connected iPod — really writes the iTunesDB when the device is readable, otherwise stages them in the pending list.</summary>
     private async Task SyncTracksToDevice(IReadOnlyList<Track> tracks)
