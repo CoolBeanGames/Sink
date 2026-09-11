@@ -157,7 +157,10 @@ public partial class MainWindow
         var ok = dialog.ShowDialog() == true;
         BlurBehind(false);
         if (!ok) return;
-        await ScanAndAddAsync(dialog.Link);
+        // One at a time — each scan already reports its own status line, and
+        // running yt-dlp processes concurrently for a whole pasted batch would
+        // just contend with itself for no benefit (task 152).
+        foreach (var link in dialog.Links) await ScanAndAddAsync(link);
     }
 
     private async Task ScanAndAddAsync(string url)

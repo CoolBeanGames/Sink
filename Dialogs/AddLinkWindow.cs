@@ -4,33 +4,43 @@ using System.Windows.Controls;
 namespace Sink.Dialogs;
 
 /// <summary>
-/// Prompts for a single YouTube / YouTube Music link. Same dark chrome as the
-/// metadata editor; the caller dims and blurs the page behind it.
+/// Prompts for one or more YouTube / YouTube Music links, one per line. Same
+/// dark chrome as the metadata editor; the caller dims and blurs the page
+/// behind it.
 /// </summary>
 public sealed class AddLinkWindow : SinkDialog
 {
     private readonly TextBox _link = new()
     {
-        Height = 40,
-        Padding = new Thickness(11, 0, 11, 0),
+        MinHeight = 96,
+        MaxHeight = 260,
+        Padding = new Thickness(11, 9, 11, 9),
         FontSize = 13,
         Foreground = Hex("#F4F6FA"),
         Background = Hex("#0F1218"),
         BorderBrush = Hex("#353C49"),
         BorderThickness = new Thickness(1),
         CaretBrush = Hex("#F4F6FA"),
-        VerticalContentAlignment = VerticalAlignment.Center,
+        AcceptsReturn = true,
+        AcceptsTab = false,
+        TextWrapping = TextWrapping.NoWrap,
+        VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
     };
 
-    public string Link => _link.Text.Trim();
+    /// <summary>Every non-blank line, trimmed — one link each.</summary>
+    public IReadOnlyList<string> Links => _link.Text
+        .Split('\n')
+        .Select(line => line.Trim())
+        .Where(line => line.Length > 0)
+        .ToList();
 
     public AddLinkWindow()
     {
-        Width = 480;
+        Width = 520;
         SizeToContent = SizeToContent.Height;
-        Title = "Add link";
+        Title = "Add links";
 
-        _link.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) Accept(); };
         Loaded += (_, _) => { _link.Focus(); TryPasteClipboard(); };
 
         var buttons = new StackPanel
@@ -49,11 +59,11 @@ public sealed class AddLinkWindow : SinkDialog
         });
         body.Children.Add(new TextBlock
         {
-            Text = "Paste a link", FontSize = 22, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 5, 0, 0),
+            Text = "Paste links", FontSize = 22, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 5, 0, 0),
         });
         body.Children.Add(new TextBlock
         {
-            Text = "YouTube or YouTube Music — a track, album, or playlist.",
+            Text = "YouTube or YouTube Music — one link per line. A track, album, artist, or playlist.",
             Foreground = Hex("#858C9B"), FontSize = 12, Margin = new Thickness(0, 5, 0, 0), TextWrapping = TextWrapping.Wrap,
         });
         _link.Margin = new Thickness(0, 18, 0, 0);
@@ -86,8 +96,12 @@ public sealed class AddLinkWindow : SinkDialog
             if (Clipboard.ContainsText())
             {
                 var text = Clipboard.GetText().Trim();
-                if (text.Contains("youtu", StringComparison.OrdinalIgnoreCase) && Uri.TryCreate(text, UriKind.Absolute, out _))
-                    _link.Text = text;
+                // Only auto-fill for a clipboard that's actually link-shaped —
+                // one or more lines that each look like a URL — so an ordinary
+                // copied sentence doesn't land in the box uninvited.
+                var lines = text.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+                if (lines.Count > 0 && lines.All(l => l.Contains("youtu", StringComparison.OrdinalIgnoreCase) && Uri.TryCreate(l, UriKind.Absolute, out _)))
+                    _link.Text = string.Join('\n', lines);
             }
         }
         catch (Exception e) when (e is System.Runtime.InteropServices.COMException or OutOfMemoryException) { }
@@ -96,7 +110,7 @@ public sealed class AddLinkWindow : SinkDialog
 
     private void Accept()
     {
-        if (string.IsNullOrWhiteSpace(Link)) return;
+        if (Links.Count == 0) return;
         DialogResult = true;
     }
 }
