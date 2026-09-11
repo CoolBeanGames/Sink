@@ -19,6 +19,13 @@ public sealed class Track
     /// <summary>Heart-icon favorite (task 127 — Reflect).</summary>
     public bool IsFavorite { get; set; }
 
+    /// <summary>
+    /// This track's PlayCount on each iPod (keyed by device serial) as of the
+    /// last sync — the baseline the next sync diffs against so device plays
+    /// aren't double-counted into Reflect (task 128).
+    /// </summary>
+    public Dictionary<string, int>? SyncedIpodPlayCounts { get; set; }
+
     /// <summary>Absolute path to extracted cover art (jpg/png) under %AppData%/Sink/artwork, if any.</summary>
     public string? ArtworkPath { get; set; }
 

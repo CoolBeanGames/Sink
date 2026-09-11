@@ -49,6 +49,43 @@ public partial class MainWindow
         ReflectStore.Save(_listenEvents);
     }
 
+    /// <summary>
+    /// Reconciles song play counts against a just-read iPod library, diffing
+    /// each track's on-device PlayCount against the baseline recorded at the
+    /// last sync so the same device plays never get folded into Reflect twice
+    /// (task 128). Matched by (Title, Artist, Album, TrackNumber) — the same
+    /// identity IpodDbTrack.Key already uses for its own matching.
+    /// </summary>
+    private void SyncMusicPlayCountsFromIpod(Services.Ipod.IpodLibrary library)
+    {
+        var deviceId = library.SerialNumber;
+        if (string.IsNullOrWhiteSpace(deviceId)) return; // no stable per-device identity to baseline against
+        var byKey = library.Tracks.Where(t => !t.IsPodcast).ToLookup(t => t.Key);
+        var recorded = 0;
+        foreach (var track in _tracks)
+        {
+            var key = $"{track.Title}{track.Artist}{track.Album}{track.TrackNumber}".ToLowerInvariant();
+            var deviceTrack = byKey[key].FirstOrDefault();
+            if (deviceTrack is null) continue;
+
+            var deviceCount = Math.Max(0, deviceTrack.PlayCount);
+            track.SyncedIpodPlayCounts ??= [];
+            var baseline = track.SyncedIpodPlayCounts.GetValueOrDefault(deviceId, 0);
+            var delta = deviceCount - baseline;
+            if (delta > 0)
+            {
+                for (var i = 0; i < delta; i++)
+                    _listenEvents.Add(new ListenEvent { Kind = ListenKind.Song, ItemId = track.Id, Duration = track.Duration, Completed = true });
+                recorded += delta;
+            }
+            track.SyncedIpodPlayCounts[deviceId] = deviceCount;
+        }
+        if (recorded == 0) return;
+        ReflectStore.Save(_listenEvents);
+        SaveLibrary();
+        Services.Log.Info($"Reflect: folded in {recorded} iPod play{(recorded == 1 ? "" : "s")} from {deviceId}");
+    }
+
     // ---- View switching -------------------------------------------------
 
     private void ShowReflectSource_Click(object sender, RoutedEventArgs e)

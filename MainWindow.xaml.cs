@@ -283,6 +283,7 @@ public partial class MainWindow : Window
             PlaybackStatus.Text = $"Read {library.Tracks.Count} track{(library.Tracks.Count == 1 ? "" : "s")} from {readableName}";
             ApplyIpodLibraryChrome(library, readableName);
             SyncPodcastStatusFromIpod();
+            SyncMusicPlayCountsFromIpod(library); // task 128
         }
         catch (Exception ex)
         {

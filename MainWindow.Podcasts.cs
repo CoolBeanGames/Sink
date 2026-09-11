@@ -608,6 +608,7 @@ public partial class MainWindow
                 episode.IsPlayed = true;
                 episode.PositionSeconds = episode.Duration.TotalSeconds;
                 if (episode.IsDownloaded) PodcastRules.DropDownload(episode);
+                RecordPodcastListen(episode.Id, episode.Duration, completed: true); // task 128
                 changed = true;
             }
 
