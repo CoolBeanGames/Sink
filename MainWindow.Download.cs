@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Threading;
 using Sink.Dialogs;
@@ -34,9 +36,59 @@ public partial class MainWindow
         RefreshDownloadChrome();
     }
 
-    /// <summary>Persists every root-level failed link so it survives a restart (task 135).</summary>
+    // ---- Per-row "busy" spinner --------------------------------------
+    //
+    // Used to be a XAML DataTrigger + Storyboard with RepeatBehavior=Forever
+    // inside the (virtualized) tree's HierarchicalDataTemplate. A recycled
+    // container reused for a different row while that forever-repeating
+    // storyboard was still attached could leave WPF's animation clock
+    // pointing at a transform it now treats as frozen, throwing "Cannot
+    // animate ... on an immutable object instance" — repeatedly, once per
+    // frame, which is what produced a wall of cascading error dialogs and
+    // eventually crashed the app outright. Every other spinner in this app
+    // already drives its animation from code-behind instead of a shared
+    // XAML storyboard; do the same here.
+    private void TrackSpinner_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: DownloadNode node } grid) return;
+        PropertyChangedEventHandler handler = (_, args) =>
+        {
+            if (args.PropertyName is nameof(DownloadNode.IsBusy) or null) UpdateTrackSpinner(grid, node);
+        };
+        grid.Tag = handler;
+        node.PropertyChanged += handler;
+        UpdateTrackSpinner(grid, node);
+    }
+
+    private void TrackSpinner_Unloaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: DownloadNode node } grid) return;
+        if (grid.Tag is PropertyChangedEventHandler handler) node.PropertyChanged -= handler;
+        if (grid.RenderTransform is RotateTransform rt) rt.BeginAnimation(RotateTransform.AngleProperty, null);
+    }
+
+    private static void UpdateTrackSpinner(FrameworkElement grid, DownloadNode node)
+    {
+        grid.Visibility = node.IsBusy ? Visibility.Visible : Visibility.Collapsed;
+        if (grid.RenderTransform is not RotateTransform rt) return;
+        rt.BeginAnimation(RotateTransform.AngleProperty, node.IsBusy
+            ? new DoubleAnimation(0, 360, TimeSpan.FromSeconds(0.9)) { RepeatBehavior = RepeatBehavior.Forever }
+            : null);
+    }
+
+    /// <summary>
+    /// Persists every root-level link that hasn't finished successfully —
+    /// failed, or still mid-download — so it survives a restart (task 135).
+    /// Only covered explicitly-failed links before; a crash mid-download
+    /// (see task 149) killed the process before a node ever reached
+    /// DownloadState.Failed, so nothing about it was ever saved and the user
+    /// had to re-paste the same links after every crash. Called after each
+    /// item finishes in StartDownloads_Click, not just once at the very end,
+    /// so an abrupt crash only loses ground back to the last-completed item
+    /// rather than the whole run.
+    /// </summary>
     private void SaveFailedDownloadQueue() =>
-        DownloadQueueStore.Save(_rootNodes.Where(n => n.State == DownloadState.Failed));
+        DownloadQueueStore.Save(_rootNodes.Where(n => n.State != DownloadState.Done));
 
     // ---- View switching -------------------------------------------------
 
@@ -134,6 +186,7 @@ public partial class MainWindow
             {
                 node.StatusText = "Ready";
             }
+            SaveFailedDownloadQueue(); // a pasted-and-scanned link is durable even if never downloaded yet (task 149)
         }
         catch (Exception ex)
         {
@@ -902,6 +955,7 @@ public partial class MainWindow
                     Log.Error($"Download failed for {node.Name} ({node.Url})", ex);
                 }
                 UpdateAggregateProgress(queue);
+                SaveFailedDownloadQueue(); // durable after every item, not just once the whole run finishes (task 149)
             }
         }
         finally
