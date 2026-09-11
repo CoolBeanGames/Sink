@@ -147,16 +147,35 @@ public static class IpodReader
         try
         {
             var file = Path.Combine(ipodRoot, "iPod_Control", "Device", "SysInfo");
-            if (!File.Exists(file)) return;
-            foreach (var line in File.ReadAllLines(file))
-            {
-                var idx = line.IndexOf(':');
-                if (idx <= 0) continue;
-                var key = line[..idx].Trim();
-                var value = line[(idx + 1)..].Trim();
-                if (key == "ModelNumStr") library.ModelNumber = value.TrimStart('x', 'X');
-                else if (key == "pszSerialNumber") library.SerialNumber = value;
-            }
+            if (File.Exists(file))
+                foreach (var line in File.ReadAllLines(file))
+                {
+                    var idx = line.IndexOf(':');
+                    if (idx <= 0) continue;
+                    var key = line[..idx].Trim();
+                    var value = line[(idx + 1)..].Trim();
+                    if (key == "ModelNumStr") library.ModelNumber = value.TrimStart('x', 'X');
+                    else if (key == "pszSerialNumber") library.SerialNumber = value;
+                }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+
+        if (!string.IsNullOrWhiteSpace(library.SerialNumber)) return;
+        // The legacy SysInfo file above is empty on at least one real device
+        // (confirmed while diagnosing task 154) — with no serial number,
+        // SyncMusicPlayCountsFromIpod had nothing to baseline against and
+        // silently skipped every device, so no play count ever reached
+        // Reflect. SysInfoExtended (the plist Clickwheel itself requires for
+        // database hashing — see EnsureExtendedSysInfo) carries the same
+        // serial under its own SerialNumber key, so fall back to that.
+        try
+        {
+            var extended = Path.Combine(ipodRoot, "iPod_Control", "Device", "SysInfoExtended");
+            if (!File.Exists(extended)) return;
+            var match = System.Text.RegularExpressions.Regex.Match(
+                File.ReadAllText(extended), @"<key>SerialNumber</key>\s*<string>([^<]+)</string>");
+            if (match.Success) library.SerialNumber = match.Groups[1].Value.Trim();
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
@@ -172,5 +191,5 @@ public static class IpodReader
         return Path.Combine(ipodRoot, relative);
     }
 
-    private static int SafeInt(uint value) => value > int.MaxValue ? 0 : (int)value;
+    internal static int SafeInt(uint value) => value > int.MaxValue ? 0 : (int)value;
 }

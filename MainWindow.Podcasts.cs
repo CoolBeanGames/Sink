@@ -581,18 +581,26 @@ public partial class MainWindow
         var root = _ipodDevice?.LibraryRoot;
         if (_ipodLibrary is null || root is null || _podcasts.Count == 0) return;
 
-        var byName = _ipodLibrary.Tracks
-            .Where(t => !string.IsNullOrWhiteSpace(t.FilePath))
-            .GroupBy(t => Path.GetFileName(t.FilePath), StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        // Matching by filename never worked: the device always renames every
+        // synced file to its own opaque, hashed name under iPod_Control/Music
+        // (confirmed against a real device — e.g. "SPJTQK.mp3" — nothing like
+        // the original), so this comparison was comparing the on-device
+        // random name to the local download's own filename and never once
+        // matched. EpisodeTrack (below, used to push an episode in the first
+        // place) already writes Title/Artist/Album as episode.Title/show
+        // .Title/show.Title, so match back the same way music play counts do
+        // (task 154).
+        var byKey = _ipodLibrary.Tracks.Where(t => t.IsPodcast).ToLookup(t => t.Key);
 
         var changed = false;
-        var toPush = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
-        foreach (var episode in _podcasts.SelectMany(p => p.Episodes))
+        var toPush = new Dictionary<string, long>();
+        foreach (var podcast in _podcasts)
+        foreach (var episode in podcast.Episodes)
         {
             if (string.IsNullOrEmpty(episode.LocalPath)) continue;
-            var name = Path.GetFileName(episode.LocalPath);
-            if (!byName.TryGetValue(name, out var deviceTrack)) continue;
+            var key = Services.Ipod.IpodDbTrack.MakeKey(episode.Title, podcast.Title, podcast.Title, 0);
+            var deviceTrack = byKey[key].FirstOrDefault();
+            if (deviceTrack is null) continue;
 
             // Pull: take the further-along position between library and device.
             if (deviceTrack.BookmarkMs > episode.PositionSeconds * 1000 + 1500)
@@ -615,7 +623,7 @@ public partial class MainWindow
             // Push: our position is ahead of the device's bookmark.
             var ourMs = (long)(episode.PositionSeconds * 1000);
             if (!episode.IsPlayed && ourMs > deviceTrack.BookmarkMs + 1500)
-                toPush[name] = ourMs;
+                toPush[key] = ourMs;
         }
 
         if (toPush.Count > 0 && !_ipodWriting)

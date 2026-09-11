@@ -64,7 +64,7 @@ public partial class MainWindow
         var recorded = 0;
         foreach (var track in _tracks)
         {
-            var key = $"{track.Title}{track.Artist}{track.Album}{track.TrackNumber}".ToLowerInvariant();
+            var key = Services.Ipod.IpodDbTrack.MakeKey(track.Title, track.Artist, track.Album, track.TrackNumber);
             var deviceTrack = byKey[key].FirstOrDefault();
             if (deviceTrack is null) continue;
 
