@@ -999,6 +999,9 @@ public partial class MainWindow
             SetDownloadStatus(failed == 0
                 ? $"Finished — imported {imported} track{(imported == 1 ? "" : "s")}"
                 : $"Finished — {done} done, {failed} failed, imported {imported} track{(imported == 1 ? "" : "s")}");
+            if (done + failed > 0)
+                PostNotification("download-finished", null,
+                    $"Download finished — {done} success, {failed} failure{(failed == 1 ? "" : "s")}, {imported} copied to library");
 
             if (done > 0) PruneSucceeded();
             SaveFailedDownloadQueue();

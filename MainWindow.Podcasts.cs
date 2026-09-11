@@ -504,36 +504,41 @@ public partial class MainWindow
         Duration = episode.Duration,
     };
 
-    /// <summary>Pushes every downloaded episode across all subscribed shows onto the device (task 137 — "Sync podcasts" did nothing but spin the indicator).</summary>
-    private async Task SyncAllPodcastsToDevice()
+    /// <summary>Pushes every downloaded episode across all subscribed shows onto the device (task 137 — "Sync podcasts" did nothing but spin the indicator). Returns how many episodes were actually added.</summary>
+    private async Task<int> SyncAllPodcastsToDevice()
     {
-        if (!_ipodConnected) { PodcastStatus.Text = "Connect an iPod before syncing"; return; }
+        if (!_ipodConnected) { PodcastStatus.Text = "Connect an iPod before syncing"; return 0; }
         var tracks = _podcasts
             .SelectMany(show => show.Episodes.Where(e => e.IsDownloaded).Select(e => EpisodeTrack(show, e)))
             .ToList();
-        if (tracks.Count == 0) { PodcastStatus.Text = "No downloaded episodes to sync"; return; }
+        if (tracks.Count == 0) { PodcastStatus.Text = "No downloaded episodes to sync"; return 0; }
         PodcastStatus.Text = $"Syncing {tracks.Count} episode{(tracks.Count == 1 ? "" : "s")} to iPod";
-        await SyncTracksToDevice(tracks);
+        return await SyncTracksToDevice(tracks);
     }
 
     // ---- Auto-download rules (task 62) ----------------------------------
 
-    private async Task RunAutoDownloadsAsync(Podcast podcast)
+    /// <summary>Returns how many episodes it actually downloaded, for the "podcast downloads complete" notification.</summary>
+    private async Task<int> RunAutoDownloadsAsync(Podcast podcast)
     {
         PodcastRules.Reconcile(podcast);
+        var downloaded = 0;
         foreach (var episode in PodcastRules.DesiredDownloads(podcast))
         {
             if (episode.IsDownloaded) continue;
             await DownloadEpisodeAsync(podcast, episode);
+            if (episode.IsDownloaded) downloaded++;
         }
         PodcastStore.Save(_podcasts);
         RenderPodcasts();
+        return downloaded;
     }
 
     private async Task RefreshAllFeedsAsync()
     {
         foreach (var podcast in _podcasts.ToList())
         {
+            var knownGuids = podcast.Episodes.Select(e => e.EpisodeGuid).ToHashSet();
             try
             {
                 var fresh = await PodcastService.LoadFeedAsync(podcast.FeedUrl);
@@ -541,11 +546,21 @@ public partial class MainWindow
             }
             catch (Exception) { /* offline / bad feed — keep what we have */ }
             PodcastRules.Reconcile(podcast);
+
+            var newCount = podcast.Episodes.Count(e => !knownGuids.Contains(e.EpisodeGuid));
+            if (newCount > 0)
+                PostNotification("new-episodes", podcast.Id.ToString(),
+                    $"{newCount} new episode{(newCount == 1 ? "" : "s")} for {podcast.Title}");
         }
         PodcastStore.Save(_podcasts);
         RenderPodcasts();
         UpdatePodcastSidebarDot();
-        foreach (var podcast in _podcasts.ToList()) await RunAutoDownloadsAsync(podcast);
+
+        var totalDownloaded = 0;
+        foreach (var podcast in _podcasts.ToList()) totalDownloaded += await RunAutoDownloadsAsync(podcast);
+        if (totalDownloaded > 0)
+            PostNotification("podcast-downloads", null,
+                $"Podcast downloads complete — {totalDownloaded} episode{(totalDownloaded == 1 ? "" : "s")} downloaded");
     }
 
     // ---- iPod play-status + bookmark sync (tasks 63, 67) ----------------

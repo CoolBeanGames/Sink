@@ -82,6 +82,7 @@ public partial class MainWindow : Window
         RenderLibrary();
         InitDownloadPage();
         InitPodcasts();
+        InitNotifications();
         _ipodPollTimer.Tick += (_, _) => PollForIpod();
         _ipodPollTimer.Start();
         Loaded += (_, _) => PollForIpod();
@@ -215,8 +216,10 @@ public partial class MainWindow : Window
                     _ipodRootlessStreak = 0;
                     _ignoreUnreadableIpod = true;
                     Services.Log.Info($"iPod's readable volume disappeared (now {device.Name}, {device.Key}) — treating as a Windows-side eject");
+                    var ejectedName = _ipodDevice?.Name ?? device.Name;
                     SetIpodConnected(false);
                     LoadIpodLibrary(null);
+                    PostNotification("device", null, $"{ejectedName} disconnected");
                     if (wasManual) PlaybackStatus.Text = "iPod ejected in Windows";
                     return;
                 }
@@ -240,6 +243,7 @@ public partial class MainWindow : Window
             {
                 Services.Log.Info($"iPod connected: {device.Name} ({device.LibraryRoot ?? "no library root"})");
                 PlaybackStatus.Text = $"Connected {device.Name}";
+                PostNotification("device", null, $"{device.Name} connected");
                 if (Services.AppSettings.Current.SyncOnConnect && !_ipodWriting)
                     _ = SyncOnConnectAsync();
             }
@@ -247,11 +251,13 @@ public partial class MainWindow : Window
             return;
         }
 
+        var wasConnectedName = _ipodConnected ? _ipodDevice?.Name : null;
         _ejectedIpodKey = null; // physically gone now; a future reconnect is a fresh plug-in
         _ignoreUnreadableIpod = false;
         _ipodRootlessStreak = 0;
         if (_ipodConnected && _ipodDevice is not null) SetIpodConnected(false);
         if (_ipodLibraryRoot is not null) LoadIpodLibrary(null);
+        if (wasConnectedName is not null) PostNotification("device", null, $"{wasConnectedName} disconnected");
         if (wasManual) PlaybackStatus.Text = "No iPod found — check the cable, or click the record to simulate one";
     }
 
@@ -763,15 +769,20 @@ public partial class MainWindow : Window
     private async void SyncIpod_Click(object sender, RoutedEventArgs e)
     {
         var header = (sender as MenuItem)?.Header as string ?? "";
+        var songsAdded = 0;
+        var podcastsAdded = 0;
         if (header is "Sync all" or "Sync music")
         {
-            await SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
+            songsAdded = await SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
             await SyncAllPlaylistsToDevice();
         }
         if (header is "Sync all" or "Sync podcasts")
-            await SyncAllPodcastsToDevice();
+            podcastsAdded = await SyncAllPodcastsToDevice();
         if (header is not ("Sync all" or "Sync music" or "Sync podcasts"))
             StartIpodSync();
+        if (songsAdded > 0 || podcastsAdded > 0)
+            PostNotification("sync-complete", null,
+                $"Syncing complete — {songsAdded} song{(songsAdded == 1 ? "" : "s")} synced, {podcastsAdded} podcast{(podcastsAdded == 1 ? "" : "s")} synced");
     }
 
     private bool _ipodWriting;
@@ -779,30 +790,33 @@ public partial class MainWindow : Window
     /// <summary>Auto-sync on connect (task 138 — only tracks were pushed, playlist membership never followed).</summary>
     private async Task SyncOnConnectAsync()
     {
-        await SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
+        var added = await SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
         await SyncAllPlaylistsToDevice();
+        if (added > 0) PostNotification("sync-complete", null, $"Syncing complete — {added} song{(added == 1 ? "" : "s")} synced, 0 podcasts synced");
     }
 
-    /// <summary>Syncs tracks to the connected iPod — really writes the iTunesDB when the device is readable, otherwise stages them in the pending list.</summary>
-    private async Task SyncTracksToDevice(IReadOnlyList<Track> tracks)
+    /// <summary>Syncs tracks to the connected iPod — really writes the iTunesDB when the device is readable, otherwise stages them in the pending list. Returns how many tracks were actually added.</summary>
+    private async Task<int> SyncTracksToDevice(IReadOnlyList<Track> tracks)
     {
-        if (_ipodWriting) { PlaybackStatus.Text = "iPod is busy…"; return; }
+        if (_ipodWriting) { PlaybackStatus.Text = "iPod is busy…"; return 0; }
         var root = _ipodDevice?.LibraryRoot;
         if (root is null)
         {
             MarkSynced(tracks.Where(t => !t.ExcludedFromShuffle).Select(t => t.Id), announce: true);
             if (_ipodConnected) StartIpodSync();
-            return;
+            return 0;
         }
 
         var payload = tracks.ToList();
         _ipodWriting = true;
         StartIpodSync(indefinite: true);
         var progress = SyncProgress();
+        var added = 0;
         try
         {
             var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.Sync(root, payload, progress));
             PlaybackStatus.Text = result.Summary;
+            added = result.Added;
         }
         catch (Exception ex)
         {
@@ -817,6 +831,7 @@ public partial class MainWindow : Window
             StopIpodSync();
             LoadIpodLibrary(root);
         }
+        return added;
     }
 
     /// <summary>Syncs one playlist's tracks to the connected iPod, and (when the device's database is writable) also creates/updates the matching on-device playlist.</summary>
@@ -1011,9 +1026,11 @@ public partial class MainWindow : Window
         if (_ipodWriting) { PlaybackStatus.Text = "iPod is busy — wait for the sync to finish before ejecting"; return; }
 
         var root = _ipodDevice?.LibraryRoot;
+        var ejectedName = _ipodDevice?.Name;
         _ejectedIpodKey = _ipodDevice?.Key;
         _ignoreUnreadableIpod = true; // the drive going unreadable right after this is our own eject, not a ghost reconnect
         SetIpodConnected(false);
+        if (ejectedName is not null) PostNotification("device", null, $"{ejectedName} disconnected");
         if (root is not null)
         {
             var ejected = Services.DriveEject.TryEject(root);
@@ -1187,7 +1204,15 @@ public partial class MainWindow : Window
         var imported = MusicImporter.Import(paths);
         foreach (var track in imported) _tracks.Add(track);
         RenderLibrary();
-        if (imported.Count > 0) SaveLibrary();
+        if (imported.Count > 0)
+        {
+            SaveLibrary();
+            var albums = imported.Select(t => t.Album).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var text = albums.Count == 1 && !string.IsNullOrWhiteSpace(albums[0])
+                ? $"Music import complete — {imported.Count} file{(imported.Count == 1 ? "" : "s")} copied ({albums[0]})"
+                : $"Music import complete — {imported.Count} file{(imported.Count == 1 ? "" : "s")} copied";
+            PostNotification("music-import", Guid.NewGuid().ToString(), text);
+        }
         PlaybackStatus.Text = imported.Count > 0 ? $"Imported {imported.Count} track{(imported.Count == 1 ? "" : "s")}" : "No supported audio files found";
         e.Handled = true;
     }
