@@ -24,6 +24,7 @@ public partial class MainWindow
         _source = LibrarySource.Ipod;
         ApplySourceChrome();
         _ipodPodcastsActive = true;
+        _ipodPlaylistsActive = false;
         _ipodPodcastShow = null;
         SetActiveNavigation(IpodPodcastsButton);
         RenderIpodPodcasts();
@@ -44,6 +45,7 @@ public partial class MainWindow
     {
         GroupsScroller.Visibility = Visibility.Collapsed;
         TracksBorder.Visibility = Visibility.Collapsed;
+        IpodPlaylistsArea.Visibility = Visibility.Collapsed;
         IpodPodcastsArea.Visibility = Visibility.Visible;
         BackButton.Visibility = Visibility.Collapsed;
 

@@ -229,6 +229,43 @@ public static class IpodWriteService
         }
     }
 
+    /// <summary>Removes just the named playlist from the device — its tracks are left alone, matching how "delete playlist" already works for the library's own playlists (task 134).</summary>
+    public static bool RemovePlaylist(string root, string playlistName)
+    {
+        Log.Info($"iPod playlist remove: \"{playlistName}\", root {root}");
+        IPod ipod;
+        try { ipod = IpodReader.Open(root); ipod.AssertIsWritable(); }
+        catch (Exception ex) { Log.Error("iPod playlist remove: open failed", ex); return false; }
+
+        string? backup = null;
+        var locked = false;
+        try
+        {
+            var playlist = ipod.Playlists.GetPlaylistByName(playlistName);
+            if (playlist is null || playlist.IsMaster) return false;
+
+            backup = BackupDatabase(root);
+            IPodBackup.EnableBackups = false;
+            ipod.AcquireLock();
+            locked = true;
+
+            ipod.Playlists.Remove(playlist, deleteTracks: false);
+            ipod.SaveChanges();
+            DriveEject.Flush(root);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("iPod playlist remove failed", ex);
+            if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
+            return false;
+        }
+        finally
+        {
+            if (locked) { try { ipod.ReleaseLock(); } catch { } }
+        }
+    }
+
     public static IpodSyncResult Remove(string root, IReadOnlyCollection<string> absoluteFilePaths)
     {
         var targets = absoluteFilePaths

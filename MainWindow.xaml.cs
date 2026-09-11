@@ -293,6 +293,7 @@ public partial class MainWindow : Window
         }
         if (_source != LibrarySource.Ipod) return;
         if (_ipodPodcastsActive) RenderIpodPodcasts();
+        else if (_ipodPlaylistsActive) RenderIpodPlaylists();
         else RenderLibrary();
     }
 
@@ -427,7 +428,7 @@ public partial class MainWindow : Window
 
     private void SetActiveNavigation(Button? active)
     {
-        foreach (var button in new[] { ArtistsButton, AlbumsButton, GenresButton, SongsButton, IpodArtistsButton, IpodAlbumsButton, IpodGenresButton, IpodSongsButton, IpodPodcastsButton })
+        foreach (var button in new[] { ArtistsButton, AlbumsButton, GenresButton, SongsButton, IpodArtistsButton, IpodAlbumsButton, IpodGenresButton, IpodSongsButton, IpodPodcastsButton, IpodPlaylistsButton })
         {
             var name = button.Name.Replace("Ipod", "").Replace("Button", "");
             button.Tag = button == active ? "Active" : name;
@@ -437,7 +438,9 @@ public partial class MainWindow : Window
     private void RenderLibrary()
     {
         _ipodPodcastsActive = false;
+        _ipodPlaylistsActive = false;
         IpodPodcastsArea.Visibility = Visibility.Collapsed;
+        IpodPlaylistsArea.Visibility = Visibility.Collapsed;
         MetadataIndex.Rebuild(_tracks);
         var query = SearchBox?.Text?.Trim() ?? "";
         var ipodOnDevice = _source == LibrarySource.Ipod && _ipodLibrary is not null;

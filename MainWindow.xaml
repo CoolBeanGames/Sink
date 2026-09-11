@@ -147,6 +147,7 @@
                         <Button x:Name="IpodGenresButton" Content="◇    Genres" Tag="Genres" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
                         <Button x:Name="IpodSongsButton" Content="♫    Songs" Tag="Songs" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
                         <Button x:Name="IpodPodcastsButton" Content="◔    Podcasts" Click="IpodPodcastsButton_Click" Style="{StaticResource NavButtonStyle}"/>
+                        <Button x:Name="IpodPlaylistsButton" Content="☰    Playlists" Click="IpodPlaylistsButton_Click" Style="{StaticResource NavButtonStyle}"/>
                         <TextBlock x:Name="IpodNavHint" Text="Drag music onto IPOD to sync" Foreground="#6E7584" FontSize="10" Margin="12,7,0,2"/>
                     </StackPanel>
                     <Button x:Name="DownloadHeaderButton" Click="ShowDownloadSource_Click" Style="{StaticResource SectionHeaderButtonStyle}" Margin="0,14,0,0">
@@ -293,6 +294,55 @@
                                         <Button DockPanel.Dock="Right" Content="Unsync" Click="IpodPodcastUnsync_Click"
                                                 Background="Transparent" Foreground="#E0679B" BorderThickness="0" Cursor="Hand"/>
                                         <TextBlock Text="{Binding Title}" Foreground="#E7E9EE" FontSize="12.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Grid>
+            </Border>
+            <Border x:Name="IpodPlaylistsArea" Grid.Row="1" Margin="0,28,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#12151C" Visibility="Collapsed">
+                <Grid>
+                    <ListBox x:Name="IpodPlaylistsList" Background="Transparent" BorderThickness="0" MouseDoubleClick="IpodPlaylist_MouseDoubleClick">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="16,12"/>
+                                <Setter Property="BorderBrush" Value="#20252F"/>
+                                <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Content="Unsync" Click="IpodPlaylistUnsync_Click"
+                                            Background="Transparent" Foreground="#E0679B" BorderThickness="0" Cursor="Hand"/>
+                                    <TextBlock Text="{Binding Count}" DockPanel.Dock="Right" Foreground="#7D8493" FontSize="11" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                                    <TextBlock Text="{Binding Name}" Foreground="#E7E9EE" FontSize="13" VerticalAlignment="Center"/>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Grid x:Name="IpodPlaylistTracksList" Visibility="Collapsed">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                        <Button x:Name="IpodPlaylistBackButton" Content="← Back to playlists" Click="IpodPlaylistBack_Click" HorizontalAlignment="Left"
+                                Margin="14,12,0,0" Background="Transparent" Foreground="#9D91FF" BorderThickness="0" Cursor="Hand"/>
+                        <ListBox Grid.Row="1" x:Name="IpodPlaylistTracksGrid" Background="Transparent" BorderThickness="0" Margin="0,6,0,0">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="16,10"/>
+                                    <Setter Property="BorderBrush" Value="#20252F"/>
+                                    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel>
+                                        <Button DockPanel.Dock="Right" Content="Unsync" Click="IpodPodcastUnsync_Click"
+                                                Background="Transparent" Foreground="#E0679B" BorderThickness="0" Cursor="Hand"/>
+                                        <TextBlock Text="{Binding Title}" Foreground="#E7E9EE" FontSize="12.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding Artist}" Foreground="#7D8493" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
                                     </DockPanel>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
