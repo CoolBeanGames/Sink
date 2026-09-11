@@ -84,6 +84,7 @@ public partial class MainWindow : Window
         InitPodcasts();
         InitNotifications();
         InitTagsPage();
+        InitReflect();
         _ipodPollTimer.Tick += (_, _) => PollForIpod();
         _ipodPollTimer.Start();
         Loaded += (_, _) => PollForIpod();
@@ -370,6 +371,7 @@ public partial class MainWindow : Window
         ExitDownloadView();
         ExitPodcastView();
         ExitTagsView();
+        ExitReflectView();
         var music = _source == LibrarySource.Music;
         MusicNav.Visibility = music ? Visibility.Visible : Visibility.Collapsed;
         IpodNav.Visibility = music ? Visibility.Collapsed : Visibility.Visible;
@@ -566,6 +568,7 @@ public partial class MainWindow : Window
     {
         StopPreview("started a library track");
         if (_playingEpisode is not null) StopPodcast(markPlayed: false);
+        RecordSongListenIfDue(); // log whatever was playing before it's replaced (task 127)
         _mediaPlayer.Stop();
         _mediaPlayer.Close();
         _nowPlaying = track;
@@ -1274,6 +1277,7 @@ public partial class MainWindow : Window
         menu.Items.Add(Header(label));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Play", () => PlayTracks(tracks)));
+        menu.Items.Add(Item(tracks.Any(t => !t.IsFavorite) ? "♥ Favorite" : "♡ Remove favorite", () => { ToggleFavorite(tracks); TracksGrid.Items.Refresh(); }));
         menu.Items.Add(Item("Edit metadata…", () => EditMetadata(tracks)));
         menu.Items.Add(AddToPlaylistMenu(tracks));
         if (_activePlaylist is { } activePlaylist)
@@ -1305,6 +1309,7 @@ public partial class MainWindow : Window
         menu.Items.Add(Header(single ? cards[0].Name : $"{cards.Count} {kind.ToString().ToLowerInvariant()}"));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Play", () => PlayTracks(tracks)));
+        menu.Items.Add(Item(tracks.Any(t => !t.IsFavorite) ? "♥ Favorite" : "♡ Remove favorite", () => { ToggleFavorite(tracks); TracksGrid.Items.Refresh(); }));
         if (kind == LibraryCategory.Genres)
         {
             if (single) menu.Items.Add(Item("Rename…", () => RenameGenre(cards[0].Name)));

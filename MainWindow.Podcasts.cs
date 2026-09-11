@@ -60,6 +60,7 @@ public partial class MainWindow
     {
         ExitDownloadView(); // stop any preview and drop the download page underneath (task 122)
         ExitTagsView();
+        ExitReflectView();
         _podcastViewActive = true;
         MusicPage.Visibility = Visibility.Collapsed;
         DownloadPage.Visibility = Visibility.Collapsed;
@@ -409,6 +410,8 @@ public partial class MainWindow
         _podcastTimer.Stop();
         if (_playingEpisode is not null)
         {
+            var elapsed = _podcastPlayer.NaturalDuration.HasTimeSpan ? _podcastPlayer.Position : TimeSpan.Zero;
+            RecordPodcastListen(_playingEpisode.Id, elapsed, markPlayed); // task 127
             if (markPlayed) _playingEpisode.IsPlayed = true;
             if (_playingEpisode.IsPlayed && _playingEpisode.IsDownloaded) PodcastRules.DropDownload(_playingEpisode);
             PodcastStore.Save(_podcasts);

@@ -4,7 +4,7 @@
         xmlns:models="clr-namespace:Sink.Models"
         xmlns:dl="clr-namespace:Sink.Services.Download"
         xmlns:ctrl="clr-namespace:Sink.Controls"
-        Title="Sink" Icon="Assets/sink.ico" Width="1260" Height="800" MinWidth="940" MinHeight="620" WindowStartupLocation="CenterScreen" Background="#0B0D12" AllowDrop="True" DragEnter="Window_DragEnter" DragOver="Window_DragOver" DragLeave="Window_DragLeave" Drop="Window_Drop">
+        Title="Sink" Icon="Assets/sink.ico" Width="1260" Height="800" MinWidth="940" MinHeight="620" WindowStartupLocation="CenterScreen" Background="#0B0D12" AllowDrop="True" DragEnter="Window_DragEnter" DragOver="Window_DragOver" DragLeave="Window_DragLeave" Drop="Window_Drop" Closing="Window_Closing">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="B2V"/>
         <Style x:Key="EpisodeIconButton" TargetType="Button">
@@ -166,6 +166,14 @@
                             <TextBlock Text="TAGS" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
+                    <Button x:Name="ReflectHeaderButton" Click="ShowReflectSource_Click" Style="{StaticResource SectionHeaderButtonStyle}" Margin="0,4,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="15" Height="15" Margin="0,0,7,0">
+                                <Path Data="M1,13 L4,7 L7,10 L13,1" Stroke="#8B7CFF" StrokeThickness="1.6" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                            </Border>
+                            <TextBlock Text="REFLECT" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
                 <TextBlock x:Name="VersionText" Grid.Row="6" Margin="10,14,0,0" Foreground="#5A616E" FontSize="10" Text="v0.13.0"/>
             </Grid>
@@ -218,7 +226,26 @@
                 <Border x:Name="SelectionBar" Visibility="Collapsed" Background="Transparent" BorderBrush="#262C38" BorderThickness="0,0,0,1" Padding="15,9"><DockPanel><Button Content="Clear" DockPanel.Dock="Right" Click="ClearSelection_Click" Background="Transparent" Foreground="#9D91FF" BorderThickness="0"/><TextBlock x:Name="SelectionText" Foreground="#7D8493" FontSize="11" VerticalAlignment="Center"/></DockPanel></Border>
                 <DataGrid x:Name="TracksGrid" Grid.Row="1" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="None" Background="Transparent" BorderThickness="0" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow" SelectionChanged="TracksGrid_SelectionChanged" MouseDoubleClick="TracksGrid_MouseDoubleClick" PreviewMouseLeftButtonDown="TracksGrid_PreviewMouseLeftButtonDown" PreviewMouseMove="TracksGrid_PreviewMouseMove" ContextMenuOpening="TracksGrid_ContextMenuOpening">
                     <DataGrid.ContextMenu><ContextMenu/></DataGrid.ContextMenu>
-                    <DataGrid.Columns><DataGridTextColumn Header="#" Binding="{Binding TrackNumber}" Width="48"/><DataGridTextColumn Header="TITLE" Binding="{Binding Title}" Width="2*"/><DataGridTextColumn Header="ARTIST" Binding="{Binding Artist}" Width="*"/><DataGridTextColumn Header="ALBUM" Binding="{Binding Album}" Width="*"/><DataGridTextColumn Header="GENRE" Binding="{Binding Genre}" Width="110"/><DataGridTextColumn Header="TIME" Binding="{Binding DurationText}" Width="70"/></DataGrid.Columns>
+                    <DataGrid.Columns>
+                        <DataGridTemplateColumn Header="♥" Width="30">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="♡" Foreground="#5A616E" FontSize="13" Cursor="Hand" HorizontalAlignment="Center" MouseLeftButtonDown="FavoriteGlyph_Click">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsFavorite}" Value="True">
+                                                        <Setter Property="Text" Value="♥"/>
+                                                        <Setter Property="Foreground" Value="#E0679B"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="#" Binding="{Binding TrackNumber}" Width="48"/><DataGridTextColumn Header="TITLE" Binding="{Binding Title}" Width="2*"/><DataGridTextColumn Header="ARTIST" Binding="{Binding Artist}" Width="*"/><DataGridTextColumn Header="ALBUM" Binding="{Binding Album}" Width="*"/><DataGridTextColumn Header="GENRE" Binding="{Binding Genre}" Width="110"/><DataGridTextColumn Header="TIME" Binding="{Binding DurationText}" Width="70"/></DataGrid.Columns>
                 </DataGrid>
                 </Grid>
             </Border>
@@ -473,6 +500,87 @@
                     </DataGrid>
                 </Grid>
             </Border>
+        </Grid>
+
+        <Grid x:Name="ReflectPage" Grid.Column="1" Margin="38,32,38,30" Visibility="Collapsed">
+            <Grid.Resources>
+                <Style x:Key="ReflectCard" TargetType="Border">
+                    <Setter Property="Background" Value="#12151C"/>
+                    <Setter Property="BorderBrush" Value="#262C38"/>
+                    <Setter Property="BorderThickness" Value="1"/>
+                    <Setter Property="CornerRadius" Value="12"/>
+                    <Setter Property="Padding" Value="18,15"/>
+                    <Setter Property="Margin" Value="0,0,14,14"/>
+                </Style>
+                <DataTemplate x:Key="RankedRowTemplate">
+                    <Grid Margin="0,4">
+                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding Name}" Foreground="#E7E9EE" FontSize="12.5" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Grid.Column="1" Text="{Binding Detail}" Foreground="#7D8493" FontSize="11" Margin="10,0,0,0"/>
+                    </Grid>
+                </DataTemplate>
+            </Grid.Resources>
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="0,0,4,0">
+                    <TextBlock Text="LISTENING HABITS" Style="{StaticResource EyebrowStyle}"/>
+                    <TextBlock Text="Reflect" FontSize="34" FontWeight="SemiBold" Margin="0,4,0,2"/>
+                    <TextBlock x:Name="ReflectYearSubtitle" Foreground="#7D8493" FontSize="12" Margin="0,0,0,20"/>
+
+                    <WrapPanel>
+                        <Border Style="{StaticResource ReflectCard}" Width="220">
+                            <StackPanel>
+                                <TextBlock Text="TOTAL LISTEN TIME" Style="{StaticResource EyebrowStyle}"/>
+                                <TextBlock x:Name="ReflectTotalTimeText" FontSize="26" FontWeight="SemiBold" Foreground="#F4F6FA" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ReflectCard}" Width="220">
+                            <StackPanel>
+                                <TextBlock Text="PODCAST HOURS LISTENED" Style="{StaticResource EyebrowStyle}"/>
+                                <TextBlock x:Name="ReflectPodcastHoursText" FontSize="26" FontWeight="SemiBold" Foreground="#F4F6FA" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ReflectCard}" Width="220">
+                            <StackPanel>
+                                <TextBlock Text="PODCAST EPISODES COMPLETED" Style="{StaticResource EyebrowStyle}"/>
+                                <TextBlock x:Name="ReflectEpisodesCompletedText" FontSize="26" FontWeight="SemiBold" Foreground="#F4F6FA" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </WrapPanel>
+
+                    <WrapPanel>
+                        <Border Style="{StaticResource ReflectCard}" Width="300">
+                            <StackPanel>
+                                <TextBlock Text="TOP 10 SONGS" Style="{StaticResource EyebrowStyle}"/>
+                                <ItemsControl x:Name="ReflectTopSongs" Margin="0,8,0,0" ItemTemplate="{StaticResource RankedRowTemplate}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ReflectCard}" Width="300">
+                            <StackPanel>
+                                <TextBlock Text="TOP 10 ALBUMS" Style="{StaticResource EyebrowStyle}"/>
+                                <ItemsControl x:Name="ReflectTopAlbums" Margin="0,8,0,0" ItemTemplate="{StaticResource RankedRowTemplate}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ReflectCard}" Width="300">
+                            <StackPanel>
+                                <TextBlock Text="TOP 10 ARTISTS" Style="{StaticResource EyebrowStyle}"/>
+                                <ItemsControl x:Name="ReflectTopArtists" Margin="0,8,0,0" ItemTemplate="{StaticResource RankedRowTemplate}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ReflectCard}" Width="300">
+                            <StackPanel>
+                                <TextBlock Text="TOP 5 GENRES" Style="{StaticResource EyebrowStyle}"/>
+                                <ItemsControl x:Name="ReflectTopGenres" Margin="0,8,0,0" ItemTemplate="{StaticResource RankedRowTemplate}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ReflectCard}" Width="300">
+                            <StackPanel>
+                                <TextBlock Text="TOP 5 PODCASTS" Style="{StaticResource EyebrowStyle}"/>
+                                <ItemsControl x:Name="ReflectTopPodcasts" Margin="0,8,0,0" ItemTemplate="{StaticResource RankedRowTemplate}"/>
+                            </StackPanel>
+                        </Border>
+                    </WrapPanel>
+                </StackPanel>
+            </ScrollViewer>
         </Grid>
 
         <Grid x:Name="PodcastPage" Grid.Column="1" Margin="38,32,38,24" Visibility="Collapsed">

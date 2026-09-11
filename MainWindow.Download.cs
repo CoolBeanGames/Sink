@@ -103,6 +103,7 @@ public partial class MainWindow
     {
         ExitPodcastView(); // was left showing underneath — task 122
         ExitTagsView();
+        ExitReflectView();
         _downloadViewActive = true;
         MusicPage.Visibility = Visibility.Collapsed;
         DownloadPage.Visibility = Visibility.Visible;

@@ -61,6 +61,7 @@ public partial class MainWindow
     {
         ExitDownloadView();
         ExitPodcastView();
+        ExitReflectView();
         _tagsViewActive = true;
         MusicPage.Visibility = Visibility.Collapsed;
         DownloadPage.Visibility = Visibility.Collapsed;
@@ -137,6 +138,7 @@ public partial class MainWindow
         menu.Items.Add(Header(tracks.Count == 1 ? tracks[0].Title : $"{tracks.Count} tracks"));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Play", () => PlayTracks(tracks)));
+        menu.Items.Add(Item(tracks.Any(t => !t.IsFavorite) ? "♥ Favorite" : "♡ Remove favorite", () => { ToggleFavorite(tracks); }));
         menu.Items.Add(Item("Edit metadata…", () => EditTagsMetadata(tracks)));
         menu.Items.Add(Item(tracks.Count == 1 ? "Translate title to English" : "Translate titles to English", () => _ = TranslateTracksAsync(tracks)));
         menu.Items.Add(Item("Set cover art…", () => SetTagsArtwork(tracks)));

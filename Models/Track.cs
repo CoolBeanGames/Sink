@@ -16,6 +16,9 @@ public sealed class Track
     public TimeSpan Duration { get; init; }
     public bool ExcludedFromShuffle { get; set; }
 
+    /// <summary>Heart-icon favorite (task 127 — Reflect).</summary>
+    public bool IsFavorite { get; set; }
+
     /// <summary>Absolute path to extracted cover art (jpg/png) under %AppData%/Sink/artwork, if any.</summary>
     public string? ArtworkPath { get; set; }
 
