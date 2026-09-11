@@ -37,6 +37,7 @@ public partial class MainWindow
 
     private void ShowDownloadSource_Click(object sender, RoutedEventArgs e)
     {
+        ExitPodcastView(); // was left showing underneath — task 122
         _downloadViewActive = true;
         MusicPage.Visibility = Visibility.Collapsed;
         DownloadPage.Visibility = Visibility.Visible;
@@ -833,12 +834,22 @@ public partial class MainWindow
                     });
                     var status = new Progress<string>(s => SetDownloadStatus(s + linkLabel));
 
+                    // Relocate (copy/move) and add each track the moment it's
+                    // finalized, instead of waiting for the whole album to
+                    // finish and flushing it all at once (task 121).
+                    var alreadyImported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var pendingImports = new List<Task<int>>();
+                    var fileReady = new Progress<string>(path =>
+                    {
+                        if (alreadyImported.Add(path)) pendingImports.Add(ImportFinalizedFileAsync(path));
+                    });
+
                     IReadOnlyList<string> paths;
                     var partialFailure = false;
                     var partialReason = "";
                     try
                     {
-                        paths = await DownloadService.DownloadAsync(node, options, progress, status, token);
+                        paths = await DownloadService.DownloadAsync(node, options, progress, status, fileReady, token);
                     }
                     catch (DownloadService.PartialDownloadException partial)
                     {
@@ -849,9 +860,11 @@ public partial class MainWindow
 
                     node.State = DownloadState.Importing;
                     node.StatusText = "Importing…";
-                    var tracks = await Task.Run(() => MusicImporter.Import(paths));
+                    var progressiveCounts = await Task.WhenAll(pendingImports);
+                    var remainder = paths.Where(p => alreadyImported.Add(p)).ToList(); // safety net
+                    var tracks = remainder.Count > 0 ? await Task.Run(() => MusicImporter.Import(remainder)) : [];
                     foreach (var track in tracks) _tracks.Add(track);
-                    imported += tracks.Count;
+                    imported += progressiveCounts.Sum() + tracks.Count;
 
                     if (partialFailure)
                     {
@@ -906,6 +919,28 @@ public partial class MainWindow
 
             if (done > 0) PruneSucceeded();
             RefreshDownloadChrome();
+        }
+    }
+
+    /// <summary>
+    /// Imports one already-finalized download (relocating it per the Copy/Move
+    /// import setting) as soon as it lands, rather than waiting for the rest of
+    /// the album (task 121). Adds it to the library immediately so it shows up
+    /// while the rest keeps downloading.
+    /// </summary>
+    private async Task<int> ImportFinalizedFileAsync(string path)
+    {
+        try
+        {
+            var tracks = await Task.Run(() => MusicImporter.Import([path]));
+            foreach (var track in tracks) _tracks.Add(track);
+            if (tracks.Count > 0 && _source == LibrarySource.Music) RenderLibrary();
+            return tracks.Count;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Progressive import failed for {path}: {ex.Message}");
+            return 0;
         }
     }
 

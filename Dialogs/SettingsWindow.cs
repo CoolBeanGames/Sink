@@ -11,10 +11,13 @@ namespace Sink.Dialogs;
 /// </summary>
 public sealed class SettingsWindow : SinkDialog
 {
+    private static readonly string[] CookieChoices = ["auto", "none", "edge", "chrome", "firefox", "brave"];
+
     private readonly TextBox _library = Field();
     private readonly TextBox _podcasts = Field();
     private readonly CheckBox _syncOnConnect = new() { Content = "Sync as soon as an iPod is connected", Foreground = Hex("#C7CCD6") };
     private readonly ComboBox _importMode = new() { Width = 220, HorizontalAlignment = HorizontalAlignment.Left };
+    private readonly ComboBox _youTubeCookies = new() { Width = 260, HorizontalAlignment = HorizontalAlignment.Left };
 
     private readonly Func<int> _refresh;
     private readonly Action _export;
@@ -41,6 +44,15 @@ public sealed class SettingsWindow : SinkDialog
         _importMode.Items.Add("Move — move files into the library folder");
         _importMode.SelectedIndex = (int)settings.ImportMode;
 
+        _youTubeCookies.Items.Add("Auto-detect (recommended)");
+        _youTubeCookies.Items.Add("Off");
+        _youTubeCookies.Items.Add("Microsoft Edge");
+        _youTubeCookies.Items.Add("Google Chrome");
+        _youTubeCookies.Items.Add("Firefox");
+        _youTubeCookies.Items.Add("Brave");
+        var cookieIndex = Array.IndexOf(CookieChoices, (settings.YouTubeCookies ?? "auto").Trim().ToLowerInvariant());
+        _youTubeCookies.SelectedIndex = Math.Max(0, cookieIndex);
+
         var body = new StackPanel { Margin = new Thickness(26, 24, 26, 22) };
         body.Children.Add(Eyebrow("SETTINGS"));
         body.Children.Add(new TextBlock { Text = "Preferences", FontSize = 22, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 5, 0, 4) });
@@ -50,6 +62,14 @@ public sealed class SettingsWindow : SinkDialog
 
         body.Children.Add(Label("Import mode"));
         body.Children.Add(_importMode);
+
+        body.Children.Add(Label("YouTube cookies"));
+        body.Children.Add(_youTubeCookies);
+        body.Children.Add(new TextBlock
+        {
+            Text = "Lets yt-dlp borrow a signed-in browser's cookies so YouTube doesn't ask Sink to \"confirm you're not a bot\".",
+            Foreground = Hex("#6E7584"), FontSize = 11, Margin = new Thickness(0, 5, 0, 0), TextWrapping = TextWrapping.Wrap,
+        });
 
         _syncOnConnect.Margin = new Thickness(0, 16, 0, 0);
         body.Children.Add(_syncOnConnect);
@@ -93,6 +113,7 @@ public sealed class SettingsWindow : SinkDialog
             PodcastLocation = _podcasts.Text.Trim(),
             SyncOnConnect = _syncOnConnect.IsChecked == true,
             ImportMode = (ImportMode)Math.Max(0, _importMode.SelectedIndex),
+            YouTubeCookies = CookieChoices[Math.Max(0, _youTubeCookies.SelectedIndex)],
         };
         DialogResult = true;
     }

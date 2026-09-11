@@ -58,6 +58,7 @@ public partial class MainWindow
 
     private void ShowPodcasts_Click(object sender, RoutedEventArgs e)
     {
+        ExitDownloadView(); // stop any preview and drop the download page underneath (task 122)
         _podcastViewActive = true;
         MusicPage.Visibility = Visibility.Collapsed;
         DownloadPage.Visibility = Visibility.Collapsed;

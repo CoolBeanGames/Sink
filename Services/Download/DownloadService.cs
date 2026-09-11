@@ -139,10 +139,15 @@ public static partial class DownloadService
     /// Downloads one Album or Single <see cref="DownloadNode"/> to one or more
     /// audio files, honouring <paramref name="options"/> and the per-track
     /// include toggles, and reports 0..1 progress. Returns every finished file.
+    /// Each track is moved into <see cref="DownloadsDirectory"/> and tagged (and,
+    /// if given, reported through <paramref name="onTrackFile"/>) as soon as
+    /// yt-dlp finishes it — not batched until the whole album completes — so a
+    /// caller doing copy/move-on-import can relocate each track as it lands
+    /// instead of flushing the whole album at the end (task 121).
     /// </summary>
     public static async Task<IReadOnlyList<string>> DownloadAsync(
         DownloadNode node, DownloadOptions options, IProgress<double> progress,
-        IProgress<string>? status = null, CancellationToken token = default)
+        IProgress<string>? status = null, IProgress<string>? onTrackFile = null, CancellationToken token = default)
     {
         System.IO.Directory.CreateDirectory(DownloadsDirectory);
         var workDir = Path.Combine(DownloadsDirectory, "_" + Guid.NewGuid().ToString("N")[..8]);
@@ -188,21 +193,73 @@ public static partial class DownloadService
 
         var current = 0;
         var source = isPlaylist ? album : node.Title;
-        status?.Report(isPlaylist ? $"Downloading track 1/{total} from {source}" : $"Downloading {source}");
-        // Light up each track as yt-dlp reaches it (task 114). yt-dlp works
-        // through an album in list order, so when it announces "item n" the
-        // ones before it are done and this one is now downloading.
+        var finished = new List<string>();
+        var finalized = new HashSet<int>(); // playlist index already moved+tagged (single always uses -1)
+
+        // Moves one track's produced file out of workDir, tags it, and reports
+        // it — called the moment yt-dlp finishes that track (mid-run, from the
+        // line callback below) rather than waiting for the whole album, so a
+        // copy/move importer can relocate it right away (task 121). Safe to
+        // call more than once for the same track; a miss can be retried once
+        // the process has exited and the file is definitely there (or not).
+        bool FinalizeTrack(DownloadNode trackNode)
+        {
+            var key = isPlaylist ? trackNode.Index : -1;
+            if (finalized.Contains(key)) return true;
+
+            string? file;
+            if (isPlaylist)
+                file = System.IO.Directory.EnumerateFiles(workDir)
+                    .Where(f => AudioExtensions.Contains(Path.GetExtension(f)))
+                    .FirstOrDefault(f => ProducedIndex().Match(Path.GetFileName(f)) is { Success: true } m
+                                         && int.TryParse(m.Groups[1].Value, out var idx) && idx == trackNode.Index);
+            else
+                file = System.IO.Directory.EnumerateFiles(workDir)
+                    .FirstOrDefault(f => AudioExtensions.Contains(Path.GetExtension(f)));
+            if (file is null) return false;
+
+            var stem = isPlaylist ? Path.GetFileNameWithoutExtension(file) : $"{artist} - {node.Title}";
+            var finalPath = UniquePath(Path.Combine(DownloadsDirectory, Sanitize(stem) + Path.GetExtension(file)));
+            File.Move(file, finalPath, overwrite: false);
+
+            // Write an edited title: always for a single, and per-track for an
+            // album when the user renamed that track. An untouched album track
+            // keeps yt-dlp's own title (see archived task 49).
+            var title = !isPlaylist ? node.Title
+                : (trackNode.TitleEdited ? trackNode.Title.Trim() : null);
+            var trackNo = trackNode.TrackNumber > 0 ? trackNode.TrackNumber
+                : (options.NumberTracks && isPlaylist && trackNode.Index > 0 ? trackNode.Index : 0);
+            ApplyTags(finalPath, artist, album, genre, title, trackNo, artBytes);
+
+            if (trackNode.Kind == DownloadKind.Track) trackNode.State = DownloadState.Done;
+            finalized.Add(key);
+            finished.Add(finalPath);
+            onTrackFile?.Report(finalPath);
+            return true;
+        }
+
+        // Light up (and finalize) each track as yt-dlp reaches it (task 114,
+        // 121). yt-dlp works through an album in list order, so when it
+        // announces "item n" the ones before it are done and this one is now
+        // downloading.
         void MarkTrackProgress(int itemIndex1Based)
         {
             if (!isPlaylist || titleOrder.Count == 0) return;
             for (var i = 0; i < titleOrder.Count && i < itemIndex1Based - 1; i++)
-                if (titleOrder[i].State is DownloadState.Downloading or DownloadState.Pending or DownloadState.Ready)
-                    titleOrder[i].State = DownloadState.Done;
+            {
+                var t = titleOrder[i];
+                if (t.State is DownloadState.Done or DownloadState.Failed) continue;
+                if (!FinalizeTrack(t))
+                {
+                    t.State = DownloadState.Failed;
+                    t.StatusText = "yt-dlp skipped this track";
+                }
+            }
             if (itemIndex1Based - 1 < titleOrder.Count)
             {
-                var node2 = titleOrder[itemIndex1Based - 1];
-                node2.State = DownloadState.Downloading;
-                node2.StatusText = "Downloading…";
+                var next = titleOrder[itemIndex1Based - 1];
+                next.State = DownloadState.Downloading;
+                next.StatusText = "Downloading…";
             }
         }
 
@@ -226,72 +283,28 @@ public static partial class DownloadService
             }
         }, token).ConfigureAwait(false);
 
-        var produced = System.IO.Directory.EnumerateFiles(workDir)
-            .Where(f => AudioExtensions.Contains(Path.GetExtension(f)))
-            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        // yt-dlp exits non-zero if *any* track failed. Keep whatever it did
-        // manage to fetch and mark the rest failed, so the caller can leave the
-        // failed tracks in the tree for a retry.
-        if (produced.Count == 0)
+        // Whatever wasn't finalized mid-run (the last track — there's no "next
+        // item" line to trigger it — or one that failed) gets a final pass now
+        // that yt-dlp has exited and every file it's going to produce exists.
+        var ordered = isPlaylist ? titleOrder : new List<DownloadNode> { node };
+        foreach (var trackNode in ordered)
         {
-            var reason = FirstError(stderr) ?? "yt-dlp produced no audio";
-            foreach (var t in trackNodes) { t.State = DownloadState.Failed; t.StatusText = reason; }
-            Log.Error($"Download failed for {node.Name} ({node.Url}): {reason}");
-            throw new InvalidOperationException(reason);
-        }
-
-        // Map produced files to playlist positions ("001 - Title.mp3").
-        var byIndex = new Dictionary<int, string>();
-        foreach (var f in produced)
-        {
-            var m = ProducedIndex().Match(Path.GetFileName(f));
-            if (m.Success && int.TryParse(m.Groups[1].Value, out var idx)) byIndex[idx] = f;
-        }
-
-        var finished = new List<string>();
-        var ordered = isPlaylist
-            ? titleOrder
-            : new List<DownloadNode> { node };
-        for (var i = 0; i < ordered.Count; i++)
-        {
-            var trackNode = ordered[i];
-            string? file = isPlaylist
-                ? (byIndex.TryGetValue(trackNode.Index, out var byIdx) ? byIdx : (i < produced.Count && byIndex.Count == 0 ? produced[i] : null))
-                : produced[0];
-            if (file is null)
+            var key = isPlaylist ? trackNode.Index : -1;
+            if (finalized.Contains(key)) continue;
+            if (!FinalizeTrack(trackNode) && trackNode.Kind == DownloadKind.Track)
             {
-                if (trackNode.Kind == DownloadKind.Track)
-                {
-                    trackNode.State = DownloadState.Failed;
-                    trackNode.StatusText = FirstError(stderr) ?? "yt-dlp skipped this track";
-                    Log.Warn($"Track {trackNode.Index} \"{trackNode.Name}\" of {album} did not download: {trackNode.StatusText}");
-                }
-                continue;
+                trackNode.State = DownloadState.Failed;
+                trackNode.StatusText = FirstError(stderr) ?? "yt-dlp skipped this track";
+                Log.Warn($"Track {trackNode.Index} \"{trackNode.Name}\" of {album} did not download: {trackNode.StatusText}");
             }
-
-            var stem = isPlaylist ? Path.GetFileNameWithoutExtension(file) : $"{artist} - {node.Title}";
-            var finalPath = UniquePath(Path.Combine(DownloadsDirectory, Sanitize(stem) + Path.GetExtension(file)));
-            File.Move(file, finalPath, overwrite: false);
-
-            // Write an edited title: always for a single, and per-track for an
-            // album when the user renamed that track. An untouched album track
-            // keeps yt-dlp's own title (see archived task 49).
-            var title = !isPlaylist ? node.Title
-                : (trackNode.TitleEdited ? trackNode.Title.Trim() : null);
-            var trackNo = trackNode.TrackNumber > 0 ? trackNode.TrackNumber
-                : (options.NumberTracks && isPlaylist && trackNode.Index > 0 ? trackNode.Index : 0);
-            ApplyTags(finalPath, artist, album, genre, title, trackNo, artBytes);
-            if (trackNode.Kind == DownloadKind.Track) trackNode.State = DownloadState.Done;
-            finished.Add(finalPath);
         }
         try { System.IO.Directory.Delete(workDir, recursive: true); } catch (IOException) { }
 
         progress.Report(1);
         if (finished.Count == 0)
         {
-            var reason = FirstError(stderr) ?? "Download failed";
+            var reason = FirstError(stderr) ?? "yt-dlp produced no audio";
+            foreach (var t in trackNodes) { t.State = DownloadState.Failed; t.StatusText = reason; }
             Log.Error($"Download failed for {node.Name} ({node.Url}): {reason}");
             throw new InvalidOperationException(reason);
         }
@@ -448,10 +461,21 @@ public static partial class DownloadService
     private static string? CleanUploader(string? uploader) =>
         string.IsNullOrWhiteSpace(uploader) ? null : uploader.Replace(" - Topic", "", StringComparison.OrdinalIgnoreCase).Trim();
 
-    private static string? FirstError(string stderr) => stderr
-        .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-        .FirstOrDefault(l => l.StartsWith("ERROR", StringComparison.OrdinalIgnoreCase))
-        ?.Replace("ERROR:", "").Trim();
+    private static string? FirstError(string stderr)
+    {
+        var raw = stderr
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault(l => l.StartsWith("ERROR", StringComparison.OrdinalIgnoreCase))
+            ?.Replace("ERROR:", "").Trim();
+        if (raw is null) return null;
+
+        // yt-dlp's generic bot-check message is meaningless to a user who has
+        // never heard of it; point them straight at the fix (task 123).
+        if (raw.Contains("not a bot", StringComparison.OrdinalIgnoreCase)
+            || raw.Contains("Sign in to confirm", StringComparison.OrdinalIgnoreCase))
+            return "YouTube is asking Sink to sign in. Open Settings and set \"YouTube cookies\" to the browser you're signed into YouTube with, then try again.";
+        return raw;
+    }
 
     private static string Sanitize(string name)
     {
@@ -472,7 +496,69 @@ public static partial class DownloadService
         }
     }
 
+    /// <summary>
+    /// yt-dlp args that hand it the user's browser cookies, so a request looks
+    /// like it came from a signed-in browser instead of a bare script — the fix
+    /// for YouTube's "Sign in to confirm you're not a bot" wall (task 123).
+    /// "auto" (the default) picks the first browser it finds installed; "none"
+    /// disables this entirely.
+    /// </summary>
+    private static IReadOnlyList<string> CookieArgs()
+    {
+        var choice = (AppSettings.Current.YouTubeCookies ?? "auto").Trim().ToLowerInvariant();
+        if (choice is "none" or "off" or "") return [];
+        var browser = choice == "auto" ? DetectInstalledBrowser() : choice;
+        return browser is null ? [] : ["--cookies-from-browser", browser];
+    }
+
+    /// <summary>The yt-dlp browser name for the first browser profile folder that exists, or null.</summary>
+    private static string? DetectInstalledBrowser()
+    {
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        (string Name, string Path)[] candidates =
+        [
+            ("edge", Path.Combine(local, "Microsoft", "Edge", "User Data")),
+            ("chrome", Path.Combine(local, "Google", "Chrome", "User Data")),
+            ("brave", Path.Combine(local, "BraveSoftware", "Brave-Browser", "User Data")),
+            ("firefox", Path.Combine(roaming, "Mozilla", "Firefox", "Profiles")),
+            ("vivaldi", Path.Combine(local, "Vivaldi", "User Data")),
+            ("opera", Path.Combine(roaming, "Opera Software", "Opera Stable")),
+        ];
+        foreach (var c in candidates)
+            if (System.IO.Directory.Exists(c.Path)) return c.Name;
+        return null;
+    }
+
+    private static bool LooksLikeCookieProblem(string stderr) =>
+        stderr.Contains("cookie", StringComparison.OrdinalIgnoreCase) &&
+        (stderr.Contains("could not", StringComparison.OrdinalIgnoreCase)
+         || stderr.Contains("unable to", StringComparison.OrdinalIgnoreCase)
+         || stderr.Contains("permission", StringComparison.OrdinalIgnoreCase)
+         || stderr.Contains("decrypt", StringComparison.OrdinalIgnoreCase)
+         || stderr.Contains("database", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Runs yt-dlp with browser cookies attached when configured, and falls back
+    /// to a cookie-less run automatically if reading them failed (a locked
+    /// profile, no matching browser, etc.) rather than breaking downloads that
+    /// worked fine before.
+    /// </summary>
     private static async Task<(int exit, string stdout, string stderr)> RunAsync(
+        IReadOnlyList<string> arguments, Action<string>? onLine, CancellationToken token)
+    {
+        var cookieArgs = CookieArgs();
+        if (cookieArgs.Count == 0)
+            return await RunProcessAsync(arguments, onLine, token).ConfigureAwait(false);
+
+        var result = await RunProcessAsync(cookieArgs.Concat(arguments).ToList(), onLine, token).ConfigureAwait(false);
+        if (result.exit == 0 || !LooksLikeCookieProblem(result.stderr)) return result;
+
+        Log.Warn($"yt-dlp couldn't read browser cookies, retrying without them: {FirstError(result.stderr)}");
+        return await RunProcessAsync(arguments, onLine, token).ConfigureAwait(false);
+    }
+
+    private static async Task<(int exit, string stdout, string stderr)> RunProcessAsync(
         IReadOnlyList<string> arguments, Action<string>? onLine, CancellationToken token)
     {
         if (!File.Exists(ToolManager.YtDlpPath))

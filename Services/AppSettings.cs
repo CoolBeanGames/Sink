@@ -39,6 +39,13 @@ public sealed class AppSettings
 
     public ImportMode ImportMode { get; set; } = ImportMode.Reference;
 
+    /// <summary>
+    /// Which browser's cookies yt-dlp borrows to get past YouTube's "confirm
+    /// you're not a bot" wall: "auto" (detect an installed browser), "none", or
+    /// an explicit yt-dlp browser name (edge, chrome, firefox, brave, …).
+    /// </summary>
+    public string YouTubeCookies { get; set; } = "auto";
+
     [JsonIgnore]
     public static AppSettings Current { get; private set; } = new();
 
@@ -72,5 +79,6 @@ public sealed class AppSettings
         PodcastLocation = PodcastLocation,
         SyncOnConnect = SyncOnConnect,
         ImportMode = ImportMode,
+        YouTubeCookies = YouTubeCookies,
     };
 }
