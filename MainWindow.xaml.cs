@@ -718,7 +718,9 @@ public partial class MainWindow : Window
             IpodStateText.Foreground = new SolidColorBrush(Color.FromRgb(154, 161, 175));
             IpodButton.ToolTip = "No iPod connected · Click to simulate connection";
             IpodMenuHeader.Header = "No iPod connected";
+            StopSyncButton.Visibility = Visibility.Collapsed;
         }
+        EjectTransportButton.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
         UpdateRecordSpin();
     }
 
@@ -792,6 +794,10 @@ public partial class MainWindow : Window
     }
 
     private bool _ipodWriting;
+    private CancellationTokenSource? _ipodSyncCts;
+
+    /// <summary>The visible "Stop syncing" button next to the record (task 129) — only meaningful while a sync is actually running.</summary>
+    private void StopSyncIpod_Click(object sender, RoutedEventArgs e) => _ipodSyncCts?.Cancel();
 
     /// <summary>Auto-sync on connect (task 138 — only tracks were pushed, playlist membership never followed).</summary>
     private async Task SyncOnConnectAsync()
@@ -817,12 +823,18 @@ public partial class MainWindow : Window
         _ipodWriting = true;
         StartIpodSync(indefinite: true);
         var progress = SyncProgress();
+        _ipodSyncCts = new CancellationTokenSource();
+        var token = _ipodSyncCts.Token;
         var added = 0;
         try
         {
-            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.Sync(root, payload, progress));
+            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.Sync(root, payload, progress, token));
             PlaybackStatus.Text = result.Summary;
             added = result.Added;
+        }
+        catch (OperationCanceledException)
+        {
+            PlaybackStatus.Text = "Sync stopped";
         }
         catch (Exception ex)
         {
@@ -834,6 +846,8 @@ public partial class MainWindow : Window
         finally
         {
             _ipodWriting = false;
+            _ipodSyncCts?.Dispose();
+            _ipodSyncCts = null;
             StopIpodSync();
             LoadIpodLibrary(root);
         }
@@ -857,10 +871,16 @@ public partial class MainWindow : Window
         _ipodWriting = true;
         StartIpodSync(indefinite: true);
         var progress = SyncProgress();
+        _ipodSyncCts = new CancellationTokenSource();
+        var token = _ipodSyncCts.Token;
         try
         {
-            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks, progress));
+            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks, progress, token));
             PlaybackStatus.Text = result.Summary;
+        }
+        catch (OperationCanceledException)
+        {
+            PlaybackStatus.Text = "Sync stopped";
         }
         catch (Exception ex)
         {
@@ -870,6 +890,8 @@ public partial class MainWindow : Window
         finally
         {
             _ipodWriting = false;
+            _ipodSyncCts?.Dispose();
+            _ipodSyncCts = null;
             StopIpodSync();
             LoadIpodLibrary(root);
         }
@@ -881,14 +903,20 @@ public partial class MainWindow : Window
         var root = _ipodDevice?.LibraryRoot;
         if (root is null || _ipodWriting) return;
         _ipodWriting = true;
+        _ipodSyncCts = new CancellationTokenSource();
+        var token = _ipodSyncCts.Token;
         try
         {
             foreach (var playlist in _playlists.ToList())
             {
                 var tracks = _tracks.Where(t => playlist.TrackIds.Contains(t.Id) && !t.ExcludedFromShuffle).ToList();
                 if (tracks.Count == 0) continue;
-                await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks));
+                await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks, token: token));
             }
+        }
+        catch (OperationCanceledException)
+        {
+            PlaybackStatus.Text = "Sync stopped";
         }
         catch (Exception ex)
         {
@@ -897,6 +925,8 @@ public partial class MainWindow : Window
         finally
         {
             _ipodWriting = false;
+            _ipodSyncCts?.Dispose();
+            _ipodSyncCts = null;
             LoadIpodLibrary(root);
         }
     }
@@ -1003,6 +1033,7 @@ public partial class MainWindow : Window
         _recordSpinning = false;
         SpinIndicator(IpodSpinner, true);
         IpodStateText.Text = "SYNCING";
+        StopSyncButton.Visibility = Visibility.Visible;
         var spin = new DoubleAnimation(0, 360, TimeSpan.FromSeconds(1.1)) { RepeatBehavior = RepeatBehavior.Forever };
         RecordRotation.BeginAnimation(RotateTransform.AngleProperty, spin);
         if (indefinite) return; // caller ends it with StopIpodSync()
@@ -1020,6 +1051,7 @@ public partial class MainWindow : Window
         RecordRotation.BeginAnimation(RotateTransform.AngleProperty, null);
         SpinIndicator(IpodSpinner, false);
         _ipodSyncing = false;
+        StopSyncButton.Visibility = Visibility.Collapsed;
         if (_ipodConnected) IpodStateText.Text = "IPOD";
         UpdateRecordSpin();
     }

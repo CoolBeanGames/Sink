@@ -42,7 +42,8 @@ public static class IpodWriteService
     public static IpodSyncResult Sync(
         string root,
         IReadOnlyList<Track> tracks,
-        IProgress<(int done, int total, string message)>? progress = null)
+        IProgress<(int done, int total, string message)>? progress = null,
+        CancellationToken token = default)
     {
         var eligible = tracks.Where(t => IsSyncable(t.FilePath) && !t.ExcludedFromShuffle).ToList();
         var skipped = tracks.Count - eligible.Count;
@@ -67,6 +68,7 @@ public static class IpodWriteService
 
             for (var i = 0; i < eligible.Count; i++)
             {
+                token.ThrowIfCancellationRequested(); // task 129 — Stop syncing button
                 var src = eligible[i];
                 progress?.Report((i, eligible.Count, $"Copying {src.Title}"));
                 CwTrack? onDevice;
@@ -102,6 +104,12 @@ public static class IpodWriteService
             }
             return new IpodSyncResult(added, present, skipped, null);
         }
+        catch (OperationCanceledException)
+        {
+            Log.Info("iPod sync cancelled");
+            if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
+            throw;
+        }
         catch (Exception ex)
         {
             Log.Error("iPod sync failed", ex);
@@ -124,7 +132,8 @@ public static class IpodWriteService
         string root,
         string playlistName,
         IReadOnlyList<Track> tracks,
-        IProgress<(int done, int total, string message)>? progress = null)
+        IProgress<(int done, int total, string message)>? progress = null,
+        CancellationToken token = default)
     {
         var eligible = tracks.Where(t => IsSyncable(t.FilePath) && !t.ExcludedFromShuffle).ToList();
         var skipped = tracks.Count - eligible.Count;
@@ -153,6 +162,7 @@ public static class IpodWriteService
 
             for (var i = 0; i < eligible.Count; i++)
             {
+                token.ThrowIfCancellationRequested(); // task 129 — Stop syncing button
                 var src = eligible[i];
                 progress?.Report((i, eligible.Count, $"Copying {src.Title}"));
                 CwTrack? onDevice;
@@ -200,6 +210,12 @@ public static class IpodWriteService
                 VerifyPlaylistPersisted(root, playlistName, playlist.TrackCount);
             }
             return new IpodSyncResult(added, present, skipped, null);
+        }
+        catch (OperationCanceledException)
+        {
+            Log.Info("iPod playlist sync cancelled");
+            if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
+            throw;
         }
         catch (Exception ex)
         {

@@ -829,6 +829,16 @@
                     </StackPanel>
                 </Grid>
             </Button>
+            <StackPanel Orientation="Horizontal" Canvas.Right="20" Canvas.Bottom="155" IsHitTestVisible="True">
+                <Button x:Name="StopSyncButton" Click="StopSyncIpod_Click" Visibility="Collapsed" ToolTip="Stop syncing"
+                        Style="{StaticResource EpisodeIconButton}" Margin="0,0,6,0">
+                    <TextBlock Text="⏹" FontSize="11" Foreground="#F4F6FA"/>
+                </Button>
+                <Button x:Name="EjectTransportButton" Click="EjectIpod_Click" Visibility="Collapsed" ToolTip="Eject"
+                        Style="{StaticResource EpisodeIconButton}">
+                    <TextBlock Text="⏏" FontSize="11" Foreground="#F4F6FA"/>
+                </Button>
+            </StackPanel>
         </Canvas>
         <Border x:Name="ImportOverlay" Grid.RowSpan="2" Grid.ColumnSpan="2" Panel.ZIndex="50" Visibility="Collapsed" Margin="14" BorderBrush="#8B7CFF" BorderThickness="2" CornerRadius="18" Background="#EE11141B" IsHitTestVisible="False">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><Border Width="66" Height="66" CornerRadius="33" Background="#6559CE"><TextBlock Text="↓" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock Text="Drop music to import" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,18,0,0"/><TextBlock Text="Audio files and nested folders are welcome" Foreground="#8C93A2" FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0"/></StackPanel>
