@@ -4,6 +4,7 @@ using Clickwheel.Exceptions;
 using Sink.Models;
 using Sink.Services;
 using CwTrack = Clickwheel.Parsers.iTunesDB.Track;
+using CwMediaType = Clickwheel.Parsers.iTunesDB.MediaType;
 
 namespace Sink.Services.Ipod;
 
@@ -67,7 +68,7 @@ public static class IpodWriteService
                 progress?.Report((i, eligible.Count, $"Copying {src.Title}"));
                 try
                 {
-                    ipod.Tracks.Add(NewTrackFrom(src));
+                    MarkPodcast(ipod.Tracks.Add(NewTrackFrom(src)), src);
                     added++;
                 }
                 catch (TrackAlreadyExistsException) { present++; }
@@ -136,6 +137,7 @@ public static class IpodWriteService
                 try
                 {
                     onDevice = ipod.Tracks.Add(NewTrackFrom(src));
+                    MarkPodcast(onDevice, src);
                     added++;
                     changedDb = true;
                 }
@@ -263,6 +265,21 @@ public static class IpodWriteService
         {
             if (locked) { try { ipod.ReleaseLock(); } catch { } }
         }
+    }
+
+    /// <summary>
+    /// A podcast episode's on-device visibility depends on the firmware-level
+    /// PodcastFlag/MediaType bit, not the Genre string — the device's own
+    /// Podcasts menu (unlike Sink's own reader, see IpodReader.Read) never
+    /// looks at Genre. NewTrack has no such field, so a Sink-synced episode
+    /// landed as an indistinguishable, invisible-under-Podcasts plain Music
+    /// track even though the write itself fully succeeded (task 140/146).
+    /// </summary>
+    private static void MarkPodcast(CwTrack? onDevice, Track src)
+    {
+        if (onDevice is null || !string.Equals(src.Genre, "Podcast", StringComparison.OrdinalIgnoreCase)) return;
+        onDevice.PodcastFlag = true;
+        onDevice.MediaType = CwMediaType.Podcast;
     }
 
     private static NewTrack NewTrackFrom(Track src)
