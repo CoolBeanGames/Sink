@@ -284,6 +284,7 @@ public partial class MainWindow : Window
             ApplyIpodLibraryChrome(library, readableName);
             SyncPodcastStatusFromIpod();
             SyncMusicPlayCountsFromIpod(library); // task 128
+            EnrichIpodArtwork(_ipodTracks); // task 132
         }
         catch (Exception ex)
         {
@@ -321,18 +322,60 @@ public partial class MainWindow : Window
         return $"{v:0.#} {units[u]}";
     }
 
-    private static Track AdaptIpodTrack(Sink.Services.Ipod.IpodDbTrack t) => new()
+    private static Track AdaptIpodTrack(Sink.Services.Ipod.IpodDbTrack t)
     {
-        Title = t.Title,
-        Artist = string.IsNullOrWhiteSpace(t.Artist) ? "Unknown Artist" : t.Artist,
-        Album = string.IsNullOrWhiteSpace(t.Album) ? "Unknown Album" : t.Album,
-        Genre = string.IsNullOrWhiteSpace(t.Genre) ? "Unknown" : t.Genre,
-        FileName = System.IO.Path.GetFileName(t.FilePath),
-        FilePath = t.FilePath,
-        TrackNumber = t.TrackNumber,
-        Year = t.Year,
-        Duration = t.Duration,
-    };
+        var artist = string.IsNullOrWhiteSpace(t.Artist) ? "Unknown Artist" : t.Artist;
+        var album = string.IsNullOrWhiteSpace(t.Album) ? "Unknown Album" : t.Album;
+        return new Track
+        {
+            Title = t.Title,
+            Artist = artist,
+            Album = album,
+            Genre = string.IsNullOrWhiteSpace(t.Genre) ? "Unknown" : t.Genre,
+            FileName = System.IO.Path.GetFileName(t.FilePath),
+            FilePath = t.FilePath,
+            TrackNumber = t.TrackNumber,
+            Year = t.Year,
+            Duration = t.Duration,
+            // Cache-only lookup here — cheap, runs synchronously for every track on
+            // the UI thread. A cache miss (never seen this album's art before) is
+            // filled in afterward by EnrichIpodArtwork, off the UI thread, since
+            // that means opening the file via TagLib (task 132).
+            ArtworkPath = Services.Artwork.CachedPath($"{album}|{artist}"),
+        };
+    }
+
+    /// <summary>
+    /// Extracts embedded cover art for whatever iPod tracks didn't already have a
+    /// cached image, one TagLib read per distinct album, off the UI thread — the
+    /// on-device audio files live on (relatively slow) USB storage, so this must
+    /// never run inline while adapting hundreds of tracks (task 132).
+    /// </summary>
+    private async void EnrichIpodArtwork(List<Track> tracks)
+    {
+        var needing = tracks.Where(t => string.IsNullOrWhiteSpace(t.ArtworkPath) && !string.IsNullOrWhiteSpace(t.FilePath)).ToList();
+        if (needing.Count == 0) return;
+
+        var found = await Task.Run(() =>
+        {
+            var results = new Dictionary<string, string>();
+            foreach (var t in needing)
+            {
+                var key = $"{t.Album}|{t.Artist}";
+                if (results.ContainsKey(key)) continue; // one extraction covers every track on that album
+                var path = Services.Artwork.ExtractAndCrop(t.FilePath!, key);
+                if (path is not null) results[key] = path;
+            }
+            return results;
+        });
+        if (found.Count == 0) return;
+        foreach (var t in tracks)
+        {
+            var key = $"{t.Album}|{t.Artist}";
+            if (string.IsNullOrWhiteSpace(t.ArtworkPath) && found.TryGetValue(key, out var path)) t.ArtworkPath = path;
+        }
+        if (_source == LibrarySource.Ipod) RenderLibrary();
+    }
 
     private void Category_Click(object sender, RoutedEventArgs e)
     {
