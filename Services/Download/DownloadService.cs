@@ -183,10 +183,14 @@ public static partial class DownloadService
         var album = node.Album;
         var genre = FirstReal(node.Genre, node.Parent?.Genre) ?? "Unknown";
 
-        // A partial album — some tracks toggled off — downloads just the chosen
-        // playlist positions; otherwise the whole link comes down.
+        // A partial album — some tracks toggled off, or (a retry) some tracks
+        // already finalized as Done last time — downloads just the chosen
+        // playlist positions; otherwise the whole link comes down. Skipping
+        // already-Done tracks on a retry matters: without it, re-running a
+        // partially-failed album re-downloaded and re-imported every track
+        // that had already succeeded, duplicating them in the library (task 153).
         var trackNodes = node.Children.Where(c => c.Kind == DownloadKind.Track).ToList();
-        var chosen = trackNodes.Where(t => t.Enabled == true).OrderBy(t => t.Index).ToList();
+        var chosen = trackNodes.Where(t => t.Enabled == true && t.State != DownloadState.Done).OrderBy(t => t.Index).ToList();
         var partial = isPlaylist && trackNodes.Count > 0 && chosen.Count < trackNodes.Count;
         var titleOrder = isPlaylist && trackNodes.Count > 0
             ? (partial ? chosen : trackNodes.OrderBy(t => t.Index).ToList())
@@ -196,6 +200,14 @@ public static partial class DownloadService
         var args = new List<string>
         {
             "-x",
+            // Spelled out explicitly rather than left to -x's own default:
+            // verified against live YouTube that a bare -x fails outright
+            // ("Requested format is not available") once a player-client
+            // override is in play and the only format on offer is a muxed
+            // stream rather than an audio-only one, even though that same
+            // muxed stream downloads and extracts fine under an explicit
+            // bestaudio/best selector (task 153).
+            "-f", "bestaudio/best",
             "--audio-format", options.FormatExtension,
             "--audio-quality", options.Quality > 0 ? options.Quality + "K" : "0",
             isPlaylist ? "--yes-playlist" : "--no-playlist",
@@ -204,6 +216,17 @@ public static partial class DownloadService
             "--no-overwrites",
             "--retries", "5",
             "--fragment-retries", "5",
+            // A big album is one yt-dlp process working through every track's
+            // own metadata + stream request back-to-back with no pacing at
+            // all — exactly the pattern that eventually trips YouTube's
+            // bot-check mid-album (confirmed against a 108-track playlist that
+            // sailed through its first ~55 tracks, then hit "Sign in to
+            // confirm you're not a bot" on every one after). A small
+            // randomized delay between tracks costs little on a real album
+            // and meaningfully cuts how often that wall gets hit (task 153).
+            "--sleep-requests", "1",
+            "--sleep-interval", "1",
+            "--max-sleep-interval", "3",
             "--ffmpeg-location", ToolManager.Directory,
             "-o", Path.Combine(workDir, isPlaylist ? "%(playlist_index)03d - %(title)s.%(ext)s" : "%(title)s.%(ext)s"),
         };
@@ -379,6 +402,7 @@ public static partial class DownloadService
         var args = new List<string>
         {
             "-x",
+            "-f", "bestaudio/best",
             "--audio-format", options.FormatExtension,
             "--audio-quality", "5",
             "--no-warnings", "--newline", "--no-overwrites",
@@ -511,12 +535,19 @@ public static partial class DownloadService
         if (raw is null) return null;
 
         // yt-dlp's generic bot-check message is meaningless to a user who has
-        // never heard of it; point them straight at the fix (task 123).
+        // never heard of it; point them straight at the fix (task 123). By the
+        // time this surfaces, RunAsync has already retried with cookies, with
+        // alternate player clients, and with both — so this is what's left
+        // after every fallback failed, not the first thing that was tried.
         if (raw.Contains("not a bot", StringComparison.OrdinalIgnoreCase)
             || raw.Contains("Sign in to confirm", StringComparison.OrdinalIgnoreCase))
-            return "YouTube is asking Sink to sign in. Open Settings and set \"YouTube cookies\" to the browser you're signed into YouTube with, then try again.";
+            return "YouTube is asking Sink to sign in, even after trying alternate download methods. Open Settings and set \"YouTube cookies\" to a browser you're signed into YouTube with (Firefox works best — Chrome/Edge often can't be read at all), then try again.";
         if (raw.Contains("dpapi", StringComparison.OrdinalIgnoreCase))
-            return "Sink couldn't read your browser's saved cookies (Windows DPAPI decryption failed). Try picking a different browser under Settings → \"YouTube cookies\", or set it to \"none\".";
+            return "Sink couldn't read your browser's saved cookies (Windows DPAPI decryption failed). Try picking a different browser under Settings → \"YouTube cookies\" — Firefox isn't affected by this — or set it to \"none\".";
+        if (raw.Contains("Requested format is not available", StringComparison.OrdinalIgnoreCase)
+            || raw.Contains("no video formats found", StringComparison.OrdinalIgnoreCase)
+            || raw.Contains("DRM protected", StringComparison.OrdinalIgnoreCase))
+            return "YouTube didn't offer a usable audio stream for this link, even after trying alternate download methods. It may be region-locked or temporarily restricted — try again later or a different link.";
         return raw;
     }
 
@@ -568,12 +599,18 @@ public static partial class DownloadService
     {
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        // Firefox first: Chromium browsers (edge/chrome/brave/vivaldi/opera) all
+        // encrypt their cookie store with Windows DPAPI "App-Bound Encryption",
+        // which yt-dlp cannot decrypt (yt-dlp#10927) — picking one of those by
+        // default meant "auto" always failed to read cookies at all, silently
+        // disabling cookie auth for the rest of the session (task 153). Firefox
+        // doesn't use that scheme, so prefer it when it's installed.
         (string Name, string Path)[] candidates =
         [
+            ("firefox", Path.Combine(roaming, "Mozilla", "Firefox", "Profiles")),
             ("edge", Path.Combine(local, "Microsoft", "Edge", "User Data")),
             ("chrome", Path.Combine(local, "Google", "Chrome", "User Data")),
             ("brave", Path.Combine(local, "BraveSoftware", "Brave-Browser", "User Data")),
-            ("firefox", Path.Combine(roaming, "Mozilla", "Firefox", "Profiles")),
             ("vivaldi", Path.Combine(local, "Vivaldi", "User Data")),
             ("opera", Path.Combine(roaming, "Opera Software", "Opera Stable")),
         ];
@@ -597,22 +634,66 @@ public static partial class DownloadService
     /// Runs yt-dlp with browser cookies attached when configured, and falls back
     /// to a cookie-less run automatically if reading them failed (a locked
     /// profile, no matching browser, etc.) rather than breaking downloads that
-    /// worked fine before.
+    /// worked fine before. If that still hits YouTube's bot-check / PO-token
+    /// wall, retries with alternate player clients, and finally with cookies
+    /// combined with one of those clients — multiple independent fallback
+    /// levels so one blocked path (e.g. a browser whose cookie store yt-dlp
+    /// can't decrypt at all) doesn't take the whole download down (task 153).
     /// </summary>
     private static async Task<(int exit, string stdout, string stderr)> RunAsync(
         IReadOnlyList<string> arguments, Action<string>? onLine, CancellationToken token)
     {
         var cookieArgs = CookieArgs();
-        if (cookieArgs.Count == 0)
-            return await RunProcessAsync(arguments, onLine, token).ConfigureAwait(false);
+        var first = cookieArgs.Count == 0
+            ? await RunProcessAsync(arguments, onLine, token).ConfigureAwait(false)
+            : await RunWithCookieRetryAsync(cookieArgs, arguments, onLine, token).ConfigureAwait(false);
+        if (first.exit == 0 || !NeedsClientFallback(first.stderr)) return first;
 
-        var result = await RunProcessAsync(cookieArgs.Concat(arguments).ToList(), onLine, token).ConfigureAwait(false);
+        // Checked directly against live YouTube while building this: most
+        // "no PO token needed" clients (web_safari, web_embedded, mweb, tv)
+        // now return nothing but storyboard placeholders without a token —
+        // that guidance is stale. android and android_vr are the ones that
+        // still hand back a real, playable format (a muxed 360p stream) with
+        // no PO token and no cookies at all, so they're what actually gets
+        // through the bot-check/format wall on their own. Quality is capped
+        // well below the usual opus/m4a audio-only stream, but that beats a
+        // failed download outright.
+        Log.Warn($"yt-dlp blocked ({FirstError(first.stderr)}), retrying with alternate player clients…");
+        var altClients = await RunProcessAsync(
+            [.. arguments, "--extractor-args", "youtube:player_client=android,android_vr"],
+            onLine, token).ConfigureAwait(false);
+        if (altClients.exit == 0 || !NeedsClientFallback(altClients.stderr) || cookieArgs.Count == 0)
+            return altClients;
+
+        // Some content (age-restricted, members-only) genuinely needs the
+        // user's own sign-in rather than just a different client — one more
+        // attempt combining both.
+        Log.Warn("Alternate player clients still blocked, retrying signed in with the same clients…");
+        return await RunProcessAsync(
+            [.. cookieArgs, .. arguments, "--extractor-args", "youtube:player_client=android,android_vr"],
+            onLine, token).ConfigureAwait(false);
+    }
+
+    private static async Task<(int exit, string stdout, string stderr)> RunWithCookieRetryAsync(
+        IReadOnlyList<string> cookieArgs, IReadOnlyList<string> arguments, Action<string>? onLine, CancellationToken token)
+    {
+        var result = await RunProcessAsync([.. cookieArgs, .. arguments], onLine, token).ConfigureAwait(false);
         if (result.exit == 0 || !LooksLikeCookieProblem(result.stderr)) return result;
 
         if (result.stderr.Contains("dpapi", StringComparison.OrdinalIgnoreCase)) _cookiesKnownBroken = true;
         Log.Warn($"yt-dlp couldn't read browser cookies, retrying without them: {FirstError(result.stderr)}");
         return await RunProcessAsync(arguments, onLine, token).ConfigureAwait(false);
     }
+
+    /// <summary>True when yt-dlp's failure is one a different player client might get past — the
+    /// bot/sign-in wall, or a format/DRM wall some clients hit and others don't.</summary>
+    private static bool NeedsClientFallback(string stderr) =>
+        stderr.Contains("not a bot", StringComparison.OrdinalIgnoreCase)
+        || stderr.Contains("Sign in to confirm", StringComparison.OrdinalIgnoreCase)
+        || stderr.Contains("Requested format is not available", StringComparison.OrdinalIgnoreCase)
+        || stderr.Contains("DRM protected", StringComparison.OrdinalIgnoreCase)
+        || stderr.Contains("no video formats found", StringComparison.OrdinalIgnoreCase)
+        || stderr.Contains("HTTP Error 403", StringComparison.OrdinalIgnoreCase);
 
     private static async Task<(int exit, string stdout, string stderr)> RunProcessAsync(
         IReadOnlyList<string> arguments, Action<string>? onLine, CancellationToken token)

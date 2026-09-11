@@ -20,6 +20,9 @@ public sealed class DownloadNodeData
     public int Index { get; set; }
     public string ScannedTitle { get; set; } = "";
     public bool Scanned { get; set; }
+    /// <summary>Whether this track already finished downloading before its album was saved as failed —
+    /// preserved so a reloaded retry re-downloads only what's left instead of duplicating it (task 153).</summary>
+    public bool Done { get; set; }
     public List<DownloadNodeData> Children { get; set; } = [];
 }
 
@@ -82,6 +85,7 @@ public static class DownloadQueueStore
         Index = node.Index,
         ScannedTitle = node.ScannedTitle,
         Scanned = node.Scanned,
+        Done = node.State == DownloadState.Done,
         Children = node.Children.Select(ToData).ToList(),
     };
 
@@ -97,7 +101,7 @@ public static class DownloadQueueStore
             TrackNumber = data.TrackNumber,
             ArtworkOverride = data.ArtworkOverride,
             Enabled = data.Enabled,
-            State = DownloadState.Failed,
+            State = data.Done ? DownloadState.Done : DownloadState.Failed,
             StatusText = data.StatusText,
             Index = data.Index,
             ScannedTitle = data.ScannedTitle,
