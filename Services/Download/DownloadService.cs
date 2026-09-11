@@ -8,7 +8,8 @@ namespace Sink.Services.Download;
 
 public sealed record ScannedInfo(
     string Title, string Artist, string Album, string Genre, bool IsPlaylist, int TrackCount,
-    IReadOnlyList<ScannedAlbum>? Albums = null, IReadOnlyList<string>? TrackTitles = null);
+    IReadOnlyList<ScannedAlbum>? Albums = null, IReadOnlyList<string>? TrackTitles = null,
+    IReadOnlyList<string>? TrackArtists = null);
 
 /// <summary>One album found on a YouTube Music artist page.</summary>
 public sealed record ScannedAlbum(string Url, string Title);
@@ -122,7 +123,17 @@ public static partial class DownloadService
             var album = StripCollectionPrefix(Str(root, "title") ?? Str(root, "playlist_title") ?? "Unknown Album");
             var artist = CleanUploader(Str(root, "uploader") ?? Str(root, "channel") ?? Str(entries[0], "uploader") ?? Str(entries[0], "channel")) ?? "Unknown Artist";
             var titles = entryList.Select(en => (Str(en, "track") ?? Str(en, "title") ?? "Untitled").Trim()).ToList();
-            return new ScannedInfo(album.Trim(), artist.Trim(), album.Trim(), "Unknown", IsPlaylist: true, TrackCount: count, TrackTitles: titles);
+            // Each entry's own uploader/channel — a plain YouTube playlist mixes
+            // videos from different channels, so this is the closest cheap,
+            // per-track signal for "artist" without a full (slow) per-video
+            // resolve. Album is deliberately left for the caller to leave blank
+            // per track rather than default it here — there's no equivalent
+            // cheap per-track signal, and the whole point is not to force one
+            // shared value onto every track (task 151).
+            var trackArtists = entryList
+                .Select(en => CleanUploader(Str(en, "artist") ?? Str(en, "uploader") ?? Str(en, "channel")) ?? "")
+                .ToList();
+            return new ScannedInfo(album.Trim(), artist.Trim(), album.Trim(), "Unknown", IsPlaylist: true, TrackCount: count, TrackTitles: titles, TrackArtists: trackArtists);
         }
 
         var title = Str(root, "track") ?? Str(root, "title") ?? "Unknown title";
@@ -243,7 +254,13 @@ public static partial class DownloadService
                 : (trackNode.TitleEdited ? trackNode.Title.Trim() : null);
             var trackNo = trackNode.TrackNumber > 0 ? trackNode.TrackNumber
                 : (options.NumberTracks && isPlaylist && trackNode.Index > 0 ? trackNode.Index : 0);
-            ApplyTags(finalPath, artist, album, genre, title, trackNo, artBytes);
+            // A mixed playlist's tracks carry their own (editable) artist/album
+            // instead of the shared container values — forcing every track to
+            // the playlist's own name as its Album is exactly what task 151
+            // fixed. Blank falls through to whatever yt-dlp itself embedded.
+            var trackArtist = node.IsMixedPlaylist ? FirstReal(trackNode.Artist) ?? "" : artist;
+            var trackAlbum = node.IsMixedPlaylist ? trackNode.Album : album;
+            ApplyTags(finalPath, trackArtist, trackAlbum, genre, title, trackNo, artBytes);
 
             if (trackNode.Kind == DownloadKind.Track) OnUi(() => trackNode.State = DownloadState.Done);
             finalized.Add(key);

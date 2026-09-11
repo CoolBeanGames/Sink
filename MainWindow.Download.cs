@@ -235,6 +235,12 @@ public partial class MainWindow
 
         if (info.IsPlaylist)
         {
+            // A directly-pasted playlist link (as opposed to an album reached
+            // by expanding an artist) commonly mixes tracks from different
+            // artists/albums — don't force every track to share one Album tag
+            // just because they happened to be collected into this playlist
+            // (task 151). The container itself still keeps a name/artist for
+            // display purposes; only per-track tagging skips the shared value.
             var node = new DownloadNode(DownloadKind.Album)
             {
                 Url = url,
@@ -242,6 +248,7 @@ public partial class MainWindow
                 Artist = info.Artist,
                 Genre = info.Genre,
                 State = DownloadState.Ready,
+                IsMixedPlaylist = true,
             };
             FillTracks(node, info);
             return node;
@@ -265,11 +272,16 @@ public partial class MainWindow
         for (var i = 0; i < info.TrackTitles.Count; i++)
         {
             var title = info.TrackTitles[i];
+            // Per-track artist defaults from each entry's own uploader/channel
+            // for a mixed playlist — editable from there, never forced (task 151).
+            var trackArtist = album.IsMixedPlaylist && info.TrackArtists is { } artists && i < artists.Count
+                ? artists[i] : "";
             album.Children.Add(new DownloadNode(DownloadKind.Track)
             {
                 Index = i + 1,
                 Title = title,
                 ScannedTitle = title,
+                Artist = trackArtist,
                 State = DownloadState.Ready,
                 StatusText = "",
             });

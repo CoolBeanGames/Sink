@@ -54,6 +54,15 @@ public sealed class DownloadNode : INotifyPropertyChanged
     public DownloadNode? Parent { get; private set; }
     public ObservableCollection<DownloadNode> Children { get; } = [];
 
+    /// <summary>
+    /// True on an Album-kind node that came from a scanned yt-dlp *playlist*
+    /// rather than a genuine single-artist album — a personal playlist mixes
+    /// tracks from different artists/albums, so unlike a real album it must
+    /// not force every track to share the playlist's own name as its Album
+    /// tag (task 151).
+    /// </summary>
+    public bool IsMixedPlaylist { get; init; }
+
     /// <summary>1-based position in the source playlist (Track nodes only).</summary>
     public int Index { get; init; }
     public string ScannedTitle { get; init; } = "";
@@ -144,8 +153,9 @@ public sealed class DownloadNode : INotifyPropertyChanged
     // Which secondary fields this kind exposes.
     public bool IsTrack => Kind == DownloadKind.Track;
     public bool ShowTrackNumber => Kind is DownloadKind.Track or DownloadKind.Single;
-    public bool ShowArtist => Kind == DownloadKind.Single || (Kind == DownloadKind.Album && Parent is null);
-    public bool ShowAlbum => Kind == DownloadKind.Single;
+    public bool ShowArtist => Kind == DownloadKind.Single || (Kind == DownloadKind.Album && Parent is null)
+                              || (Kind == DownloadKind.Track && Parent?.IsMixedPlaylist == true);
+    public bool ShowAlbum => Kind == DownloadKind.Single || (Kind == DownloadKind.Track && Parent?.IsMixedPlaylist == true);
     public bool ShowGenre => Kind is DownloadKind.Single or DownloadKind.Artist
                              || (Kind == DownloadKind.Album && Parent is null);
 
