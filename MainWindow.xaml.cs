@@ -82,6 +82,9 @@ public partial class MainWindow : Window
         RenderLibrary();
         InitDownloadPage();
         InitPodcasts();
+        InitNotifications();
+        InitTagsPage();
+        InitReflect();
         _ipodPollTimer.Tick += (_, _) => PollForIpod();
         _ipodPollTimer.Start();
         Loaded += (_, _) => PollForIpod();
@@ -215,8 +218,10 @@ public partial class MainWindow : Window
                     _ipodRootlessStreak = 0;
                     _ignoreUnreadableIpod = true;
                     Services.Log.Info($"iPod's readable volume disappeared (now {device.Name}, {device.Key}) — treating as a Windows-side eject");
+                    var ejectedName = _ipodDevice?.Name ?? device.Name;
                     SetIpodConnected(false);
                     LoadIpodLibrary(null);
+                    PostNotification("device", null, $"{ejectedName} disconnected");
                     if (wasManual) PlaybackStatus.Text = "iPod ejected in Windows";
                     return;
                 }
@@ -240,6 +245,7 @@ public partial class MainWindow : Window
             {
                 Services.Log.Info($"iPod connected: {device.Name} ({device.LibraryRoot ?? "no library root"})");
                 PlaybackStatus.Text = $"Connected {device.Name}";
+                PostNotification("device", null, $"{device.Name} connected");
                 if (Services.AppSettings.Current.SyncOnConnect && !_ipodWriting)
                     _ = SyncOnConnectAsync();
             }
@@ -247,11 +253,13 @@ public partial class MainWindow : Window
             return;
         }
 
+        var wasConnectedName = _ipodConnected ? _ipodDevice?.Name : null;
         _ejectedIpodKey = null; // physically gone now; a future reconnect is a fresh plug-in
         _ignoreUnreadableIpod = false;
         _ipodRootlessStreak = 0;
         if (_ipodConnected && _ipodDevice is not null) SetIpodConnected(false);
         if (_ipodLibraryRoot is not null) LoadIpodLibrary(null);
+        if (wasConnectedName is not null) PostNotification("device", null, $"{wasConnectedName} disconnected");
         if (wasManual) PlaybackStatus.Text = "No iPod found — check the cable, or click the record to simulate one";
     }
 
@@ -275,13 +283,18 @@ public partial class MainWindow : Window
             PlaybackStatus.Text = $"Read {library.Tracks.Count} track{(library.Tracks.Count == 1 ? "" : "s")} from {readableName}";
             ApplyIpodLibraryChrome(library, readableName);
             SyncPodcastStatusFromIpod();
+            SyncMusicPlayCountsFromIpod(library); // task 128
+            EnrichIpodArtwork(_ipodTracks); // task 132
         }
         catch (Exception ex)
         {
             Services.Log.Error("Reading iPod database failed", ex);
             PlaybackStatus.Text = $"Couldn't read the iPod database: {ex.Message}";
         }
-        if (_source == LibrarySource.Ipod) RenderLibrary();
+        if (_source != LibrarySource.Ipod) return;
+        if (_ipodPodcastsActive) RenderIpodPodcasts();
+        else if (_ipodPlaylistsActive) RenderIpodPlaylists();
+        else RenderLibrary();
     }
 
     private void ApplyIpodLibraryChrome(Sink.Services.Ipod.IpodLibrary library, string name)
@@ -312,18 +325,60 @@ public partial class MainWindow : Window
         return $"{v:0.#} {units[u]}";
     }
 
-    private static Track AdaptIpodTrack(Sink.Services.Ipod.IpodDbTrack t) => new()
+    private static Track AdaptIpodTrack(Sink.Services.Ipod.IpodDbTrack t)
     {
-        Title = t.Title,
-        Artist = string.IsNullOrWhiteSpace(t.Artist) ? "Unknown Artist" : t.Artist,
-        Album = string.IsNullOrWhiteSpace(t.Album) ? "Unknown Album" : t.Album,
-        Genre = string.IsNullOrWhiteSpace(t.Genre) ? "Unknown" : t.Genre,
-        FileName = System.IO.Path.GetFileName(t.FilePath),
-        FilePath = t.FilePath,
-        TrackNumber = t.TrackNumber,
-        Year = t.Year,
-        Duration = t.Duration,
-    };
+        var artist = string.IsNullOrWhiteSpace(t.Artist) ? "Unknown Artist" : t.Artist;
+        var album = string.IsNullOrWhiteSpace(t.Album) ? "Unknown Album" : t.Album;
+        return new Track
+        {
+            Title = t.Title,
+            Artist = artist,
+            Album = album,
+            Genre = string.IsNullOrWhiteSpace(t.Genre) ? "Unknown" : t.Genre,
+            FileName = System.IO.Path.GetFileName(t.FilePath),
+            FilePath = t.FilePath,
+            TrackNumber = t.TrackNumber,
+            Year = t.Year,
+            Duration = t.Duration,
+            // Cache-only lookup here — cheap, runs synchronously for every track on
+            // the UI thread. A cache miss (never seen this album's art before) is
+            // filled in afterward by EnrichIpodArtwork, off the UI thread, since
+            // that means opening the file via TagLib (task 132).
+            ArtworkPath = Services.Artwork.CachedPath($"{album}|{artist}"),
+        };
+    }
+
+    /// <summary>
+    /// Extracts embedded cover art for whatever iPod tracks didn't already have a
+    /// cached image, one TagLib read per distinct album, off the UI thread — the
+    /// on-device audio files live on (relatively slow) USB storage, so this must
+    /// never run inline while adapting hundreds of tracks (task 132).
+    /// </summary>
+    private async void EnrichIpodArtwork(List<Track> tracks)
+    {
+        var needing = tracks.Where(t => string.IsNullOrWhiteSpace(t.ArtworkPath) && !string.IsNullOrWhiteSpace(t.FilePath)).ToList();
+        if (needing.Count == 0) return;
+
+        var found = await Task.Run(() =>
+        {
+            var results = new Dictionary<string, string>();
+            foreach (var t in needing)
+            {
+                var key = $"{t.Album}|{t.Artist}";
+                if (results.ContainsKey(key)) continue; // one extraction covers every track on that album
+                var path = Services.Artwork.ExtractAndCrop(t.FilePath!, key);
+                if (path is not null) results[key] = path;
+            }
+            return results;
+        });
+        if (found.Count == 0) return;
+        foreach (var t in tracks)
+        {
+            var key = $"{t.Album}|{t.Artist}";
+            if (string.IsNullOrWhiteSpace(t.ArtworkPath) && found.TryGetValue(key, out var path)) t.ArtworkPath = path;
+        }
+        if (_source == LibrarySource.Ipod) RenderLibrary();
+    }
 
     private void Category_Click(object sender, RoutedEventArgs e)
     {
@@ -362,6 +417,8 @@ public partial class MainWindow : Window
     {
         ExitDownloadView();
         ExitPodcastView();
+        ExitTagsView();
+        ExitReflectView();
         var music = _source == LibrarySource.Music;
         MusicNav.Visibility = music ? Visibility.Visible : Visibility.Collapsed;
         IpodNav.Visibility = music ? Visibility.Collapsed : Visibility.Visible;
@@ -371,7 +428,7 @@ public partial class MainWindow : Window
 
     private void SetActiveNavigation(Button? active)
     {
-        foreach (var button in new[] { ArtistsButton, AlbumsButton, GenresButton, SongsButton, IpodArtistsButton, IpodAlbumsButton, IpodGenresButton, IpodSongsButton })
+        foreach (var button in new[] { ArtistsButton, AlbumsButton, GenresButton, SongsButton, IpodArtistsButton, IpodAlbumsButton, IpodGenresButton, IpodSongsButton, IpodPodcastsButton, IpodPlaylistsButton })
         {
             var name = button.Name.Replace("Ipod", "").Replace("Button", "");
             button.Tag = button == active ? "Active" : name;
@@ -380,6 +437,10 @@ public partial class MainWindow : Window
 
     private void RenderLibrary()
     {
+        _ipodPodcastsActive = false;
+        _ipodPlaylistsActive = false;
+        IpodPodcastsArea.Visibility = Visibility.Collapsed;
+        IpodPlaylistsArea.Visibility = Visibility.Collapsed;
         MetadataIndex.Rebuild(_tracks);
         var query = SearchBox?.Text?.Trim() ?? "";
         var ipodOnDevice = _source == LibrarySource.Ipod && _ipodLibrary is not null;
@@ -558,6 +619,7 @@ public partial class MainWindow : Window
     {
         StopPreview("started a library track");
         if (_playingEpisode is not null) StopPodcast(markPlayed: false);
+        RecordSongListenIfDue(); // log whatever was playing before it's replaced (task 127)
         _mediaPlayer.Stop();
         _mediaPlayer.Close();
         _nowPlaying = track;
@@ -706,7 +768,9 @@ public partial class MainWindow : Window
             IpodStateText.Foreground = new SolidColorBrush(Color.FromRgb(154, 161, 175));
             IpodButton.ToolTip = "No iPod connected · Click to simulate connection";
             IpodMenuHeader.Header = "No iPod connected";
+            StopSyncButton.Visibility = Visibility.Collapsed;
         }
+        EjectTransportButton.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
         UpdateRecordSpin();
     }
 
@@ -763,46 +827,64 @@ public partial class MainWindow : Window
     private async void SyncIpod_Click(object sender, RoutedEventArgs e)
     {
         var header = (sender as MenuItem)?.Header as string ?? "";
+        var songsAdded = 0;
+        var podcastsAdded = 0;
         if (header is "Sync all" or "Sync music")
         {
-            await SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
+            songsAdded = await SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
             await SyncAllPlaylistsToDevice();
         }
         if (header is "Sync all" or "Sync podcasts")
-            await SyncAllPodcastsToDevice();
+            podcastsAdded = await SyncAllPodcastsToDevice();
         if (header is not ("Sync all" or "Sync music" or "Sync podcasts"))
             StartIpodSync();
+        if (songsAdded > 0 || podcastsAdded > 0)
+            PostNotification("sync-complete", null,
+                $"Syncing complete — {songsAdded} song{(songsAdded == 1 ? "" : "s")} synced, {podcastsAdded} podcast{(podcastsAdded == 1 ? "" : "s")} synced");
     }
 
     private bool _ipodWriting;
+    private CancellationTokenSource? _ipodSyncCts;
+
+    /// <summary>The visible "Stop syncing" button next to the record (task 129) — only meaningful while a sync is actually running.</summary>
+    private void StopSyncIpod_Click(object sender, RoutedEventArgs e) => _ipodSyncCts?.Cancel();
 
     /// <summary>Auto-sync on connect (task 138 — only tracks were pushed, playlist membership never followed).</summary>
     private async Task SyncOnConnectAsync()
     {
-        await SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
+        var added = await SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
         await SyncAllPlaylistsToDevice();
+        if (added > 0) PostNotification("sync-complete", null, $"Syncing complete — {added} song{(added == 1 ? "" : "s")} synced, 0 podcasts synced");
     }
 
-    /// <summary>Syncs tracks to the connected iPod — really writes the iTunesDB when the device is readable, otherwise stages them in the pending list.</summary>
-    private async Task SyncTracksToDevice(IReadOnlyList<Track> tracks)
+    /// <summary>Syncs tracks to the connected iPod — really writes the iTunesDB when the device is readable, otherwise stages them in the pending list. Returns how many tracks were actually added.</summary>
+    private async Task<int> SyncTracksToDevice(IReadOnlyList<Track> tracks)
     {
-        if (_ipodWriting) { PlaybackStatus.Text = "iPod is busy…"; return; }
+        if (_ipodWriting) { PlaybackStatus.Text = "iPod is busy…"; return 0; }
         var root = _ipodDevice?.LibraryRoot;
         if (root is null)
         {
             MarkSynced(tracks.Where(t => !t.ExcludedFromShuffle).Select(t => t.Id), announce: true);
             if (_ipodConnected) StartIpodSync();
-            return;
+            return 0;
         }
 
         var payload = tracks.ToList();
         _ipodWriting = true;
         StartIpodSync(indefinite: true);
         var progress = SyncProgress();
+        _ipodSyncCts = new CancellationTokenSource();
+        var token = _ipodSyncCts.Token;
+        var added = 0;
         try
         {
-            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.Sync(root, payload, progress));
+            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.Sync(root, payload, progress, token));
             PlaybackStatus.Text = result.Summary;
+            added = result.Added;
+        }
+        catch (OperationCanceledException)
+        {
+            PlaybackStatus.Text = "Sync stopped";
         }
         catch (Exception ex)
         {
@@ -814,9 +896,12 @@ public partial class MainWindow : Window
         finally
         {
             _ipodWriting = false;
+            _ipodSyncCts?.Dispose();
+            _ipodSyncCts = null;
             StopIpodSync();
             LoadIpodLibrary(root);
         }
+        return added;
     }
 
     /// <summary>Syncs one playlist's tracks to the connected iPod, and (when the device's database is writable) also creates/updates the matching on-device playlist.</summary>
@@ -836,10 +921,16 @@ public partial class MainWindow : Window
         _ipodWriting = true;
         StartIpodSync(indefinite: true);
         var progress = SyncProgress();
+        _ipodSyncCts = new CancellationTokenSource();
+        var token = _ipodSyncCts.Token;
         try
         {
-            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks, progress));
+            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks, progress, token));
             PlaybackStatus.Text = result.Summary;
+        }
+        catch (OperationCanceledException)
+        {
+            PlaybackStatus.Text = "Sync stopped";
         }
         catch (Exception ex)
         {
@@ -849,6 +940,8 @@ public partial class MainWindow : Window
         finally
         {
             _ipodWriting = false;
+            _ipodSyncCts?.Dispose();
+            _ipodSyncCts = null;
             StopIpodSync();
             LoadIpodLibrary(root);
         }
@@ -860,14 +953,20 @@ public partial class MainWindow : Window
         var root = _ipodDevice?.LibraryRoot;
         if (root is null || _ipodWriting) return;
         _ipodWriting = true;
+        _ipodSyncCts = new CancellationTokenSource();
+        var token = _ipodSyncCts.Token;
         try
         {
             foreach (var playlist in _playlists.ToList())
             {
                 var tracks = _tracks.Where(t => playlist.TrackIds.Contains(t.Id) && !t.ExcludedFromShuffle).ToList();
                 if (tracks.Count == 0) continue;
-                await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks));
+                await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks, token: token));
             }
+        }
+        catch (OperationCanceledException)
+        {
+            PlaybackStatus.Text = "Sync stopped";
         }
         catch (Exception ex)
         {
@@ -876,6 +975,8 @@ public partial class MainWindow : Window
         finally
         {
             _ipodWriting = false;
+            _ipodSyncCts?.Dispose();
+            _ipodSyncCts = null;
             LoadIpodLibrary(root);
         }
     }
@@ -982,6 +1083,7 @@ public partial class MainWindow : Window
         _recordSpinning = false;
         SpinIndicator(IpodSpinner, true);
         IpodStateText.Text = "SYNCING";
+        StopSyncButton.Visibility = Visibility.Visible;
         var spin = new DoubleAnimation(0, 360, TimeSpan.FromSeconds(1.1)) { RepeatBehavior = RepeatBehavior.Forever };
         RecordRotation.BeginAnimation(RotateTransform.AngleProperty, spin);
         if (indefinite) return; // caller ends it with StopIpodSync()
@@ -999,6 +1101,7 @@ public partial class MainWindow : Window
         RecordRotation.BeginAnimation(RotateTransform.AngleProperty, null);
         SpinIndicator(IpodSpinner, false);
         _ipodSyncing = false;
+        StopSyncButton.Visibility = Visibility.Collapsed;
         if (_ipodConnected) IpodStateText.Text = "IPOD";
         UpdateRecordSpin();
     }
@@ -1011,9 +1114,11 @@ public partial class MainWindow : Window
         if (_ipodWriting) { PlaybackStatus.Text = "iPod is busy — wait for the sync to finish before ejecting"; return; }
 
         var root = _ipodDevice?.LibraryRoot;
+        var ejectedName = _ipodDevice?.Name;
         _ejectedIpodKey = _ipodDevice?.Key;
         _ignoreUnreadableIpod = true; // the drive going unreadable right after this is our own eject, not a ghost reconnect
         SetIpodConnected(false);
+        if (ejectedName is not null) PostNotification("device", null, $"{ejectedName} disconnected");
         if (root is not null)
         {
             var ejected = Services.DriveEject.TryEject(root);
@@ -1187,7 +1292,15 @@ public partial class MainWindow : Window
         var imported = MusicImporter.Import(paths);
         foreach (var track in imported) _tracks.Add(track);
         RenderLibrary();
-        if (imported.Count > 0) SaveLibrary();
+        if (imported.Count > 0)
+        {
+            SaveLibrary();
+            var albums = imported.Select(t => t.Album).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var text = albums.Count == 1 && !string.IsNullOrWhiteSpace(albums[0])
+                ? $"Music import complete — {imported.Count} file{(imported.Count == 1 ? "" : "s")} copied ({albums[0]})"
+                : $"Music import complete — {imported.Count} file{(imported.Count == 1 ? "" : "s")} copied";
+            PostNotification("music-import", Guid.NewGuid().ToString(), text);
+        }
         PlaybackStatus.Text = imported.Count > 0 ? $"Imported {imported.Count} track{(imported.Count == 1 ? "" : "s")}" : "No supported audio files found";
         e.Handled = true;
     }
@@ -1247,6 +1360,7 @@ public partial class MainWindow : Window
         menu.Items.Add(Header(label));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Play", () => PlayTracks(tracks)));
+        menu.Items.Add(Item(tracks.Any(t => !t.IsFavorite) ? "♥ Favorite" : "♡ Remove favorite", () => { ToggleFavorite(tracks); TracksGrid.Items.Refresh(); }));
         menu.Items.Add(Item("Edit metadata…", () => EditMetadata(tracks)));
         menu.Items.Add(AddToPlaylistMenu(tracks));
         if (_activePlaylist is { } activePlaylist)
@@ -1278,6 +1392,7 @@ public partial class MainWindow : Window
         menu.Items.Add(Header(single ? cards[0].Name : $"{cards.Count} {kind.ToString().ToLowerInvariant()}"));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Play", () => PlayTracks(tracks)));
+        menu.Items.Add(Item(tracks.Any(t => !t.IsFavorite) ? "♥ Favorite" : "♡ Remove favorite", () => { ToggleFavorite(tracks); TracksGrid.Items.Refresh(); }));
         if (kind == LibraryCategory.Genres)
         {
             if (single) menu.Items.Add(Item("Rename…", () => RenameGenre(cards[0].Name)));

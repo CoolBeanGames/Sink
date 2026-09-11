@@ -4,7 +4,7 @@
         xmlns:models="clr-namespace:Sink.Models"
         xmlns:dl="clr-namespace:Sink.Services.Download"
         xmlns:ctrl="clr-namespace:Sink.Controls"
-        Title="Sink" Icon="Assets/sink.ico" Width="1260" Height="800" MinWidth="940" MinHeight="620" WindowStartupLocation="CenterScreen" Background="#0B0D12" AllowDrop="True" DragEnter="Window_DragEnter" DragOver="Window_DragOver" DragLeave="Window_DragLeave" Drop="Window_Drop">
+        Title="Sink" Icon="Assets/sink.ico" Width="1260" Height="800" MinWidth="940" MinHeight="620" WindowStartupLocation="CenterScreen" Background="#0B0D12" AllowDrop="True" DragEnter="Window_DragEnter" DragOver="Window_DragOver" DragLeave="Window_DragLeave" Drop="Window_Drop" Closing="Window_Closing">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="B2V"/>
         <Style x:Key="EpisodeIconButton" TargetType="Button">
@@ -29,6 +29,16 @@
             </Setter>
         </Style>
         <Style x:Key="EyebrowStyle" TargetType="TextBlock"><Setter Property="Foreground" Value="#7D8493"/><Setter Property="FontSize" Value="10"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+        <Style x:Key="TagsFieldStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#D8DCE4"/>
+            <Setter Property="CaretBrush" Value="#F4F6FA"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
         <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#12151C"/><Setter Property="Foreground" Value="#747B8A"/><Setter Property="BorderBrush" Value="#262C38"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="Padding" Value="12,10"/><Setter Property="FontSize" Value="10"/></Style>
         <Style TargetType="DataGridCell"><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="12,9"/><Setter Property="Foreground" Value="#BFC4CE"/><Setter Property="Background" Value="Transparent"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/></Style>
         <Style TargetType="DataGridRow"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="#20252F"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="MinHeight" Value="48"/><Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#1B1F28"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#2B2850"/><Setter Property="Foreground" Value="#F4F6FA"/></Trigger></Style.Triggers></Style>
@@ -38,10 +48,51 @@
         <Grid.ColumnDefinitions><ColumnDefinition Width="238"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
         <Border Grid.RowSpan="2" Background="#12151C" BorderBrush="#262C38" BorderThickness="0,0,1,0" Padding="16,24">
             <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                <StackPanel Orientation="Horizontal" Margin="8,0,0,28">
-                    <Image Source="Assets/sink.ico" Width="32" Height="32" RenderOptions.BitmapScalingMode="HighQuality"/>
-                    <TextBlock Text="Sink" FontSize="20" FontWeight="Bold" Foreground="#F4F6FA" Margin="11,3,0,0" VerticalAlignment="Center"/>
-                </StackPanel>
+                <Grid Margin="8,0,0,28">
+                    <StackPanel Orientation="Horizontal">
+                        <Image Source="Assets/sink.ico" Width="32" Height="32" RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <TextBlock Text="Sink" FontSize="20" FontWeight="Bold" Foreground="#F4F6FA" Margin="11,3,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <Button x:Name="NotificationBell" Click="NotificationBell_Click" ToolTip="Notifications"
+                            HorizontalAlignment="Right" VerticalAlignment="Center" Padding="7"
+                            Background="Transparent" BorderThickness="0" Cursor="Hand">
+                        <Path Width="14" Height="14" Stretch="Uniform" StrokeLineJoin="Round" Stroke="#BCC2CD" StrokeThickness="1.3"
+                              Data="M7,1 C4.5,1 3.3,3 3.3,5.7 L3.3,7.5 C3.3,9 2.5,10.3 1.3,11 L12.7,11 C11.5,10.3 10.7,9 10.7,7.5 L10.7,5.7 C10.7,3 9.5,1 7,1 Z M5.3,12.5 C5.3,13.3 6,14 7,14 C8,14 8.7,13.3 8.7,12.5"/>
+                    </Button>
+                    <Ellipse x:Name="NotificationDot" Width="8" Height="8" Fill="#8B7CFF" Stroke="#12151C" StrokeThickness="1.5"
+                             HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-2,-2,0" Visibility="Collapsed" IsHitTestVisible="False"/>
+                    <Popup x:Name="NotificationPopup" PlacementTarget="{Binding ElementName=NotificationBell}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+                        <Border Width="320" MaxHeight="420" Background="#1A1E27" BorderBrush="#2E3542" BorderThickness="1" CornerRadius="10" Margin="0,6,0,0">
+                            <Border.Effect><DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.4" Color="Black"/></Border.Effect>
+                            <DockPanel>
+                                <Grid DockPanel.Dock="Top" Margin="14,12,10,10">
+                                    <TextBlock Text="NOTIFICATIONS" Style="{StaticResource EyebrowStyle}" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="NotificationEmptyHint" Text="Nothing yet" Foreground="#6E7584" FontSize="11" HorizontalAlignment="Right" Visibility="Collapsed"/>
+                                </Grid>
+                                <Button DockPanel.Dock="Bottom" x:Name="ClearAllNotificationsButton" Content="Clear all" Click="ClearAllNotifications_Click"
+                                        Margin="10,4,10,10" Padding="0,8" Background="#242A34" Foreground="#BCC2CD" BorderThickness="0" Cursor="Hand"/>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="300">
+                                    <ItemsControl x:Name="NotificationList" Margin="6,0,6,0">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type models:AppNotification}">
+                                                <Border Background="#20242F" CornerRadius="8" Margin="4,3" Padding="10,8">
+                                                    <DockPanel>
+                                                        <Button DockPanel.Dock="Right" Content="✕" Click="ClearNotification_Click" Tag="{Binding}"
+                                                                Background="Transparent" BorderThickness="0" Foreground="#8A93A3" Padding="6,0" Cursor="Hand" VerticalAlignment="Top"/>
+                                                        <StackPanel>
+                                                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="#E7E9EE" FontSize="12"/>
+                                                            <TextBlock Text="{Binding Occurred, StringFormat='{}{0:t}'}" Foreground="#6E7584" FontSize="10" Margin="0,3,0,0"/>
+                                                        </StackPanel>
+                                                    </DockPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </Border>
+                    </Popup>
+                </Grid>
                 <StackPanel Grid.Row="1">
                     <Button x:Name="MusicHeaderButton" Content="LIBRARY" Tag="Active" Click="ShowMusicSource_Click" Style="{StaticResource SectionHeaderButtonStyle}"/>
                     <StackPanel x:Name="MusicNav">
@@ -95,6 +146,8 @@
                         <Button x:Name="IpodAlbumsButton" Content="▣    Albums" Tag="Albums" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
                         <Button x:Name="IpodGenresButton" Content="◇    Genres" Tag="Genres" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
                         <Button x:Name="IpodSongsButton" Content="♫    Songs" Tag="Songs" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
+                        <Button x:Name="IpodPodcastsButton" Content="◔    Podcasts" Click="IpodPodcastsButton_Click" Style="{StaticResource NavButtonStyle}"/>
+                        <Button x:Name="IpodPlaylistsButton" Content="☰    Playlists" Click="IpodPlaylistsButton_Click" Style="{StaticResource NavButtonStyle}"/>
                         <TextBlock x:Name="IpodNavHint" Text="Drag music onto IPOD to sync" Foreground="#6E7584" FontSize="10" Margin="12,7,0,2"/>
                     </StackPanel>
                     <Button x:Name="DownloadHeaderButton" Click="ShowDownloadSource_Click" Style="{StaticResource SectionHeaderButtonStyle}" Margin="0,14,0,0">
@@ -107,6 +160,20 @@
                                 <Grid.RenderTransform><RotateTransform/></Grid.RenderTransform>
                                 <Ellipse Stroke="#8B7CFF" StrokeThickness="1.7" StrokeDashArray="3.1 1.5" StrokeDashCap="Round"/>
                             </Grid>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="TagsHeaderButton" Click="ShowTagsSource_Click" Style="{StaticResource SectionHeaderButtonStyle}" Margin="0,4,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="#" FontSize="15" FontWeight="Bold" Foreground="#8B7CFF" Width="15" Margin="0,0,7,0" TextAlignment="Center"/>
+                            <TextBlock Text="TAGS" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="ReflectHeaderButton" Click="ShowReflectSource_Click" Style="{StaticResource SectionHeaderButtonStyle}" Margin="0,4,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="15" Height="15" Margin="0,0,7,0">
+                                <Path Data="M1,13 L4,7 L7,10 L13,1" Stroke="#8B7CFF" StrokeThickness="1.6" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                            </Border>
+                            <TextBlock Text="REFLECT" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>
@@ -161,8 +228,126 @@
                 <Border x:Name="SelectionBar" Visibility="Collapsed" Background="Transparent" BorderBrush="#262C38" BorderThickness="0,0,0,1" Padding="15,9"><DockPanel><Button Content="Clear" DockPanel.Dock="Right" Click="ClearSelection_Click" Background="Transparent" Foreground="#9D91FF" BorderThickness="0"/><TextBlock x:Name="SelectionText" Foreground="#7D8493" FontSize="11" VerticalAlignment="Center"/></DockPanel></Border>
                 <DataGrid x:Name="TracksGrid" Grid.Row="1" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="None" Background="Transparent" BorderThickness="0" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow" SelectionChanged="TracksGrid_SelectionChanged" MouseDoubleClick="TracksGrid_MouseDoubleClick" PreviewMouseLeftButtonDown="TracksGrid_PreviewMouseLeftButtonDown" PreviewMouseMove="TracksGrid_PreviewMouseMove" ContextMenuOpening="TracksGrid_ContextMenuOpening">
                     <DataGrid.ContextMenu><ContextMenu/></DataGrid.ContextMenu>
-                    <DataGrid.Columns><DataGridTextColumn Header="#" Binding="{Binding TrackNumber}" Width="48"/><DataGridTextColumn Header="TITLE" Binding="{Binding Title}" Width="2*"/><DataGridTextColumn Header="ARTIST" Binding="{Binding Artist}" Width="*"/><DataGridTextColumn Header="ALBUM" Binding="{Binding Album}" Width="*"/><DataGridTextColumn Header="GENRE" Binding="{Binding Genre}" Width="110"/><DataGridTextColumn Header="TIME" Binding="{Binding DurationText}" Width="70"/></DataGrid.Columns>
+                    <DataGrid.Columns>
+                        <DataGridTemplateColumn Header="♥" Width="30">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="♡" Foreground="#5A616E" FontSize="13" Cursor="Hand" HorizontalAlignment="Center" MouseLeftButtonDown="FavoriteGlyph_Click">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsFavorite}" Value="True">
+                                                        <Setter Property="Text" Value="♥"/>
+                                                        <Setter Property="Foreground" Value="#E0679B"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="#" Binding="{Binding TrackNumber}" Width="48"/><DataGridTextColumn Header="TITLE" Binding="{Binding Title}" Width="2*"/><DataGridTextColumn Header="ARTIST" Binding="{Binding Artist}" Width="*"/><DataGridTextColumn Header="ALBUM" Binding="{Binding Album}" Width="*"/><DataGridTextColumn Header="GENRE" Binding="{Binding Genre}" Width="110"/><DataGridTextColumn Header="TIME" Binding="{Binding DurationText}" Width="70"/></DataGrid.Columns>
                 </DataGrid>
+                </Grid>
+            </Border>
+            <Border x:Name="IpodPodcastsArea" Grid.Row="1" Margin="0,28,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#12151C" Visibility="Collapsed">
+                <Grid>
+                    <ListBox x:Name="IpodPodcastShowsList" Background="Transparent" BorderThickness="0" MouseDoubleClick="IpodPodcastShow_MouseDoubleClick">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="16,12"/>
+                                <Setter Property="BorderBrush" Value="#20252F"/>
+                                <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Title}" Foreground="#E7E9EE" FontSize="13"/>
+                                        <TextBlock Text="{Binding Artist}" Foreground="#7D8493" FontSize="11" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="{Binding Count}" Foreground="#7D8493" FontSize="11" VerticalAlignment="Center"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Grid x:Name="IpodPodcastEpisodesList" Visibility="Collapsed">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                        <Button x:Name="IpodPodcastBackButton" Content="← Back to shows" Click="IpodPodcastBack_Click" HorizontalAlignment="Left"
+                                Margin="14,12,0,0" Background="Transparent" Foreground="#9D91FF" BorderThickness="0" Cursor="Hand"/>
+                        <ListBox Grid.Row="1" x:Name="IpodPodcastEpisodesGrid" Background="Transparent" BorderThickness="0" Margin="0,6,0,0">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="16,10"/>
+                                    <Setter Property="BorderBrush" Value="#20252F"/>
+                                    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel>
+                                        <Button DockPanel.Dock="Right" Content="Unsync" Click="IpodPodcastUnsync_Click"
+                                                Background="Transparent" Foreground="#E0679B" BorderThickness="0" Cursor="Hand"/>
+                                        <TextBlock Text="{Binding Title}" Foreground="#E7E9EE" FontSize="12.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Grid>
+            </Border>
+            <Border x:Name="IpodPlaylistsArea" Grid.Row="1" Margin="0,28,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#12151C" Visibility="Collapsed">
+                <Grid>
+                    <ListBox x:Name="IpodPlaylistsList" Background="Transparent" BorderThickness="0" MouseDoubleClick="IpodPlaylist_MouseDoubleClick">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="16,12"/>
+                                <Setter Property="BorderBrush" Value="#20252F"/>
+                                <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Content="Unsync" Click="IpodPlaylistUnsync_Click"
+                                            Background="Transparent" Foreground="#E0679B" BorderThickness="0" Cursor="Hand"/>
+                                    <TextBlock Text="{Binding Count}" DockPanel.Dock="Right" Foreground="#7D8493" FontSize="11" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                                    <TextBlock Text="{Binding Name}" Foreground="#E7E9EE" FontSize="13" VerticalAlignment="Center"/>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Grid x:Name="IpodPlaylistTracksList" Visibility="Collapsed">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                        <Button x:Name="IpodPlaylistBackButton" Content="← Back to playlists" Click="IpodPlaylistBack_Click" HorizontalAlignment="Left"
+                                Margin="14,12,0,0" Background="Transparent" Foreground="#9D91FF" BorderThickness="0" Cursor="Hand"/>
+                        <ListBox Grid.Row="1" x:Name="IpodPlaylistTracksGrid" Background="Transparent" BorderThickness="0" Margin="0,6,0,0">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="16,10"/>
+                                    <Setter Property="BorderBrush" Value="#20252F"/>
+                                    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel>
+                                        <Button DockPanel.Dock="Right" Content="Unsync" Click="IpodPodcastUnsync_Click"
+                                                Background="Transparent" Foreground="#E0679B" BorderThickness="0" Cursor="Hand"/>
+                                        <TextBlock Text="{Binding Title}" Foreground="#E7E9EE" FontSize="12.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding Artist}" Foreground="#7D8493" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
                 </Grid>
             </Border>
         </Grid>
@@ -343,6 +528,160 @@
             <Border Grid.Row="5" Margin="0,16,0,0" Background="#161A22" BorderBrush="#2A303C" BorderThickness="1" CornerRadius="9" Padding="13,8">
                 <TextBlock x:Name="DownloadStatusBar" Text="Ready" Foreground="#9AA0AE" FontSize="11" TextTrimming="CharacterEllipsis"/>
             </Border>
+        </Grid>
+
+        <Grid x:Name="TagsPage" Grid.Column="1" Margin="38,32,38,30" Visibility="Collapsed">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <Grid>
+                <StackPanel>
+                    <TextBlock Text="LIBRARY" Style="{StaticResource EyebrowStyle}"/>
+                    <TextBlock Text="Tags" FontSize="34" FontWeight="SemiBold" Margin="0,4,0,2"/>
+                    <TextBlock x:Name="TagsSubtitle" Foreground="#7D8493" FontSize="12"/>
+                </StackPanel>
+                <Border Width="260" Height="39" HorizontalAlignment="Right" VerticalAlignment="Top" Background="#12151C" BorderBrush="#262C38" BorderThickness="1" CornerRadius="10" Padding="12,7">
+                    <DockPanel>
+                        <TextBlock Text="⌕" Foreground="#747B8B" Margin="0,0,8,0"/>
+                        <TextBox x:Name="TagsSearchBox" TextChanged="TagsSearchBox_TextChanged" Background="Transparent" BorderThickness="0" Foreground="#F4F6FA" CaretBrush="#F4F6FA"/>
+                    </DockPanel>
+                </Border>
+            </Grid>
+            <Border Grid.Row="1" Margin="0,28,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#12151C">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <Border x:Name="TagsSelectionBar" Grid.Row="0" Visibility="Collapsed" Background="Transparent" BorderBrush="#262C38" BorderThickness="0,0,0,1" Padding="15,9">
+                        <DockPanel>
+                            <Button Content="Clear" DockPanel.Dock="Right" Click="TagsClearSelection_Click" Background="Transparent" Foreground="#9D91FF" BorderThickness="0"/>
+                            <TextBlock x:Name="TagsSelectionText" Foreground="#7D8493" FontSize="11" VerticalAlignment="Center"/>
+                        </DockPanel>
+                    </Border>
+                    <DataGrid x:Name="TagsGrid" Grid.Row="1" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="None"
+                              Background="Transparent" BorderThickness="0" CanUserSortColumns="True" CanUserAddRows="False"
+                              SelectionMode="Extended" SelectionUnit="FullRow"
+                              SelectionChanged="TagsGrid_SelectionChanged" ContextMenuOpening="TagsGrid_ContextMenuOpening"
+                              PreviewKeyDown="TagsGrid_PreviewKeyDown">
+                        <DataGrid.ContextMenu><ContextMenu/></DataGrid.ContextMenu>
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="#" Width="48" SortMemberPath="TrackNumber">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding TrackNumber, UpdateSourceTrigger=LostFocus}" Style="{StaticResource TagsFieldStyle}" LostFocus="TagsField_LostFocus"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="TITLE" Width="2*" SortMemberPath="Title">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Title, UpdateSourceTrigger=LostFocus}" Style="{StaticResource TagsFieldStyle}" LostFocus="TagsField_LostFocus"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="ARTIST" Width="*" SortMemberPath="Artist">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Artist, UpdateSourceTrigger=LostFocus}" Style="{StaticResource TagsFieldStyle}" LostFocus="TagsField_LostFocus"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="ALBUM" Width="*" SortMemberPath="Album">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Album, UpdateSourceTrigger=LostFocus}" Style="{StaticResource TagsFieldStyle}" LostFocus="TagsField_LostFocus"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="GENRE" Width="110" SortMemberPath="Genre">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Genre, UpdateSourceTrigger=LostFocus}" Style="{StaticResource TagsFieldStyle}" LostFocus="TagsField_LostFocus"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="TIME" Binding="{Binding DurationText}" Width="70" IsReadOnly="True"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Grid x:Name="ReflectPage" Grid.Column="1" Margin="38,32,38,30" Visibility="Collapsed">
+            <Grid.Resources>
+                <Style x:Key="ReflectCard" TargetType="Border">
+                    <Setter Property="Background" Value="#12151C"/>
+                    <Setter Property="BorderBrush" Value="#262C38"/>
+                    <Setter Property="BorderThickness" Value="1"/>
+                    <Setter Property="CornerRadius" Value="12"/>
+                    <Setter Property="Padding" Value="18,15"/>
+                    <Setter Property="Margin" Value="0,0,14,14"/>
+                </Style>
+                <DataTemplate x:Key="RankedRowTemplate">
+                    <Grid Margin="0,4">
+                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding Name}" Foreground="#E7E9EE" FontSize="12.5" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Grid.Column="1" Text="{Binding Detail}" Foreground="#7D8493" FontSize="11" Margin="10,0,0,0"/>
+                    </Grid>
+                </DataTemplate>
+            </Grid.Resources>
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="0,0,4,0">
+                    <TextBlock Text="LISTENING HABITS" Style="{StaticResource EyebrowStyle}"/>
+                    <TextBlock Text="Reflect" FontSize="34" FontWeight="SemiBold" Margin="0,4,0,2"/>
+                    <TextBlock x:Name="ReflectYearSubtitle" Foreground="#7D8493" FontSize="12" Margin="0,0,0,20"/>
+
+                    <WrapPanel>
+                        <Border Style="{StaticResource ReflectCard}" Width="220">
+                            <StackPanel>
+                                <TextBlock Text="TOTAL LISTEN TIME" Style="{StaticResource EyebrowStyle}"/>
+                                <TextBlock x:Name="ReflectTotalTimeText" FontSize="26" FontWeight="SemiBold" Foreground="#F4F6FA" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ReflectCard}" Width="220">
+                            <StackPanel>
+                                <TextBlock Text="PODCAST HOURS LISTENED" Style="{StaticResource EyebrowStyle}"/>
+                                <TextBlock x:Name="ReflectPodcastHoursText" FontSize="26" FontWeight="SemiBold" Foreground="#F4F6FA" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ReflectCard}" Width="220">
+                            <StackPanel>
+                                <TextBlock Text="PODCAST EPISODES COMPLETED" Style="{StaticResource EyebrowStyle}"/>
+                                <TextBlock x:Name="ReflectEpisodesCompletedText" FontSize="26" FontWeight="SemiBold" Foreground="#F4F6FA" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </WrapPanel>
+
+                    <WrapPanel>
+                        <Border Style="{StaticResource ReflectCard}" Width="300">
+                            <StackPanel>
+                                <TextBlock Text="TOP 10 SONGS" Style="{StaticResource EyebrowStyle}"/>
+                                <ItemsControl x:Name="ReflectTopSongs" Margin="0,8,0,0" ItemTemplate="{StaticResource RankedRowTemplate}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ReflectCard}" Width="300">
+                            <StackPanel>
+                                <TextBlock Text="TOP 10 ALBUMS" Style="{StaticResource EyebrowStyle}"/>
+                                <ItemsControl x:Name="ReflectTopAlbums" Margin="0,8,0,0" ItemTemplate="{StaticResource RankedRowTemplate}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ReflectCard}" Width="300">
+                            <StackPanel>
+                                <TextBlock Text="TOP 10 ARTISTS" Style="{StaticResource EyebrowStyle}"/>
+                                <ItemsControl x:Name="ReflectTopArtists" Margin="0,8,0,0" ItemTemplate="{StaticResource RankedRowTemplate}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ReflectCard}" Width="300">
+                            <StackPanel>
+                                <TextBlock Text="TOP 5 GENRES" Style="{StaticResource EyebrowStyle}"/>
+                                <ItemsControl x:Name="ReflectTopGenres" Margin="0,8,0,0" ItemTemplate="{StaticResource RankedRowTemplate}"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ReflectCard}" Width="300">
+                            <StackPanel>
+                                <TextBlock Text="TOP 5 PODCASTS" Style="{StaticResource EyebrowStyle}"/>
+                                <ItemsControl x:Name="ReflectTopPodcasts" Margin="0,8,0,0" ItemTemplate="{StaticResource RankedRowTemplate}"/>
+                            </StackPanel>
+                        </Border>
+                    </WrapPanel>
+                </StackPanel>
+            </ScrollViewer>
         </Grid>
 
         <Grid x:Name="PodcastPage" Grid.Column="1" Margin="38,32,38,24" Visibility="Collapsed">
@@ -591,6 +930,16 @@
                     </StackPanel>
                 </Grid>
             </Button>
+            <StackPanel Orientation="Horizontal" Canvas.Right="20" Canvas.Bottom="155" IsHitTestVisible="True">
+                <Button x:Name="StopSyncButton" Click="StopSyncIpod_Click" Visibility="Collapsed" ToolTip="Stop syncing"
+                        Style="{StaticResource EpisodeIconButton}" Margin="0,0,6,0">
+                    <TextBlock Text="⏹" FontSize="11" Foreground="#F4F6FA"/>
+                </Button>
+                <Button x:Name="EjectTransportButton" Click="EjectIpod_Click" Visibility="Collapsed" ToolTip="Eject"
+                        Style="{StaticResource EpisodeIconButton}">
+                    <TextBlock Text="⏏" FontSize="11" Foreground="#F4F6FA"/>
+                </Button>
+            </StackPanel>
         </Canvas>
         <Border x:Name="ImportOverlay" Grid.RowSpan="2" Grid.ColumnSpan="2" Panel.ZIndex="50" Visibility="Collapsed" Margin="14" BorderBrush="#8B7CFF" BorderThickness="2" CornerRadius="18" Background="#EE11141B" IsHitTestVisible="False">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><Border Width="66" Height="66" CornerRadius="33" Background="#6559CE"><TextBlock Text="↓" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock Text="Drop music to import" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,18,0,0"/><TextBlock Text="Audio files and nested folders are welcome" Foreground="#8C93A2" FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0"/></StackPanel>

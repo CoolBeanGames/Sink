@@ -19,6 +19,13 @@ public static class Artwork
     /// <summary>Every imported cover is normalised to this square size, centre-cropped.</summary>
     public const int Size = 300;
 
+    /// <summary>The cached file path for a key if it's already been extracted/saved, without doing any extraction work — for a hot path that shouldn't pay for a fresh TagLib read of every track (task 132).</summary>
+    public static string? CachedPath(string key)
+    {
+        var path = Path.Combine(Directory, Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(key)))[..16] + ".jpg");
+        return File.Exists(path) ? path : null;
+    }
+
     /// <summary>Saves the picture bytes for an album key and returns the file path, or null.</summary>
     public static string? Save(string key, byte[]? data, string? mimeType)
     {

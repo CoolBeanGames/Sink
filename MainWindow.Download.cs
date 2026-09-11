@@ -102,6 +102,8 @@ public partial class MainWindow
     private void ShowDownloadSource_Click(object sender, RoutedEventArgs e)
     {
         ExitPodcastView(); // was left showing underneath — task 122
+        ExitTagsView();
+        ExitReflectView();
         _downloadViewActive = true;
         MusicPage.Visibility = Visibility.Collapsed;
         DownloadPage.Visibility = Visibility.Visible;
@@ -999,6 +1001,9 @@ public partial class MainWindow
             SetDownloadStatus(failed == 0
                 ? $"Finished — imported {imported} track{(imported == 1 ? "" : "s")}"
                 : $"Finished — {done} done, {failed} failed, imported {imported} track{(imported == 1 ? "" : "s")}");
+            if (done + failed > 0)
+                PostNotification("download-finished", null,
+                    $"Download finished — {done} success, {failed} failure{(failed == 1 ? "" : "s")}, {imported} copied to library");
 
             if (done > 0) PruneSucceeded();
             SaveFailedDownloadQueue();

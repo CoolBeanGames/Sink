@@ -42,7 +42,8 @@ public static class IpodWriteService
     public static IpodSyncResult Sync(
         string root,
         IReadOnlyList<Track> tracks,
-        IProgress<(int done, int total, string message)>? progress = null)
+        IProgress<(int done, int total, string message)>? progress = null,
+        CancellationToken token = default)
     {
         var eligible = tracks.Where(t => IsSyncable(t.FilePath) && !t.ExcludedFromShuffle).ToList();
         var skipped = tracks.Count - eligible.Count;
@@ -67,6 +68,7 @@ public static class IpodWriteService
 
             for (var i = 0; i < eligible.Count; i++)
             {
+                token.ThrowIfCancellationRequested(); // task 129 — Stop syncing button
                 var src = eligible[i];
                 progress?.Report((i, eligible.Count, $"Copying {src.Title}"));
                 CwTrack? onDevice;
@@ -102,6 +104,12 @@ public static class IpodWriteService
             }
             return new IpodSyncResult(added, present, skipped, null);
         }
+        catch (OperationCanceledException)
+        {
+            Log.Info("iPod sync cancelled");
+            if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
+            throw;
+        }
         catch (Exception ex)
         {
             Log.Error("iPod sync failed", ex);
@@ -124,7 +132,8 @@ public static class IpodWriteService
         string root,
         string playlistName,
         IReadOnlyList<Track> tracks,
-        IProgress<(int done, int total, string message)>? progress = null)
+        IProgress<(int done, int total, string message)>? progress = null,
+        CancellationToken token = default)
     {
         var eligible = tracks.Where(t => IsSyncable(t.FilePath) && !t.ExcludedFromShuffle).ToList();
         var skipped = tracks.Count - eligible.Count;
@@ -153,6 +162,7 @@ public static class IpodWriteService
 
             for (var i = 0; i < eligible.Count; i++)
             {
+                token.ThrowIfCancellationRequested(); // task 129 — Stop syncing button
                 var src = eligible[i];
                 progress?.Report((i, eligible.Count, $"Copying {src.Title}"));
                 CwTrack? onDevice;
@@ -201,11 +211,54 @@ public static class IpodWriteService
             }
             return new IpodSyncResult(added, present, skipped, null);
         }
+        catch (OperationCanceledException)
+        {
+            Log.Info("iPod playlist sync cancelled");
+            if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
+            throw;
+        }
         catch (Exception ex)
         {
             Log.Error("iPod playlist sync failed", ex);
             if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
             return new IpodSyncResult(added, present, skipped, ex.Message);
+        }
+        finally
+        {
+            if (locked) { try { ipod.ReleaseLock(); } catch { } }
+        }
+    }
+
+    /// <summary>Removes just the named playlist from the device — its tracks are left alone, matching how "delete playlist" already works for the library's own playlists (task 134).</summary>
+    public static bool RemovePlaylist(string root, string playlistName)
+    {
+        Log.Info($"iPod playlist remove: \"{playlistName}\", root {root}");
+        IPod ipod;
+        try { ipod = IpodReader.Open(root); ipod.AssertIsWritable(); }
+        catch (Exception ex) { Log.Error("iPod playlist remove: open failed", ex); return false; }
+
+        string? backup = null;
+        var locked = false;
+        try
+        {
+            var playlist = ipod.Playlists.GetPlaylistByName(playlistName);
+            if (playlist is null || playlist.IsMaster) return false;
+
+            backup = BackupDatabase(root);
+            IPodBackup.EnableBackups = false;
+            ipod.AcquireLock();
+            locked = true;
+
+            ipod.Playlists.Remove(playlist, deleteTracks: false);
+            ipod.SaveChanges();
+            DriveEject.Flush(root);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("iPod playlist remove failed", ex);
+            if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
+            return false;
         }
         finally
         {
