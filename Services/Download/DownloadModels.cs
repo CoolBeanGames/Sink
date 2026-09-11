@@ -220,7 +220,26 @@ public sealed class DownloadNode : INotifyPropertyChanged
     private const string GlyphGrey = "#6E7584";
     private const string GlyphBlack = "#0C0D11";
 
-    private string GlyphHex => _state switch
+    /// <summary>
+    /// An artist row isn't itself a download unit — only its album children are
+    /// (see <c>DownloadUnits</c>) — so its own <see cref="_state"/> never moves.
+    /// Roll the albums' states up so the artist's light actually reflects what's
+    /// happening underneath it (task 139).
+    /// </summary>
+    private DownloadState EffectiveState
+    {
+        get
+        {
+            if (Kind != DownloadKind.Artist || Children.Count == 0) return _state;
+            if (Children.Any(c => c.EffectiveState is DownloadState.Downloading or DownloadState.Importing)) return DownloadState.Downloading;
+            if (Children.Any(c => c.EffectiveState == DownloadState.Scanning)) return DownloadState.Scanning;
+            if (Children.Any(c => c.EffectiveState == DownloadState.Failed)) return DownloadState.Failed;
+            if (Children.All(c => c.EffectiveState == DownloadState.Done)) return DownloadState.Done;
+            return _state;
+        }
+    }
+
+    private string GlyphHex => EffectiveState switch
     {
         DownloadState.Done => GlyphGreen,
         DownloadState.Failed => GlyphRed,
@@ -229,7 +248,7 @@ public sealed class DownloadNode : INotifyPropertyChanged
         _ => Enabled == false ? GlyphBlack : GlyphOrange,
     };
 
-    private bool GlyphGlows => _state switch
+    private bool GlyphGlows => EffectiveState switch
     {
         DownloadState.Done or DownloadState.Failed or DownloadState.Downloading or DownloadState.Importing => true,
         DownloadState.Scanning or DownloadState.Pending => false,
@@ -250,7 +269,7 @@ public sealed class DownloadNode : INotifyPropertyChanged
     public double StatusGlowOpacity => GlyphGlows ? 0.95 : 0.0;
     public double StatusGlowRadius => GlyphGlows ? 13 : 0;
 
-    public string StatusGlyphTooltip => _state switch
+    public string StatusGlyphTooltip => EffectiveState switch
     {
         DownloadState.Done => "Downloaded",
         DownloadState.Failed => "Download failed",
@@ -287,7 +306,7 @@ public sealed class DownloadNode : INotifyPropertyChanged
 
     private void Child_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(Enabled)) OnChildChanged();
+        if (e.PropertyName is nameof(Enabled) or nameof(State)) OnChildChanged();
     }
 
     private void OnChildChanged()
