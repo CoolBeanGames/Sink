@@ -36,6 +36,31 @@ public partial class MainWindow : Window
     private bool _ipodConnected;
     private bool _ipodSyncing;
     private string? _ejectedIpodKey;
+
+    /// <summary>
+    /// Windows enumerates a connected iPod through more than one path at once —
+    /// a mounted drive letter (readable) and one or two WMI USB PnP entries
+    /// (unreadable) — and a drive-letter scan can transiently miss on a given
+    /// poll even while the device is fully present. Without debouncing, a
+    /// single missed poll silently swaps a working, readable device for an
+    /// unreadable placeholder mid-session: a sync started right then targets
+    /// null LibraryRoot and only stages tracks instead of writing them, and
+    /// the two identities' different Keys defeat the eject-ignore check below
+    /// (tasks 140/141/143).
+    /// </summary>
+    private int _ipodRootlessStreak;
+
+    /// <summary>
+    /// Set once a readable connection is confirmed to have dropped to an
+    /// unreadable one (see <see cref="_ipodRootlessStreak"/>) — almost always
+    /// because the volume was just ejected in Windows, not because the iPod
+    /// suddenly became unreadable. Suppresses the ghost WMI-only detections
+    /// (which keep enumerating under different Keys) from re-"connecting" us
+    /// as an unreadable device until a real, readable device reappears or the
+    /// iPod is unplugged entirely (task 143).
+    /// </summary>
+    private bool _ignoreUnreadableIpod;
+
     private bool _recordSpinning;
     private IpodDevice? _ipodDevice;
     private readonly DispatcherTimer _ipodPollTimer = new() { Interval = TimeSpan.FromSeconds(2) };
@@ -171,6 +196,38 @@ public partial class MainWindow : Window
                 return;
             }
 
+            if (device.LibraryRoot is null)
+            {
+                // A ghost WMI-only re-detection under a fresh, un-ejected Key
+                // right after we already recognized the eject below — ignore
+                // it until a real, readable device reappears.
+                if (_ignoreUnreadableIpod) return;
+
+                if (_ipodConnected && _ipodDevice?.LibraryRoot is not null)
+                {
+                    // We had a readable connection and this poll suddenly
+                    // can't see its library root. Debounce a couple of polls
+                    // before believing it — a drive-letter scan can miss a
+                    // beat on its own — then treat it as Windows having
+                    // ejected the volume out from under us, not as the same
+                    // iPod having gone unreadable.
+                    if (++_ipodRootlessStreak < 2) return;
+                    _ipodRootlessStreak = 0;
+                    _ignoreUnreadableIpod = true;
+                    Services.Log.Info($"iPod's readable volume disappeared (now {device.Name}, {device.Key}) — treating as a Windows-side eject");
+                    SetIpodConnected(false);
+                    LoadIpodLibrary(null);
+                    if (wasManual) PlaybackStatus.Text = "iPod ejected in Windows";
+                    return;
+                }
+                // Never had a readable connection this session — genuinely unreadable (HFS+/MTP); fall through as before.
+            }
+            else
+            {
+                _ipodRootlessStreak = 0;
+                _ignoreUnreadableIpod = false;
+            }
+
             var isNew = !_ipodConnected || _ipodDevice?.Key != device.Key;
             var changed = isNew || _ipodDevice?.Tooltip != device.Tooltip;
             if (changed)
@@ -191,6 +248,8 @@ public partial class MainWindow : Window
         }
 
         _ejectedIpodKey = null; // physically gone now; a future reconnect is a fresh plug-in
+        _ignoreUnreadableIpod = false;
+        _ipodRootlessStreak = 0;
         if (_ipodConnected && _ipodDevice is not null) SetIpodConnected(false);
         if (_ipodLibraryRoot is not null) LoadIpodLibrary(null);
         if (wasManual) PlaybackStatus.Text = "No iPod found — check the cable, or click the record to simulate one";
@@ -946,8 +1005,15 @@ public partial class MainWindow : Window
 
     private void EjectIpod_Click(object sender, RoutedEventArgs e)
     {
+        var root = _ipodDevice?.LibraryRoot;
         _ejectedIpodKey = _ipodDevice?.Key;
+        _ignoreUnreadableIpod = true; // the drive going unreadable right after this is our own eject, not a ghost reconnect
         SetIpodConnected(false);
+        if (root is not null)
+        {
+            var ejected = Services.DriveEject.TryEject(root);
+            Services.Log.Info(ejected ? $"Ejected {root} in Windows" : $"Windows eject for {root} failed or wasn't supported by the device");
+        }
     }
 
     private void IpodButton_DragOver(object sender, DragEventArgs e)
