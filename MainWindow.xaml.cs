@@ -291,7 +291,9 @@ public partial class MainWindow : Window
             Services.Log.Error("Reading iPod database failed", ex);
             PlaybackStatus.Text = $"Couldn't read the iPod database: {ex.Message}";
         }
-        if (_source == LibrarySource.Ipod) RenderLibrary();
+        if (_source != LibrarySource.Ipod) return;
+        if (_ipodPodcastsActive) RenderIpodPodcasts();
+        else RenderLibrary();
     }
 
     private void ApplyIpodLibraryChrome(Sink.Services.Ipod.IpodLibrary library, string name)
@@ -425,7 +427,7 @@ public partial class MainWindow : Window
 
     private void SetActiveNavigation(Button? active)
     {
-        foreach (var button in new[] { ArtistsButton, AlbumsButton, GenresButton, SongsButton, IpodArtistsButton, IpodAlbumsButton, IpodGenresButton, IpodSongsButton })
+        foreach (var button in new[] { ArtistsButton, AlbumsButton, GenresButton, SongsButton, IpodArtistsButton, IpodAlbumsButton, IpodGenresButton, IpodSongsButton, IpodPodcastsButton })
         {
             var name = button.Name.Replace("Ipod", "").Replace("Button", "");
             button.Tag = button == active ? "Active" : name;
@@ -434,6 +436,8 @@ public partial class MainWindow : Window
 
     private void RenderLibrary()
     {
+        _ipodPodcastsActive = false;
+        IpodPodcastsArea.Visibility = Visibility.Collapsed;
         MetadataIndex.Rebuild(_tracks);
         var query = SearchBox?.Text?.Trim() ?? "";
         var ipodOnDevice = _source == LibrarySource.Ipod && _ipodLibrary is not null;
