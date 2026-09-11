@@ -474,6 +474,8 @@ public static partial class DownloadService
         if (raw.Contains("not a bot", StringComparison.OrdinalIgnoreCase)
             || raw.Contains("Sign in to confirm", StringComparison.OrdinalIgnoreCase))
             return "YouTube is asking Sink to sign in. Open Settings and set \"YouTube cookies\" to the browser you're signed into YouTube with, then try again.";
+        if (raw.Contains("dpapi", StringComparison.OrdinalIgnoreCase))
+            return "Sink couldn't read your browser's saved cookies (Windows DPAPI decryption failed). Try picking a different browser under Settings → \"YouTube cookies\", or set it to \"none\".";
         return raw;
     }
 
@@ -531,12 +533,15 @@ public static partial class DownloadService
     }
 
     private static bool LooksLikeCookieProblem(string stderr) =>
-        stderr.Contains("cookie", StringComparison.OrdinalIgnoreCase) &&
+        // "Failed to decrypt with DPAPI" (yt-dlp#10927) never mentions the word
+        // "cookie" at all, so it needs its own check alongside the general one.
+        stderr.Contains("dpapi", StringComparison.OrdinalIgnoreCase)
+        || (stderr.Contains("cookie", StringComparison.OrdinalIgnoreCase) &&
         (stderr.Contains("could not", StringComparison.OrdinalIgnoreCase)
          || stderr.Contains("unable to", StringComparison.OrdinalIgnoreCase)
          || stderr.Contains("permission", StringComparison.OrdinalIgnoreCase)
          || stderr.Contains("decrypt", StringComparison.OrdinalIgnoreCase)
-         || stderr.Contains("database", StringComparison.OrdinalIgnoreCase));
+         || stderr.Contains("database", StringComparison.OrdinalIgnoreCase)));
 
     /// <summary>
     /// Runs yt-dlp with browser cookies attached when configured, and falls back
