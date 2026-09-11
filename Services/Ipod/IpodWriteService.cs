@@ -5,6 +5,7 @@ using Sink.Models;
 using Sink.Services;
 using CwTrack = Clickwheel.Parsers.iTunesDB.Track;
 using CwMediaType = Clickwheel.Parsers.iTunesDB.MediaType;
+using CwPlaylist = Clickwheel.Parsers.iTunesDB.Playlist;
 
 namespace Sink.Services.Ipod;
 
@@ -55,6 +56,8 @@ public static class IpodWriteService
         string? backup = null;
         var locked = false;
         int added = 0, present = 0;
+        var changedDb = false;
+        CwPlaylist? podcastsPlaylist = null;
         try
         {
             backup = BackupDatabase(root);
@@ -66,16 +69,32 @@ public static class IpodWriteService
             {
                 var src = eligible[i];
                 progress?.Report((i, eligible.Count, $"Copying {src.Title}"));
+                CwTrack? onDevice;
                 try
                 {
-                    MarkPodcast(ipod.Tracks.Add(NewTrackFrom(src)), src);
+                    onDevice = ipod.Tracks.Add(NewTrackFrom(src));
+                    MarkPodcast(onDevice, src);
                     added++;
+                    changedDb = true;
                 }
-                catch (TrackAlreadyExistsException) { present++; }
+                catch (TrackAlreadyExistsException existing) { present++; onDevice = existing.ExistingTrack; }
                 catch (OutOfDiskSpaceException) { skipped += eligible.Count - i; break; }
+
+                // A track only shows under the device's own Podcasts menu when
+                // it's a member of the special "Podcasts" playlist — the
+                // PodcastFlag alone (set above) isn't enough (task 147/148).
+                if (onDevice is not null && string.Equals(src.Genre, "Podcast", StringComparison.OrdinalIgnoreCase))
+                {
+                    podcastsPlaylist ??= ipod.Playlists.GetPlaylistByName("Podcasts") ?? ipod.Playlists.Add("Podcasts");
+                    if (!podcastsPlaylist.ContainsTrack(onDevice))
+                    {
+                        podcastsPlaylist.AddTrack(onDevice);
+                        changedDb = true;
+                    }
+                }
             }
 
-            if (added > 0)
+            if (changedDb)
             {
                 progress?.Report((eligible.Count, eligible.Count, "Updating the iPod database"));
                 ipod.SaveChanges();
@@ -144,12 +163,24 @@ public static class IpodWriteService
                     added++;
                     changedDb = true;
                 }
-                catch (TrackAlreadyExistsException)
+                catch (TrackAlreadyExistsException existing)
                 {
+                    // Clickwheel rewrites a track's FilePath to its on-device
+                    // location the moment it's copied, so re-deriving "the
+                    // existing track" by comparing that resolved on-device
+                    // path against the original source path could never
+                    // match — it was comparing D:\iPod_Control\Music\... to
+                    // Z:\Sink\Music\... and always came up empty. The
+                    // exception already carries the real match directly
+                    // (Clickwheel dedupes by title/artist/album/track number,
+                    // not by path at all). Every song already synced before
+                    // adding it to a playlist hit this path, so a playlist
+                    // whose tracks were already on the device (the normal
+                    // case) never got any track linked to it, changedDb
+                    // stayed false, and the whole playlist silently never
+                    // reached SaveChanges (task 141).
                     present++;
-                    var target = Path.GetFullPath(src.FilePath!);
-                    onDevice = ipod.Tracks.Find(t =>
-                        string.Equals(Path.GetFullPath(IpodReader.ResolvePath(root, t.FilePath)), target, StringComparison.OrdinalIgnoreCase));
+                    onDevice = existing.ExistingTrack;
                 }
                 catch (OutOfDiskSpaceException) { skipped += eligible.Count - i; break; }
 
