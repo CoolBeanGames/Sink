@@ -1213,6 +1213,26 @@ public partial class MainWindow : Window
         _activePlaylist = playlist; _category = LibraryCategory.Playlist; _drilldown = null; SetActiveNavigation(null); RenderLibrary();
     }
 
+    // A ListBox doesn't select on right-click either (see the identical note
+    // on LinksTree_PreviewRightButtonDown) — without this, right-clicking a
+    // playlist row that isn't already selected would open a menu that acts
+    // on the wrong playlist.
+    private void PlaylistItem_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is ListBoxItem item) item.IsSelected = true;
+    }
+
+    private void PlaylistList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        var menu = PlaylistList.ContextMenu!;
+        menu.Items.Clear();
+        if (PlaylistList.SelectedItem is not Playlist playlist) { e.Handled = true; return; }
+
+        menu.Items.Add(Header(playlist.Name));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Delete playlist", () => DeletePlaylist(playlist)));
+    }
+
     // ---- Contextual right-click menus ------------------------------------
 
     private void TracksGrid_ContextMenuOpening(object sender, ContextMenuEventArgs e)
@@ -1229,6 +1249,8 @@ public partial class MainWindow : Window
         menu.Items.Add(Item("Play", () => PlayTracks(tracks)));
         menu.Items.Add(Item("Edit metadata…", () => EditMetadata(tracks)));
         menu.Items.Add(AddToPlaylistMenu(tracks));
+        if (_activePlaylist is { } activePlaylist)
+            menu.Items.Add(Item("Remove from playlist", () => RemoveTracksFromPlaylist(activePlaylist, tracks)));
         if (_source == LibrarySource.Ipod)
         {
             menu.Items.Add(Item("Unsync from iPod", () => UnsyncTracks(tracks)));
@@ -1334,6 +1356,30 @@ public partial class MainWindow : Window
         PlaylistList.Items.Refresh();
         if (added > 0) SaveLibrary();
         PlaybackStatus.Text = added > 0 ? $"Added {added} track{(added == 1 ? "" : "s")} to {playlist.Name}" : $"Already in {playlist.Name}";
+    }
+
+    /// <summary>Removes tracks from a playlist's membership only — never touches the library or the iPod.</summary>
+    private void RemoveTracksFromPlaylist(Playlist playlist, IReadOnlyList<Track> tracks)
+    {
+        var removed = 0;
+        foreach (var track in tracks)
+            if (playlist.TrackIds.Remove(track.Id)) removed++;
+        if (removed == 0) return;
+        PlaylistList.Items.Refresh();
+        if (_activePlaylist == playlist) RenderLibrary();
+        SaveLibrary();
+        PlaybackStatus.Text = $"Removed {removed} track{(removed == 1 ? "" : "s")} from {playlist.Name}";
+    }
+
+    private void DeletePlaylist(Playlist playlist)
+    {
+        if (MessageBox.Show(this, $"Delete the playlist \"{playlist.Name}\"? The tracks themselves are kept in your library.",
+                "Delete playlist", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        _playlists.Remove(playlist);
+        if (_activePlaylist == playlist) { _activePlaylist = null; _category = LibraryCategory.Albums; RenderLibrary(); }
+        PlaylistList.Items.Refresh();
+        SaveLibrary();
+        PlaybackStatus.Text = $"Deleted playlist \"{playlist.Name}\"";
     }
 
     private void SyncTracksToIpod(IReadOnlyList<Track> tracks)
