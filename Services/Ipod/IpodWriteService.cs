@@ -127,7 +127,10 @@ public static class IpodWriteService
             ipod.AcquireLock();
             locked = true;
 
-            var playlist = ipod.Playlists.GetPlaylistByName(playlistName) ?? ipod.Playlists.Add(playlistName);
+            var playlist = ipod.Playlists.GetPlaylistByName(playlistName);
+            var isNewPlaylist = playlist is null;
+            playlist ??= ipod.Playlists.Add(playlistName);
+            Log.Info($"iPod playlist sync: \"{playlistName}\" {(isNewPlaylist ? "created" : "found existing")}, had {playlist.TrackCount} track(s), {ipod.Playlists.Count} playlist(s) total on device");
 
             for (var i = 0; i < eligible.Count; i++)
             {
@@ -160,8 +163,10 @@ public static class IpodWriteService
             if (changedDb)
             {
                 progress?.Report((eligible.Count, eligible.Count, "Updating the iPod database"));
+                Log.Info($"iPod playlist sync: \"{playlistName}\" has {playlist.TrackCount} track(s) in memory before SaveChanges");
                 ipod.SaveChanges();
                 DriveEject.Flush(root);
+                VerifyPlaylistPersisted(root, playlistName, playlist.TrackCount);
             }
             return new IpodSyncResult(added, present, skipped, null);
         }
@@ -280,6 +285,26 @@ public static class IpodWriteService
         if (onDevice is null || !string.Equals(src.Genre, "Podcast", StringComparison.OrdinalIgnoreCase)) return;
         onDevice.PodcastFlag = true;
         onDevice.MediaType = CwMediaType.Podcast;
+    }
+
+    /// <summary>
+    /// Diagnostic only (task: playlist sync reports success but the playlist
+    /// doesn't appear on-device while its tracks do — narrowing down whether
+    /// that's a Sink/Clickwheel write bug or a device firmware display quirk).
+    /// Re-opens the database fresh from disk — a separate IPod instance, not
+    /// the one still in memory — and checks whether the playlist survived.
+    /// </summary>
+    private static void VerifyPlaylistPersisted(string root, string playlistName, int expectedTrackCount)
+    {
+        try
+        {
+            var reopened = IpodReader.Open(root);
+            var found = reopened.Playlists.GetPlaylistByName(playlistName);
+            Log.Info(found is null
+                ? $"iPod playlist sync: VERIFY FAILED — \"{playlistName}\" not found on a fresh re-read of the database ({reopened.Playlists.Count} playlist(s) total)"
+                : $"iPod playlist sync: verified — \"{playlistName}\" persisted with {found.TrackCount} track(s) (expected {expectedTrackCount})");
+        }
+        catch (Exception ex) { Log.Warn($"iPod playlist sync: verify re-read failed: {ex.Message}"); }
     }
 
     private static NewTrack NewTrackFrom(Track src)
