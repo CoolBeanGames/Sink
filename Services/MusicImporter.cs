@@ -26,14 +26,34 @@ public static partial class MusicImporter
         return files.Select(CreateTrack).ToList();
     }
 
+    /// <summary>
+    /// The Artist/Album subfolder a track belongs in under the library root
+    /// (task 155) — blank input falls back to "Unknown Artist"/"Unknown Album"
+    /// rather than an invalid or missing path segment.
+    /// </summary>
+    public static string ArtistAlbumDir(string libraryDir, string? artist, string? album) =>
+        Path.Combine(libraryDir,
+            SanitizeSegment(string.IsNullOrWhiteSpace(artist) ? "Unknown Artist" : artist),
+            SanitizeSegment(string.IsNullOrWhiteSpace(album) ? "Unknown Album" : album));
+
+    /// <summary>Makes a string safe to use as one path segment (folder or file name), capped to a sane length.</summary>
+    public static string SanitizeSegment(string name)
+    {
+        var trimmed = name.Trim();
+        foreach (var c in Path.GetInvalidFileNameChars()) trimmed = trimmed.Replace(c, '_');
+        return trimmed.Length > 120 ? trimmed[..120] : trimmed;
+    }
+
     private static string Relocate(string sourcePath, ImportMode mode, string libraryDir)
     {
         try
         {
-            Directory.CreateDirectory(libraryDir);
-            var target = Path.Combine(libraryDir, Path.GetFileName(sourcePath));
+            var (artist, album) = ReadArtistAlbum(sourcePath);
+            var destDir = ArtistAlbumDir(libraryDir, artist, album);
+            Directory.CreateDirectory(destDir);
+            var target = Path.Combine(destDir, Path.GetFileName(sourcePath));
             for (var i = 2; File.Exists(target) && !PathsEqual(target, sourcePath); i++)
-                target = Path.Combine(libraryDir, $"{Path.GetFileNameWithoutExtension(sourcePath)} ({i}){Path.GetExtension(sourcePath)}");
+                target = Path.Combine(destDir, $"{Path.GetFileNameWithoutExtension(sourcePath)} ({i}){Path.GetExtension(sourcePath)}");
             if (PathsEqual(target, sourcePath)) return sourcePath;
 
             if (mode == ImportMode.Move) File.Move(sourcePath, target);
@@ -44,6 +64,91 @@ public static partial class MusicImporter
         {
             return sourcePath; // fall back to referencing in place
         }
+    }
+
+    /// <summary>Best-effort Artist/Album straight from a file's own tags — "Unknown" if unreadable.</summary>
+    private static (string Artist, string Album) ReadArtistAlbum(string filePath)
+    {
+        try
+        {
+            using var tag = TagLib.File.Create(filePath);
+            var t = tag.Tag;
+            var artist = !string.IsNullOrWhiteSpace(t.FirstPerformer) ? t.FirstPerformer.Trim()
+                : !string.IsNullOrWhiteSpace(t.FirstAlbumArtist) ? t.FirstAlbumArtist.Trim() : "Unknown Artist";
+            var album = !string.IsNullOrWhiteSpace(t.Album) ? t.Album.Trim() : "Unknown Album";
+            return (artist, album);
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            return ("Unknown Artist", "Unknown Album");
+        }
+    }
+
+    public sealed record OrganizeResult(int Moved, int FoldersRemoved);
+
+    /// <summary>
+    /// Reorganizes every audio file already under <paramref name="libraryDir"/> into
+    /// Artist/Album subfolders (task 155) — keyed off a matching <see cref="Track"/>'s
+    /// own Artist/Album when one exists (updating its FilePath/FileName so playback
+    /// and iPod sync keep working), or the file's own tags for a loose file nothing
+    /// in the library references yet. Files already in the right place are left
+    /// alone. Finishes by deleting every folder the moves left empty.
+    /// </summary>
+    public static OrganizeResult Organize(string libraryDir, IReadOnlyList<Track> tracks)
+    {
+        if (!Directory.Exists(libraryDir)) return new OrganizeResult(0, 0);
+        var byPath = new Dictionary<string, Track>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in tracks)
+            if (!string.IsNullOrWhiteSpace(t.FilePath))
+                byPath[Path.GetFullPath(t.FilePath)] = t;
+
+        var moved = 0;
+        foreach (var file in Directory.EnumerateFiles(libraryDir, "*", SearchOption.AllDirectories).ToList())
+        {
+            if (!AudioExtensions.Contains(Path.GetExtension(file))) continue;
+            var full = Path.GetFullPath(file);
+            var track = byPath.GetValueOrDefault(full);
+            var (artist, album) = track is not null ? (track.Artist, track.Album) : ReadArtistAlbum(file);
+            var destDir = ArtistAlbumDir(libraryDir, artist, album);
+            var dest = Path.Combine(destDir, Path.GetFileName(file));
+            if (PathsEqual(dest, file)) continue;
+
+            try
+            {
+                Directory.CreateDirectory(destDir);
+                for (var i = 2; File.Exists(dest); i++)
+                    dest = Path.Combine(destDir, $"{Path.GetFileNameWithoutExtension(file)} ({i}){Path.GetExtension(file)}");
+                File.Move(file, dest);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { continue; }
+
+            if (track is not null) { track.FilePath = dest; track.FileName = Path.GetFileName(dest); }
+            moved++;
+        }
+
+        var removed = RemoveEmptyFolders(libraryDir);
+        return new OrganizeResult(moved, removed);
+    }
+
+    /// <summary>Deletes every folder under (but not including) <paramref name="root"/> left with nothing in it, deepest first.</summary>
+    private static int RemoveEmptyFolders(string root)
+    {
+        var removed = 0;
+        var dirs = Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories)
+            .OrderByDescending(d => d.Count(c => c == Path.DirectorySeparatorChar || c == Path.AltDirectorySeparatorChar));
+        foreach (var dir in dirs)
+        {
+            try
+            {
+                if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
+                {
+                    Directory.Delete(dir);
+                    removed++;
+                }
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
+        return removed;
     }
 
     private static bool PathsEqual(string a, string b) =>

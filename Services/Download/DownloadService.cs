@@ -266,10 +266,6 @@ public static partial class DownloadService
                     .FirstOrDefault(f => AudioExtensions.Contains(Path.GetExtension(f)));
             if (file is null) return false;
 
-            var stem = isPlaylist ? Path.GetFileNameWithoutExtension(file) : $"{artist} - {node.Title}";
-            var finalPath = UniquePath(Path.Combine(DownloadsDirectory, Sanitize(stem) + Path.GetExtension(file)));
-            File.Move(file, finalPath, overwrite: false);
-
             // Write an edited title: always for a single, and per-track for an
             // album when the user renamed that track. An untouched album track
             // keeps yt-dlp's own title (see archived task 49).
@@ -288,6 +284,15 @@ public static partial class DownloadService
             var trackArtist = node.IsMixedPlaylist ? FirstReal(trackNode.Artist) ?? "" : artist;
             var trackAlbum = node.IsMixedPlaylist ? trackNode.Album : album;
             var trackGenre = node.IsMixedPlaylist ? trackNode.Genre : genre;
+
+            // Lands straight in Artist/Album under the library, the same
+            // structure "Organize library" enforces after the fact (task 155).
+            var destDir = MusicImporter.ArtistAlbumDir(DownloadsDirectory, trackArtist, trackAlbum);
+            System.IO.Directory.CreateDirectory(destDir);
+            var stem = isPlaylist ? Path.GetFileNameWithoutExtension(file) : $"{artist} - {node.Title}";
+            var finalPath = UniquePath(Path.Combine(destDir, Sanitize(stem) + Path.GetExtension(file)));
+            File.Move(file, finalPath, overwrite: false);
+
             ApplyTags(finalPath, trackArtist, trackAlbum, trackGenre, title, trackNo, artBytes);
 
             if (trackNode.Kind == DownloadKind.Track) OnUi(() => trackNode.State = DownloadState.Done);

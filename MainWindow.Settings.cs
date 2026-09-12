@@ -12,10 +12,28 @@ public partial class MainWindow
 {
     private void Settings_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new SettingsWindow(AppSettings.Current.Clone(), RefreshLibrary, ExportLibrary, ImportLibrary) { Owner = this };
+        var dialog = new SettingsWindow(AppSettings.Current.Clone(), RefreshLibrary, ExportLibrary, ImportLibrary, OrganizeLibrary) { Owner = this };
         if (dialog.ShowDialog() != true || dialog.Result is null) return;
         dialog.Result.Save();
         PlaybackStatus.Text = "Settings saved";
+    }
+
+    /// <summary>
+    /// Moves every file under the library folder into Artist/Album subfolders
+    /// and deletes whatever's left empty afterward (task 155). Runs against
+    /// whatever is currently saved as the library location, not an unsaved
+    /// edit still sitting in the settings dialog.
+    /// </summary>
+    private string OrganizeLibrary()
+    {
+        var result = MusicImporter.Organize(AppSettings.Current.LibraryLocation, _tracks);
+        if (result.Moved > 0) SaveLibrary();
+        PlaybackStatus.Text = result.Moved > 0
+            ? $"Organized library — moved {result.Moved} file{(result.Moved == 1 ? "" : "s")}"
+            : "Library already organized";
+        return result.Moved > 0 || result.FoldersRemoved > 0
+            ? $"Moved {result.Moved} file{(result.Moved == 1 ? "" : "s")} into Artist/Album folders and removed {result.FoldersRemoved} empty folder{(result.FoldersRemoved == 1 ? "" : "s")}."
+            : "Everything was already organized — nothing to move.";
     }
 
     /// <summary>Re-reads tags/art for every track and drops any whose file is gone. Returns the number kept.</summary>

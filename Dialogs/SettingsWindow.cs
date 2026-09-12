@@ -22,17 +22,19 @@ public sealed class SettingsWindow : SinkDialog
     private readonly Func<int> _refresh;
     private readonly Action _export;
     private readonly Action _import;
+    private readonly Func<string> _organize;
 
     /// <summary>Set when the user pressed Save.</summary>
     public AppSettings? Result { get; private set; }
 
-    public SettingsWindow(AppSettings settings, Func<int> refreshLibrary, Action exportLibrary, Action importLibrary)
+    public SettingsWindow(AppSettings settings, Func<int> refreshLibrary, Action exportLibrary, Action importLibrary, Func<string> organizeLibrary)
     {
         _refresh = refreshLibrary;
         _export = exportLibrary;
         _import = importLibrary;
+        _organize = organizeLibrary;
 
-        Width = 560;
+        Width = 640;
         SizeToContent = SizeToContent.Height;
         Title = "Settings";
 
@@ -75,7 +77,11 @@ public sealed class SettingsWindow : SinkDialog
         body.Children.Add(_syncOnConnect);
 
         body.Children.Add(Label("Library maintenance"));
-        var actions = new StackPanel { Orientation = Orientation.Horizontal };
+        // WrapPanel rather than a horizontal StackPanel: a 4th button here
+        // already pushed "Open logs…" past the dialog's edge at a fixed
+        // width — wrapping to a second row degrades gracefully instead of
+        // silently clipping the next one that gets added (task 155).
+        var actions = new WrapPanel();
         actions.Children.Add(SecondaryButton("Refresh library", (_, _) =>
         {
             var n = _refresh();
@@ -84,9 +90,14 @@ public sealed class SettingsWindow : SinkDialog
         }));
         actions.Children.Add(SecondaryButton("Export library…", (_, _) => _export()));
         actions.Children.Add(SecondaryButton("Import library…", (_, _) => _import()));
+        actions.Children.Add(SecondaryButton("Organize library…", (_, _) =>
+        {
+            var summary = _organize();
+            MessageBox.Show(this, summary, "Organize library", MessageBoxButton.OK, MessageBoxImage.Information);
+        }));
         actions.Children.Add(SecondaryButton("Open logs…", (_, _) => Log.OpenFolder()));
-        for (var i = 1; i < actions.Children.Count; i++)
-            actions.Children[i].SetValue(MarginProperty, new Thickness(8, 0, 0, 0));
+        for (var i = 0; i < actions.Children.Count; i++)
+            actions.Children[i].SetValue(MarginProperty, new Thickness(i == 0 ? 0 : 8, 0, 0, 8));
         body.Children.Add(actions);
         body.Children.Add(new TextBlock
         {
