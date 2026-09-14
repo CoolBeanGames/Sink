@@ -158,7 +158,8 @@ public static partial class DownloadService
     /// </summary>
     public static async Task<IReadOnlyList<string>> DownloadAsync(
         DownloadNode node, DownloadOptions options, IProgress<double> progress,
-        IProgress<string>? status = null, IProgress<string>? onTrackFile = null, CancellationToken token = default)
+        IProgress<string>? status = null, IProgress<string>? onTrackFile = null,
+        IProgress<DownloadNode>? onTrackDone = null, CancellationToken token = default)
     {
         System.IO.Directory.CreateDirectory(DownloadsDirectory);
         var workDir = Path.Combine(DownloadsDirectory, "_" + Guid.NewGuid().ToString("N")[..8]);
@@ -295,7 +296,12 @@ public static partial class DownloadService
 
             ApplyTags(finalPath, trackArtist, trackAlbum, trackGenre, title, trackNo, artBytes);
 
-            if (trackNode.Kind == DownloadKind.Track) OnUi(() => trackNode.State = DownloadState.Done);
+            if (trackNode.Kind == DownloadKind.Track)
+                // Reported the moment this one track (not the whole album) is
+                // actually done, so the caller can drop it out of the visible
+                // queue right away instead of waiting for the rest of the
+                // album — or the whole batch — to finish too (task 163).
+                OnUi(() => { trackNode.State = DownloadState.Done; onTrackDone?.Report(trackNode); });
             finalized.Add(key);
             finished.Add(finalPath);
             onTrackFile?.Report(finalPath);

@@ -975,13 +975,17 @@ public partial class MainWindow
                     {
                         if (alreadyImported.Add(path)) pendingImports.Add(ImportFinalizedFileAsync(path));
                     });
+                    // Removes one track from the queue the instant it succeeds,
+                    // rather than leaving it sitting there (already imported)
+                    // until the whole album finishes too (task 163).
+                    var trackDone = new Progress<DownloadNode>(PruneNodeNow);
 
                     IReadOnlyList<string> paths;
                     var partialFailure = false;
                     var partialReason = "";
                     try
                     {
-                        paths = await DownloadService.DownloadAsync(node, options, progress, status, fileReady, token);
+                        paths = await DownloadService.DownloadAsync(node, options, progress, status, fileReady, trackDone, token);
                     }
                     catch (DownloadService.PartialDownloadException partial)
                     {
@@ -1011,6 +1015,17 @@ public partial class MainWindow
                         node.State = DownloadState.Done;
                         node.Progress = 1;
                         node.StatusText = tracks.Count > 1 ? $"Done · {tracks.Count} tracks" : "Done";
+                        // Drop this unit out of the visible queue once
+                        // nothing real is left inside it, instead of waiting
+                        // for the rest of the batch too (task 163) —
+                        // individual tracks inside an album already leave as
+                        // they each finish, via trackDone below. Checking
+                        // Children.Count (rather than pruning unconditionally)
+                        // matters for a scoped "download just this track" run
+                        // (task 161): it deliberately disables every sibling
+                        // rather than removing them, so they're still sitting
+                        // right here and must not be swept away with it.
+                        if (node.Children.Count == 0) PruneNodeNow(node);
                     }
                 }
                 catch (OperationCanceledException)
@@ -1086,6 +1101,21 @@ public partial class MainWindow
     /// that failed (plus the album / artist rows above it) so a retry only has
     /// to cover what's left.
     /// </summary>
+    /// <summary>Removes one now-succeeded node from the tree right away — a completed track, or a whole unit once it's done — instead of waiting for the batch to finish (task 163). Also collapses an artist container left empty behind it.</summary>
+    private void PruneNodeNow(DownloadNode node)
+    {
+        if (node.Parent is { } parent)
+        {
+            parent.Children.Remove(node);
+            if (parent.Kind == DownloadKind.Artist && parent.Children.Count == 0)
+                PruneNodeNow(parent);
+        }
+        else
+        {
+            _rootNodes.Remove(node);
+        }
+    }
+
     private void PruneSucceeded()
     {
         foreach (var root in _rootNodes.ToList())
