@@ -631,6 +631,7 @@ public partial class MainWindow
 
         menu.Items.Add(Header(string.IsNullOrWhiteSpace(node.Name) ? node.Url : node.Name));
         menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Download just this", () => _ = DownloadJustThisAsync(node)));
         if (node.Kind is DownloadKind.Track or DownloadKind.Single)
             menu.Items.Add(Item("Preview", () => _ = PreviewNodeAsync(node)));
         menu.Items.Add(Item("Edit metadata…", () => EditNodeMetadata(node)));
@@ -867,10 +868,7 @@ public partial class MainWindow
 
     // ---- Download run ---------------------------------------------------
 
-    private List<DownloadNode> DownloadUnits() => _rootNodes
-        .SelectMany(n => n.SelfAndDescendants())
-        .Where(n => n.Kind is DownloadKind.Album or DownloadKind.Single)
-        .ToList();
+    private List<DownloadNode> DownloadUnits() => DownloadUnits(_rootNodes);
 
     private async void StartDownloads_Click(object sender, RoutedEventArgs e)
     {
@@ -887,6 +885,56 @@ public partial class MainWindow
                         || n.Children.Any(c => c.Enabled == true))
             .ToList();
         if (queue.Count == 0) { SetDownloadStatus("Nothing ticked to download"); return; }
+        await RunDownloadQueueAsync(queue);
+    }
+
+    /// <summary>
+    /// Downloads only <paramref name="node"/> — a track, album, artist, or
+    /// mixed-playlist album — leaving every other queued item untouched
+    /// (task 161). A lone track's real download unit is its parent album,
+    /// so it's isolated by temporarily disabling every sibling track for
+    /// just this run and restoring their checkboxes afterward.
+    /// </summary>
+    private async Task DownloadJustThisAsync(DownloadNode node)
+    {
+        if (_downloading) { SetDownloadStatus("A download is already running"); return; }
+
+        List<(DownloadNode track, bool wasEnabled)>? restore = null;
+        var unit = node;
+        if (node.Kind == DownloadKind.Track)
+        {
+            if (node.Parent is not { } parent) return;
+            unit = parent;
+            restore = parent.Children.Where(c => c.Kind == DownloadKind.Track)
+                .Select(c => (c, c.Enabled == true)).ToList();
+            foreach (var (c, _) in restore) c.Enabled = c == node;
+        }
+
+        try
+        {
+            var queue = DownloadUnits([unit])
+                .Where(n => n.State is not DownloadState.Done && n.Enabled != false)
+                .Where(n => n.Kind == DownloadKind.Single
+                            || n.Children.Count == 0
+                            || n.Children.Any(c => c.Enabled == true))
+                .ToList();
+            if (queue.Count == 0) { SetDownloadStatus($"Nothing to download in {node.Name}"); return; }
+            await RunDownloadQueueAsync(queue);
+        }
+        finally
+        {
+            if (restore is not null)
+                foreach (var (c, wasEnabled) in restore) c.Enabled = wasEnabled;
+        }
+    }
+
+    private List<DownloadNode> DownloadUnits(IEnumerable<DownloadNode> roots) => roots
+        .SelectMany(n => n.SelfAndDescendants())
+        .Where(n => n.Kind is DownloadKind.Album or DownloadKind.Single)
+        .ToList();
+
+    private async Task RunDownloadQueueAsync(List<DownloadNode> queue)
+    {
         if (!ToolManager.ToolsPresent) { SetDownloadStatus("Still setting up yt-dlp…"); EnsureToolsReady(); return; }
 
         StopPreview("starting download");
