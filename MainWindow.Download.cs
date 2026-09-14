@@ -1063,6 +1063,35 @@ public partial class MainWindow
             for (var index = 0; index < queue.Count && !token.IsCancellationRequested; index++)
             {
                 var node = queue[index];
+
+                // An Album never expanded in the tree has no Track children
+                // yet — DownloadAsync needs those to know what to finalize.
+                // Without this, yt-dlp would still successfully download the
+                // whole album to a temp folder, but the empty child list
+                // meant nothing ever got finalized, so it reported "yt-dlp
+                // produced no audio" and deleted everything it had just
+                // fetched. This is why downloading only ever worked reliably
+                // after manually expanding an album first.
+                if (node.Kind == DownloadKind.Album && !node.Scanned)
+                {
+                    node.State = DownloadState.Scanning;
+                    node.StatusText = "Loading tracks…";
+                    try
+                    {
+                        var scanned = await Task.Run(() => DownloadService.ScanAsync(node.Url));
+                        FillTracks(node, scanned);
+                        node.Scanned = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        node.State = DownloadState.Failed;
+                        node.StatusText = $"Couldn't load tracks — {Shorten(ex.Message)}";
+                        Log.Error($"Pre-download scan failed for {node.Name} ({node.Url})", ex);
+                        SaveFailedDownloadQueue();
+                        continue;
+                    }
+                }
+
                 node.State = DownloadState.Downloading;
                 node.Progress = 0;
                 node.StatusText = "Starting…";
