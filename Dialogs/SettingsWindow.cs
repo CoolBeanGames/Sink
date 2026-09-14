@@ -118,14 +118,20 @@ public sealed class SettingsWindow : SinkDialog
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
+        var cookieChoice = CookieChoices[Math.Max(0, _youTubeCookies.SelectedIndex)];
         Result = new AppSettings
         {
             LibraryLocation = _library.Text.Trim(),
             PodcastLocation = _podcasts.Text.Trim(),
             SyncOnConnect = _syncOnConnect.IsChecked == true,
             ImportMode = (ImportMode)Math.Max(0, _importMode.SelectedIndex),
-            YouTubeCookies = CookieChoices[Math.Max(0, _youTubeCookies.SelectedIndex)],
+            YouTubeCookies = cookieChoice,
         };
+        // A cookie failure earlier this session (e.g. Chrome's DPAPI-encrypted
+        // store) latches "give up on cookies" for the rest of the process —
+        // otherwise switching to a browser that actually works, like Firefox,
+        // would silently never get retried and keep failing the same way.
+        Sink.Services.Download.DownloadService.ResetCookieLatch();
         DialogResult = true;
     }
 

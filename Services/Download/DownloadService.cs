@@ -644,6 +644,18 @@ public static partial class DownloadService
     /// </summary>
     private static bool _cookiesKnownBroken;
 
+    /// <summary>
+    /// Clears the "cookies are broken, don't bother" latch. Without this, once
+    /// any browser failed once in a running session, <see cref="CookieArgs"/>
+    /// would skip cookies entirely for the rest of that session regardless of
+    /// what the user later picked in Settings — so switching from a genuinely
+    /// broken browser (Chrome/Edge's DPAPI-encrypted store) to a working one
+    /// (Firefox) silently kept failing the exact same way, since Firefox was
+    /// never actually retried. Call this whenever the user changes their
+    /// YouTube-cookies choice.
+    /// </summary>
+    internal static void ResetCookieLatch() => _cookiesKnownBroken = false;
+
     /// <summary>The yt-dlp browser name for the first browser profile folder that exists, or null.</summary>
     private static string? DetectInstalledBrowser()
     {
@@ -740,7 +752,8 @@ public static partial class DownloadService
         // wording — latch it so every later call in the session skips the
         // cookie attempt instead of repeating it (and failing it) per track.
         _cookiesKnownBroken = true;
-        Log.Warn($"yt-dlp couldn't read browser cookies, retrying without them: {FirstError(result.stderr)}");
+        var browser = cookieArgs.Count > 1 ? cookieArgs[1] : "?";
+        Log.Warn($"yt-dlp couldn't read cookies from {browser}, retrying without them: {FirstError(result.stderr)}");
         return await RunProcessAsync(arguments, onLine, token).ConfigureAwait(false);
     }
 
