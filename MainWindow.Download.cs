@@ -162,7 +162,11 @@ public partial class MainWindow
         // One at a time — each scan already reports its own status line, and
         // running yt-dlp processes concurrently for a whole pasted batch would
         // just contend with itself for no benefit (task 152).
-        foreach (var link in dialog.Links) await ScanAndAddAsync(link);
+        foreach (var link in dialog.Links)
+        {
+            if (SunnifyService.IsSpotifyLink(link)) await ScanAndAddSpotifyAsync(link);
+            else await ScanAndAddAsync(link);
+        }
     }
 
     private async Task ScanAndAddAsync(string url)
@@ -292,6 +296,104 @@ public partial class MainWindow
             });
         }
     }
+
+    /// <summary>
+    /// A pasted Spotify link (task 168): resolved via Sunnify's keyless
+    /// metadata lookup, then downloaded entirely through Sink's own yt-dlp
+    /// pipeline — every track becomes an independent Single node whose Url
+    /// is a YouTube search query, so it gets 100% of the same download
+    /// behavior (retries, cookies, tagging, per-track queue removal, "download
+    /// just this", …) as a track pasted directly from YouTube.
+    /// </summary>
+    private async Task ScanAndAddSpotifyAsync(string url)
+    {
+        var probe = new DownloadNode(DownloadKind.Single)
+        {
+            Url = url,
+            Title = url,
+            State = DownloadState.Scanning,
+            StatusText = "Resolving Spotify link…",
+        };
+        _rootNodes.Add(probe);
+
+        try
+        {
+            await SunnifyToolManager.EnsureAsync(new Progress<string>(s => probe.StatusText = s));
+            if (!SunnifyToolManager.Present)
+                throw new InvalidOperationException("Couldn't set up Sunnify — check your connection and try again");
+
+            var info = await Task.Run(() => SunnifyService.ResolveAsync(url));
+            var at = Math.Max(0, _rootNodes.IndexOf(probe));
+            _rootNodes.Remove(probe);
+
+            var node = BuildSpotifyNode(url, info);
+            _rootNodes.Insert(Math.Min(at, _rootNodes.Count), node);
+
+            SetDownloadStatus(node.Kind == DownloadKind.Artist
+                ? $"{info.Name}: {node.Children.Count} track{(node.Children.Count == 1 ? "" : "s")} matched from Spotify"
+                : "Matched from Spotify — ready");
+            SaveFailedDownloadQueue();
+        }
+        catch (Exception ex)
+        {
+            probe.State = DownloadState.Failed;
+            probe.StatusText = $"Couldn't resolve Spotify link — {Shorten(ex.Message)}";
+            Log.Error($"Spotify resolve failed for {url}", ex);
+            SetDownloadStatus($"Spotify link failed for {url}: {ex.Message}");
+            SaveFailedDownloadQueue();
+        }
+        UpdateDownloadButtonState();
+    }
+
+    private static DownloadNode BuildSpotifyNode(string url, SpotifyResolved info)
+    {
+        if (info.Type == "track")
+        {
+            var t = info.Tracks[0];
+            return new DownloadNode(DownloadKind.Single)
+            {
+                Url = SpotifySearchUrl(t.Artist, t.Title),
+                Title = t.Title,
+                Artist = string.IsNullOrWhiteSpace(t.Artist) ? "Unknown Artist" : t.Artist,
+                Album = t.Album,
+                Genre = "Unknown",
+                State = DownloadState.Ready,
+                StatusText = "Ready — matched from Spotify",
+            };
+        }
+
+        // Album or playlist: a flat container of independent Single downloads
+        // rather than an Album/Track pair, because there is no one YouTube
+        // playlist URL backing these tracks the way a real scanned YouTube
+        // album has — each track is its own separate YouTube search.
+        var container = new DownloadNode(DownloadKind.Artist)
+        {
+            Url = url,
+            Artist = info.Name,
+            Genre = "Unknown",
+            State = DownloadState.Ready,
+            StatusText = $"{info.Tracks.Count} tracks from Spotify",
+        };
+        for (var i = 0; i < info.Tracks.Count; i++)
+        {
+            var t = info.Tracks[i];
+            container.Children.Add(new DownloadNode(DownloadKind.Single)
+            {
+                Index = i + 1,
+                Url = SpotifySearchUrl(t.Artist, t.Title),
+                Title = t.Title,
+                Artist = string.IsNullOrWhiteSpace(t.Artist) ? "Unknown Artist" : t.Artist,
+                Album = t.Album,
+                Genre = "Unknown",
+                State = DownloadState.Ready,
+                StatusText = "Ready — matched from Spotify",
+            });
+        }
+        return container;
+    }
+
+    private static string SpotifySearchUrl(string artist, string title) =>
+        "ytsearch1:" + (string.IsNullOrWhiteSpace(artist) ? title : $"{artist} {title}");
 
     /// <summary>Loads an album's track list the first time it is expanded.</summary>
     private void LinksTree_ItemExpanded(object sender, RoutedEventArgs e)
