@@ -89,9 +89,9 @@ public partial class MainWindow
     /// each track's on-device PlayCount against the baseline recorded at the
     /// last sync so the same device plays never get folded into Reflect twice
     /// (task 128). Matched by (Title, Artist, Album, TrackNumber) — the same
-    /// identity IpodDbTrack.Key already uses for its own matching.
+    /// identity IpodDbTrack.Key already uses for its own matching. Returns how
+    /// many new plays were folded in, for the "Sync changes" completion message.
     /// </summary>
-    /// <summary>Returns how many new plays were folded into Reflect, for the "Sync changes" completion message.</summary>
     private int SyncMusicPlayCountsFromIpod(Services.Ipod.IpodLibrary library)
     {
         var deviceId = library.SerialNumber;

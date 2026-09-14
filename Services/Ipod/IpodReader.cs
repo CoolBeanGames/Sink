@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using Clickwheel;
+using Sink.Services;
 using CwMediaType = Clickwheel.Parsers.iTunesDB.MediaType;
 
 namespace Sink.Services.Ipod;
@@ -102,12 +103,14 @@ public static class IpodReader
 
         ReadSysInfo(ipodRoot, library);
 
+        var rawPlayCounts = new List<(bool isPodcast, int raw)>();
         foreach (var t in ipod.Tracks)
         {
             var file = ResolvePath(ipodRoot, t.FilePath);
             var isPodcast = t.PodcastFlag
                 || t.MediaType is CwMediaType.Podcast or CwMediaType.VideoPodcast
                 || string.Equals(t.Genre, "Podcast", StringComparison.OrdinalIgnoreCase);
+            rawPlayCounts.Add((isPodcast, t.PlayCount)); // pre-clamp — see the distribution log below
             library.Tracks.Add(new IpodDbTrack
             {
                 TrackId = t.Id,
@@ -148,6 +151,19 @@ public static class IpodReader
                 if (byId.ContainsKey(track.Id)) view.TrackIds.Add(track.Id);
             library.Playlists.Add(view);
         }
+
+        // One-time distribution check across the whole device on every read,
+        // using the RAW pre-clamp PlayCount (Math.Max(0, ...) above would
+        // silently turn a negative sentinel value into an indistinguishable
+        // 0) — logged unconditionally, not just when something looks wrong,
+        // because direct evidence straight from the field beats another
+        // inferred fix after 3+ rounds of guessing at this.
+        var music = rawPlayCounts.Where(r => !r.isPodcast).ToList();
+        var podcasts = rawPlayCounts.Where(r => r.isPodcast).ToList();
+        var bookmarked = library.Tracks.Count(t => t.BookmarkMs > 0);
+        Log.Info($"iPod read: {music.Count} music track(s) — raw PlayCount: >0 count={music.Count(r => r.raw > 0)}, <0 count={music.Count(r => r.raw < 0)}, max={(music.Count > 0 ? music.Max(r => r.raw) : 0)}, min={(music.Count > 0 ? music.Min(r => r.raw) : 0)}");
+        Log.Info($"iPod read: {podcasts.Count} podcast track(s) — raw PlayCount: >0 count={podcasts.Count(r => r.raw > 0)}, <0 count={podcasts.Count(r => r.raw < 0)}, max={(podcasts.Count > 0 ? podcasts.Max(r => r.raw) : 0)}, min={(podcasts.Count > 0 ? podcasts.Min(r => r.raw) : 0)}");
+        Log.Info($"iPod read: {bookmarked} of {library.Tracks.Count} total track(s) have BookmarkMs > 0");
 
         return library;
     }
