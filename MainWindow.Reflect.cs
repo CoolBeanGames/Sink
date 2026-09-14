@@ -59,14 +59,27 @@ public partial class MainWindow
     private void SyncMusicPlayCountsFromIpod(Services.Ipod.IpodLibrary library)
     {
         var deviceId = library.SerialNumber;
-        if (string.IsNullOrWhiteSpace(deviceId)) return; // no stable per-device identity to baseline against
-        var byKey = library.Tracks.Where(t => !t.IsPodcast).ToLookup(t => t.Key);
+        if (string.IsNullOrWhiteSpace(deviceId))
+        {
+            // This used to be a bare, silent `return` — every prior report of
+            // "listen counts still not syncing" left no trace of why, because
+            // nothing here ever logged anything at all. If this is still the
+            // failure mode, the log will now say so explicitly instead of the
+            // guesswork this has taken so far.
+            Services.Log.Warn("Reflect: iPod has no usable SerialNumber (checked SysInfo + SysInfoExtended) — can't baseline play counts against it");
+            return;
+        }
+        var deviceMusic = library.Tracks.Where(t => !t.IsPodcast).ToList();
+        var byKey = deviceMusic.ToLookup(t => t.Key);
         var recorded = 0;
+        var matched = 0;
+        var deltaZero = 0;
         foreach (var track in _tracks)
         {
             var key = Services.Ipod.IpodDbTrack.MakeKey(track.Title, track.Artist, track.Album, track.TrackNumber);
             var deviceTrack = byKey[key].FirstOrDefault();
             if (deviceTrack is null) continue;
+            matched++;
 
             var deviceCount = Math.Max(0, deviceTrack.PlayCount);
             track.SyncedIpodPlayCounts ??= [];
@@ -78,7 +91,21 @@ public partial class MainWindow
                     _listenEvents.Add(new ListenEvent { Kind = ListenKind.Song, ItemId = track.Id, Duration = track.Duration, Completed = true });
                 recorded += delta;
             }
+            else deltaZero++;
             track.SyncedIpodPlayCounts[deviceId] = deviceCount;
+        }
+        // Always log a summary line (not just on a successful fold-in) so a
+        // sync that finds nothing to record still shows *why*: no keys
+        // matched at all (library vs device metadata disagrees — sample keys
+        // from both sides below to compare directly) versus keys matched but
+        // every device PlayCount was already at its recorded baseline (no
+        // new plays since the last sync, or the baseline over-counted).
+        Services.Log.Info($"Reflect music sync: device {deviceId}, {_tracks.Count} local track(s), {deviceMusic.Count} device music track(s), {matched} matched by key, {deltaZero} matched-but-no-new-plays, {recorded} new play(s) recorded");
+        if (matched == 0 && _tracks.Count > 0 && deviceMusic.Count > 0)
+        {
+            var localSample = _tracks.Take(3).Select(t => $"\"{Services.Ipod.IpodDbTrack.MakeKey(t.Title, t.Artist, t.Album, t.TrackNumber)}\"");
+            var deviceSample = deviceMusic.Take(3).Select(t => $"\"{t.Key}\"");
+            Services.Log.Warn($"Reflect music sync: zero key matches — local sample [{string.Join(", ", localSample)}] vs device sample [{string.Join(", ", deviceSample)}]");
         }
         if (recorded == 0) return;
         ReflectStore.Save(_listenEvents);

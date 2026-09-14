@@ -112,9 +112,19 @@ public static class IpodReader
             {
                 TrackId = t.Id,
                 Title = string.IsNullOrWhiteSpace(t.Title) ? Path.GetFileNameWithoutExtension(file) : t.Title,
-                Artist = string.IsNullOrWhiteSpace(t.Artist) ? "Unknown Artist" : t.Artist,
+                // Deliberately NOT substituted to "Unknown Artist"/"Unknown
+                // Album" here (unlike Title/Genre) — this feeds Key, used to
+                // match a device track back against the local library
+                // (Reflect play counts, podcast status). AdaptIpodTrack
+                // already substitutes independently for anything shown in
+                // the UI, so raw values here cost nothing — but substituting
+                // here too risked a real device track (whatever it actually
+                // is) silently keying as "unknown artist"/"unknown album"
+                // while the local Track kept its real, non-blank name,
+                // guaranteeing that pair could never match.
+                Artist = t.Artist ?? "",
                 AlbumArtist = t.AlbumArtist ?? "",
-                Album = string.IsNullOrWhiteSpace(t.Album) ? "Unknown Album" : t.Album,
+                Album = t.Album ?? "",
                 Genre = string.IsNullOrWhiteSpace(t.Genre) ? "Unknown" : t.Genre,
                 Comment = t.Comment ?? "",
                 FilePath = file,

@@ -592,17 +592,27 @@ public partial class MainWindow
         // place) already writes Title/Artist/Album as episode.Title/show
         // .Title/show.Title, so match back the same way music play counts do
         // (task 154).
-        var byKey = _ipodLibrary.Tracks.Where(t => t.IsPodcast).ToLookup(t => t.Key);
+        var devicePodcasts = _ipodLibrary.Tracks.Where(t => t.IsPodcast).ToList();
+        var byKey = devicePodcasts.ToLookup(t => t.Key);
 
         var changed = false;
         var toPush = new Dictionary<string, long>();
+        var candidates = 0;
+        var matched = 0;
+        var firstUnmatched = "";
         foreach (var podcast in _podcasts)
         foreach (var episode in podcast.Episodes)
         {
             if (string.IsNullOrEmpty(episode.LocalPath)) continue;
+            candidates++;
             var key = Services.Ipod.IpodDbTrack.MakeKey(episode.Title, podcast.Title, podcast.Title, 0);
             var deviceTrack = byKey[key].FirstOrDefault();
-            if (deviceTrack is null) continue;
+            if (deviceTrack is null)
+            {
+                if (firstUnmatched.Length == 0) firstUnmatched = $"\"{key}\"";
+                continue;
+            }
+            matched++;
 
             // Pull: take the further-along position between library and device.
             if (deviceTrack.BookmarkMs > episode.PositionSeconds * 1000 + 1500)
@@ -626,6 +636,18 @@ public partial class MainWindow
             var ourMs = (long)(episode.PositionSeconds * 1000);
             if (!episode.IsPlayed && ourMs > deviceTrack.BookmarkMs + 1500)
                 toPush[key] = ourMs;
+        }
+
+        // Same "always log a summary" reasoning as the music play-count sync
+        // (task: podcasts still showing unplayed / Reflect still empty) — a
+        // sync that changes nothing should still say whether that's because
+        // no downloaded episode matched a device track at all, versus
+        // matches were found but nothing on the device was further along.
+        Services.Log.Info($"Reflect podcast sync: {candidates} downloaded episode(s) with a local path, {devicePodcasts.Count} device podcast track(s), {matched} matched by key, changed={changed}");
+        if (matched == 0 && candidates > 0 && devicePodcasts.Count > 0)
+        {
+            var deviceSample = devicePodcasts.Take(3).Select(t => $"\"{t.Key}\"");
+            Services.Log.Warn($"Reflect podcast sync: zero key matches — first local key {firstUnmatched} vs device sample [{string.Join(", ", deviceSample)}]");
         }
 
         if (toPush.Count > 0 && !_ipodWriting)
