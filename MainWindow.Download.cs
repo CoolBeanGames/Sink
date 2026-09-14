@@ -870,6 +870,16 @@ public partial class MainWindow
 
     private List<DownloadNode> DownloadUnits() => DownloadUnits(_rootNodes);
 
+    /// <summary>Right-click on the DOWNLOAD sidebar entry (task 165) — start/stop, greyed out to match whether a run is already in progress.</summary>
+    private void DownloadMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        DownloadMenuStart.IsEnabled = !_downloading;
+        DownloadMenuStop.IsEnabled = _downloading;
+    }
+
+    private void StartDownloadMenuItem_Click(object sender, RoutedEventArgs e) => StartDownloads_Click(sender, e);
+    private void StopDownloadMenuItem_Click(object sender, RoutedEventArgs e) => _downloadCts?.Cancel();
+
     private async void StartDownloads_Click(object sender, RoutedEventArgs e)
     {
         if (_downloading)

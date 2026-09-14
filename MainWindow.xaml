@@ -151,6 +151,12 @@
                         <TextBlock x:Name="IpodNavHint" Text="Drag music onto IPOD to sync" Foreground="#6E7584" FontSize="10" Margin="12,7,0,2"/>
                     </StackPanel>
                     <Button x:Name="DownloadHeaderButton" Click="ShowDownloadSource_Click" Style="{StaticResource SectionHeaderButtonStyle}" Margin="0,14,0,0">
+                        <Button.ContextMenu>
+                            <ContextMenu x:Name="DownloadMenu" Background="#1D222C" Foreground="#F4F6FA" BorderBrush="#363D4B" Opened="DownloadMenu_Opened">
+                                <MenuItem x:Name="DownloadMenuStart" Header="Start downloads" Click="StartDownloadMenuItem_Click"/>
+                                <MenuItem x:Name="DownloadMenuStop" Header="Stop downloads" Click="StopDownloadMenuItem_Click"/>
+                            </ContextMenu>
+                        </Button.ContextMenu>
                         <StackPanel Orientation="Horizontal">
                             <Border Width="15" Height="17" Margin="0,0,7,0">
                                 <Path Data="M7,0 L7,9 M3,6 L7,10 L11,6 M1,14 L13,14" Stroke="#8B7CFF" StrokeThickness="1.6" StrokeEndLineCap="Round" StrokeStartLineCap="Round"/>
