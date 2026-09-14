@@ -40,7 +40,13 @@
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
         <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#12151C"/><Setter Property="Foreground" Value="#747B8A"/><Setter Property="BorderBrush" Value="#262C38"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="Padding" Value="12,10"/><Setter Property="FontSize" Value="10"/></Style>
-        <Style TargetType="DataGridCell"><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="12,9"/><Setter Property="Foreground" Value="#BFC4CE"/><Setter Property="Background" Value="Transparent"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/></Style>
+        <!-- VerticalContentAlignment=Center matters for a plain DataGridTextColumn
+             (e.g. TIME) whose auto-generated TextBlock has no alignment of its
+             own — the template-column fields elsewhere center themselves via
+             TagsFieldStyle regardless, but TIME was left stuck at the
+             DataGridCell default (effectively top-aligned), the only column
+             visibly out of line with the rest of the row. -->
+        <Style TargetType="DataGridCell"><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="12,9"/><Setter Property="Foreground" Value="#BFC4CE"/><Setter Property="Background" Value="Transparent"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/><Setter Property="VerticalContentAlignment" Value="Center"/></Style>
         <Style TargetType="DataGridRow"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="#20252F"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="MinHeight" Value="48"/><Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#1B1F28"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#2B2850"/><Setter Property="Foreground" Value="#F4F6FA"/></Trigger></Style.Triggers></Style>
     </Window.Resources>
     <Grid x:Name="RootGrid">
