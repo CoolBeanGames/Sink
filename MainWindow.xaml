@@ -889,6 +889,10 @@
         <Canvas x:Name="IpodCanvas" Grid.Row="0" Grid.Column="1" Panel.ZIndex="12" IsHitTestVisible="True" ClipToBounds="True">
             <Button x:Name="IpodButton" Style="{StaticResource IpodButtonStyle}" Width="300" Height="300" Canvas.Right="-150" Canvas.Bottom="-150" Click="IpodButton_Click" AllowDrop="True" DragOver="IpodButton_DragOver" DragLeave="IpodButton_DragLeave" Drop="IpodButton_Drop" ToolTip="No iPod connected · Click to simulate connection">
                 <Button.ContextMenu>
+                    <!-- The single, systemic iPod actions menu (task 164) —
+                         also assigned to IpodHeaderButton in the sidebar from
+                         the MainWindow constructor, so both places share this
+                         exact instance; add future items here only, once. -->
                     <ContextMenu x:Name="IpodMenu" Background="#1D222C" Foreground="#F4F6FA" BorderBrush="#363D4B" Opened="IpodMenu_Opened">
                         <MenuItem x:Name="IpodMenuHeader" Header="No iPod connected" IsEnabled="False" FontWeight="SemiBold"/>
                         <Separator/>

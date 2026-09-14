@@ -76,6 +76,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        // The IPOD sidebar entry shares the exact same right-click menu as
+        // the record on the iPod canvas — one menu instance, so anything
+        // added to it in XAML shows up in both places automatically (task 164).
+        IpodHeaderButton.ContextMenu = IpodMenu;
         var v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
         if (v is not null) VersionText.Text = $"v{v.Major}.{v.Minor}.{v.Build}";
         LoadLibrary();
