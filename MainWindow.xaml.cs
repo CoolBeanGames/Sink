@@ -1475,6 +1475,11 @@ public partial class MainWindow : Window
             PlaybackStatus.Text = exclude
                 ? $"Excluded {tracks.Count} track{(tracks.Count == 1 ? "" : "s")} from shuffle"
                 : $"Included {tracks.Count} track{(tracks.Count == 1 ? "" : "s")} in shuffle";
+            // The flag alone only gates *future* syncs — anything already on
+            // the device stays there and keeps playing in its shuffle until
+            // actually removed. Excluding a whole genre that was already
+            // synced did nothing for exactly this reason (task 166).
+            if (exclude) UnsyncTracks(tracks);
         };
         return item;
     }
