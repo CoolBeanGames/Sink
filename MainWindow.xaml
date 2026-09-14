@@ -232,9 +232,15 @@
                         <DataGridTemplateColumn Header="♥" Width="30">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="♡" Foreground="#5A616E" FontSize="13" Cursor="Hand" HorizontalAlignment="Center" MouseLeftButtonDown="FavoriteGlyph_Click">
+                                    <TextBlock FontSize="13" Cursor="Hand" HorizontalAlignment="Center" MouseLeftButtonDown="FavoriteGlyph_Click">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
+                                                <!-- Text/Foreground must be Setters here, not local values on the
+                                                     element above — a local value always beats a Style trigger in
+                                                     WPF's property-precedence order, which is why the glyph never
+                                                     visually updated even though IsFavorite did toggle (task 158). -->
+                                                <Setter Property="Text" Value="♡"/>
+                                                <Setter Property="Foreground" Value="#5A616E"/>
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding IsFavorite}" Value="True">
                                                         <Setter Property="Text" Value="♥"/>
