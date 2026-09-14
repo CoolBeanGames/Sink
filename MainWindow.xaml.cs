@@ -273,11 +273,30 @@ public partial class MainWindow : Window
             if (_source == LibrarySource.Ipod) RenderLibrary();
             return;
         }
+        await RefreshIpodLibraryFromDeviceAsync(root);
+        if (_source != LibrarySource.Ipod) return;
+        if (_ipodPodcastsActive) RenderIpodPodcasts();
+        else if (_ipodPlaylistsActive) RenderIpodPlaylists();
+        else RenderLibrary();
+    }
+
+    /// <summary>
+    /// Re-reads the device's iTunesDB right now and folds in whatever it
+    /// shows (play counts, podcast positions) — used both on connect and,
+    /// explicitly, right before every manual sync action, since relying
+    /// solely on the connect-time read missed listens whenever the device
+    /// was still considered "already loaded" (same drive root, no fresh
+    /// connect event — e.g. the iPod flapping identities, see the iPod
+    /// detection notes) when the user actually clicked Sync (task 157).
+    /// </summary>
+    private async Task<bool> RefreshIpodLibraryFromDeviceAsync(string root)
+    {
         try
         {
             var library = await Task.Run(() => Sink.Services.Ipod.IpodReader.Read(root));
-            if (_ipodLibraryRoot != root) return; // device changed while loading
+            if (_ipodLibraryRoot != root) return false; // device changed while loading
             _ipodLibrary = library;
+            _ipodTracks.Clear();
             foreach (var t in library.Tracks) _ipodTracks.Add(AdaptIpodTrack(t));
             var readableName = library.DeviceName ?? _ipodDevice?.Name ?? "iPod";
             PlaybackStatus.Text = $"Read {library.Tracks.Count} track{(library.Tracks.Count == 1 ? "" : "s")} from {readableName}";
@@ -285,16 +304,14 @@ public partial class MainWindow : Window
             SyncPodcastStatusFromIpod();
             SyncMusicPlayCountsFromIpod(library); // task 128
             EnrichIpodArtwork(_ipodTracks); // task 132
+            return true;
         }
         catch (Exception ex)
         {
             Services.Log.Error("Reading iPod database failed", ex);
             PlaybackStatus.Text = $"Couldn't read the iPod database: {ex.Message}";
+            return false;
         }
-        if (_source != LibrarySource.Ipod) return;
-        if (_ipodPodcastsActive) RenderIpodPodcasts();
-        else if (_ipodPlaylistsActive) RenderIpodPlaylists();
-        else RenderLibrary();
     }
 
     private void ApplyIpodLibraryChrome(Sink.Services.Ipod.IpodLibrary library, string name)
@@ -827,6 +844,14 @@ public partial class MainWindow : Window
     private async void SyncIpod_Click(object sender, RoutedEventArgs e)
     {
         var header = (sender as MenuItem)?.Header as string ?? "";
+        // Pull whatever the device gained (play counts, podcast positions)
+        // since the last time Sink actually read it, right before any write
+        // below. The connect-time read alone wasn't enough — a device that
+        // never re-triggers a fresh connect event (same drive root, or the
+        // iPod's flapping identities) stayed "already loaded" and a click on
+        // Sync never picked up new listens (task 157).
+        if (_ipodDevice?.LibraryRoot is string syncRoot && !_ipodWriting)
+            await RefreshIpodLibraryFromDeviceAsync(syncRoot);
         var songsAdded = 0;
         var podcastsAdded = 0;
         if (header is "Sync all" or "Sync music")
