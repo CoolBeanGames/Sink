@@ -663,7 +663,24 @@ public partial class MainWindow
         if (!changed) return;
         PodcastStore.Save(_podcasts);
         if (_podcastViewActive) { RenderPodcasts(); UpdatePodcastSidebarDot(); }
-        foreach (var podcast in _podcasts.ToList()) _ = RunAutoDownloadsAsync(podcast);
+        // A played episode just freed a rule slot — download its replacement
+        // and, since the device is right here, push it straight on without
+        // requiring a second manual sync to actually get it onto the iPod
+        // (task: "sink then begins downloading episodes as syncing finishes").
+        foreach (var podcast in _podcasts.ToList()) _ = AutoDownloadAndPushAsync(podcast);
+    }
+
+    /// <summary>Downloads a podcast's currently-desired episodes, then pushes any that are newly downloaded straight to the connected device.</summary>
+    private async Task AutoDownloadAndPushAsync(Podcast podcast)
+    {
+        var before = podcast.Episodes.Where(e => e.IsDownloaded).Select(e => e.Id).ToHashSet();
+        await RunAutoDownloadsAsync(podcast);
+        var newlyDownloaded = podcast.Episodes.Where(e => e.IsDownloaded && !before.Contains(e.Id)).ToList();
+        if (newlyDownloaded.Count == 0 || !_ipodConnected || _ipodDevice?.LibraryRoot is null) return;
+        var added = await SyncTracksToDevice(newlyDownloaded.Select(e => EpisodeTrack(podcast, e)).ToList());
+        if (added > 0)
+            PostNotification("sync-complete", null,
+                $"Synced {added} new episode{(added == 1 ? "" : "s")} of {podcast.Title} to iPod");
     }
 
     // ---- Rendering ----------------------------------------------------
