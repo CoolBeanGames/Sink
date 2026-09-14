@@ -579,6 +579,15 @@ public partial class MainWindow
     private void RemoveNode_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not DownloadNode node) return;
+        // Removing a queued album out from under an active "Downloading Album
+        // #/Total" run should shrink Total right away — unlike an album that
+        // merely finishes, which must NOT shrink it (see DownloadTotalOverride).
+        if (node.Kind == DownloadKind.Album && node.Enabled != false
+            && node.Parent is { Kind: DownloadKind.Artist, DownloadTotalOverride: { } total } artist)
+        {
+            artist.DownloadTotalOverride = Math.Max(0, total - 1);
+            artist.StatusText = $"Downloading Album {artist.DownloadStartedCount}/{artist.DownloadTotalOverride}";
+        }
         if (node.Parent is null) _rootNodes.Remove(node);
         else node.Parent.Children.Remove(node);
         if (_previewNode is not null && !_rootNodes.SelectMany(n => n.SelfAndDescendants()).Contains(_previewNode))
@@ -1065,6 +1074,25 @@ public partial class MainWindow
     {
         if (!ToolManager.ToolsPresent) { SetDownloadStatus("Still setting up yt-dlp…"); EnsureToolsReady(); return; }
 
+        // Fresh start for every artist's "Downloading Album #/Total" counter
+        // each run, so a leftover value from an earlier, already-finished run
+        // against the same artist row never leaks into this one.
+        foreach (var artist in queue.Select(n => n.Parent).Where(p => p?.Kind == DownloadKind.Artist).Distinct())
+            artist!.DownloadTotalOverride = null;
+
+        // Once every album this run queued under an artist has been attempted
+        // (started, whether it succeeded or failed), that artist's counter
+        // text is done — hand its row back to the normal "N albums" label.
+        void MaybeResetArtistText(DownloadNode unit)
+        {
+            if (unit.Parent is { Kind: DownloadKind.Artist } artist
+                && artist.DownloadTotalOverride is { } total && artist.DownloadStartedCount >= total)
+            {
+                artist.DownloadTotalOverride = null;
+                RefreshDownloadNodeStatus(artist);
+            }
+        }
+
         StopPreview("starting download");
         var options = ReadOptions();
         _downloading = true;
@@ -1080,6 +1108,19 @@ public partial class MainWindow
             {
                 var node = queue[index];
 
+                // Counted as "started" the moment we take up this queue slot
+                // — not only once it actually begins downloading — so a
+                // scan failure below still advances the artist's counter
+                // instead of leaving it permanently one behind Total.
+                if (node.Parent is { Kind: DownloadKind.Artist } artistNode)
+                {
+                    artistNode.DownloadTotalOverride ??= queue.Count(n => n.Parent == artistNode);
+                    artistNode.DownloadStartedCount++;
+                    artistNode.StatusText = $"Downloading Album {artistNode.DownloadStartedCount}/{artistNode.DownloadTotalOverride}";
+                }
+
+                try
+                {
                 // An Album never expanded in the tree has no Track children
                 // yet — DownloadAsync needs those to know what to finalize.
                 // Without this, yt-dlp would still successfully download the
@@ -1110,8 +1151,17 @@ public partial class MainWindow
 
                 node.State = DownloadState.Downloading;
                 node.Progress = 0;
-                node.StatusText = "Starting…";
                 var linkLabel = queue.Count > 1 ? $"  (item {index + 1}/{queue.Count})" : "";
+
+                // Track-count based, not byte/time based: a lone track that
+                // happens to reach 100% of its own transfer right before
+                // failing must not read as "the whole album is done" (this is
+                // what previously made a fully-stuck album still show 100%).
+                var totalTracks = node.Children.Count(c => c.Kind == DownloadKind.Track);
+                var doneTracks = 0;
+                node.StatusText = node.Kind == DownloadKind.Album && totalTracks > 0
+                    ? "Downloading 0%"
+                    : "Downloading…";
 
                 try
                 {
@@ -1137,7 +1187,6 @@ public partial class MainWindow
                     var progress = new Progress<double>(p =>
                     {
                         node.Progress = p;
-                        node.StatusText = $"Downloading {p * 100:0}%";
                         UpdateAggregateProgress(queue);
                         ResetIdleTimeout();
                     });
@@ -1156,7 +1205,16 @@ public partial class MainWindow
                     // Removes one track from the queue the instant it succeeds,
                     // rather than leaving it sitting there (already imported)
                     // until the whole album finishes too (task 163).
-                    var trackDone = new Progress<DownloadNode>(n => { PruneNodeNow(n); ResetIdleTimeout(); });
+                    var trackDone = new Progress<DownloadNode>(n =>
+                    {
+                        PruneNodeNow(n);
+                        if (node.Kind == DownloadKind.Album && totalTracks > 0)
+                        {
+                            doneTracks++;
+                            node.StatusText = $"Downloading {(int)Math.Round(100.0 * doneTracks / totalTracks)}%";
+                        }
+                        ResetIdleTimeout();
+                    });
 
                     IReadOnlyList<string> paths;
                     var partialFailure = false;
@@ -1232,6 +1290,11 @@ public partial class MainWindow
                 }
                 UpdateAggregateProgress(queue);
                 SaveFailedDownloadQueue(); // durable after every item, not just once the whole run finishes (task 149)
+                }
+                finally
+                {
+                    MaybeResetArtistText(node);
+                }
             }
         }
         finally

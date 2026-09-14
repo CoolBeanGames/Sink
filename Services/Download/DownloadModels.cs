@@ -56,6 +56,18 @@ public sealed class DownloadNode : INotifyPropertyChanged, ITitleTrimmable
     public ObservableCollection<DownloadNode> Children { get; } = [];
 
     /// <summary>
+    /// Artist-only, download-run-scoped: how many of this artist's albums are
+    /// part of the current run, and how many have been started so far. Kept
+    /// separate from <see cref="Children"/>'s live count because a finished
+    /// album is pruned out of Children the instant it's done (task 163) —
+    /// counting that way would make the artist's "Total" shrink every time an
+    /// album merely finishes, when it should only shrink when the user
+    /// actually removes a queued link.
+    /// </summary>
+    public int? DownloadTotalOverride { get; set; }
+    public int DownloadStartedCount { get; set; }
+
+    /// <summary>
     /// True on an Album-kind node that came from a scanned yt-dlp *playlist*
     /// rather than a genuine single-artist album — a personal playlist mixes
     /// tracks from different artists/albums, so unlike a real album it must
