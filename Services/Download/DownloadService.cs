@@ -556,7 +556,8 @@ public static partial class DownloadService
         // alternate player clients, and with both — so this is what's left
         // after every fallback failed, not the first thing that was tried.
         if (raw.Contains("not a bot", StringComparison.OrdinalIgnoreCase)
-            || raw.Contains("Sign in to confirm", StringComparison.OrdinalIgnoreCase))
+            || raw.Contains("Sign in to confirm", StringComparison.OrdinalIgnoreCase)
+            || raw.Contains("Please sign in", StringComparison.OrdinalIgnoreCase))
             return "YouTube is asking Sink to sign in, even after trying alternate download methods. Open Settings and set \"YouTube cookies\" to a browser you're signed into YouTube with (Firefox works best — Chrome/Edge often can't be read at all), then try again.";
         if (raw.Contains("dpapi", StringComparison.OrdinalIgnoreCase))
             return "Sink couldn't read your browser's saved cookies (Windows DPAPI decryption failed). Try picking a different browser under Settings → \"YouTube cookies\" — Firefox isn't affected by this — or set it to \"none\".";
@@ -684,7 +685,12 @@ public static partial class DownloadService
         var altClients = await RunProcessAsync(
             [.. arguments, "--extractor-args", "youtube:player_client=android,android_vr"],
             onLine, token).ConfigureAwait(false);
-        if (altClients.exit == 0 || !NeedsClientFallback(altClients.stderr) || cookieArgs.Count == 0)
+        // Skip the final combined attempt entirely once cookies are already
+        // known broken (set inside RunWithCookieRetryAsync above, possibly
+        // just now) — reattaching them would only fail the same way again
+        // (the cookie store still won't load) and bury the actually useful
+        // "sign in" message under a confusing cookie-copy error instead.
+        if (altClients.exit == 0 || !NeedsClientFallback(altClients.stderr) || cookieArgs.Count == 0 || _cookiesKnownBroken)
             return altClients;
 
         // Some content (age-restricted, members-only) genuinely needs the
@@ -716,6 +722,13 @@ public static partial class DownloadService
     private static bool NeedsClientFallback(string stderr) =>
         stderr.Contains("not a bot", StringComparison.OrdinalIgnoreCase)
         || stderr.Contains("Sign in to confirm", StringComparison.OrdinalIgnoreCase)
+        // yt-dlp 2026.08.19's actual current wording for this same wall —
+        // confirmed live ("Please sign in. Use --cookies-from-browser or
+        // --cookies for the authentication...") — matched neither this nor
+        // FirstError's rewrite below, so the client-fallback ladder never
+        // even ran and the raw, link-filled yt-dlp error leaked straight to
+        // the user instead.
+        || stderr.Contains("Please sign in", StringComparison.OrdinalIgnoreCase)
         || stderr.Contains("Requested format is not available", StringComparison.OrdinalIgnoreCase)
         || stderr.Contains("DRM protected", StringComparison.OrdinalIgnoreCase)
         || stderr.Contains("no video formats found", StringComparison.OrdinalIgnoreCase)
