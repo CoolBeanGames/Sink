@@ -142,6 +142,7 @@ public partial class MainWindow
         menu.Items.Add(Item("Edit metadata…", () => EditTagsMetadata(tracks)));
         menu.Items.Add(Item("Trim titles…", () => TrimTagsTrackTitles(tracks)));
         menu.Items.Add(Item(tracks.Count == 1 ? "Translate title to English" : "Translate titles to English", () => _ = TranslateTracksAsync(tracks)));
+        menu.Items.Add(Item(tracks.Count == 1 ? "Auto-tag" : "Auto-tag all", () => _ = AutoTagTracksAsync(tracks)));
         menu.Items.Add(Item("Set cover art…", () => SetTagsArtwork(tracks)));
         menu.Items.Add(Item("Crop album art", () => CropTagsArtwork(tracks)));
         menu.Items.Add(new Separator());
@@ -215,6 +216,42 @@ public partial class MainWindow
         PlaybackStatus.Text = changed == 0
             ? (failed == 0 ? "Titles are already English" : "Couldn't reach the translation service")
             : $"Translated {changed} title{(changed == 1 ? "" : "s")} to English" + (failed > 0 ? $" · {failed} still failed" : "");
+    }
+
+    /// <summary>
+    /// Fills in Album/Genre/Artist/Year via <see cref="AutoTagService"/> —
+    /// only touches fields still holding the app's own "unset" placeholder,
+    /// so a real (even if imperfect) existing value is never clobbered
+    /// (task 160).
+    /// </summary>
+    private async Task AutoTagTracksAsync(IReadOnlyList<Track> tracks)
+    {
+        FlushTagsIfDirty();
+        var updated = 0;
+        var notFound = 0;
+        for (var i = 0; i < tracks.Count; i++)
+        {
+            var track = tracks[i];
+            if (tracks.Count > 1) PlaybackStatus.Text = $"Auto-tagging… {i + 1}/{tracks.Count}";
+            var result = await AutoTagService.LookupAsync(track.Title, track.Artist);
+            if (!result.Found) { notFound++; continue; }
+
+            var changed = false;
+            if (AutoTagService.IsUnknown(track.Album, "Unknown Album") && !string.IsNullOrWhiteSpace(result.Album))
+            { track.Album = result.Album!; changed = true; }
+            if (AutoTagService.IsUnknown(track.Genre, "Unknown") && !string.IsNullOrWhiteSpace(result.Genre))
+            { track.Genre = result.Genre!; changed = true; }
+            if (AutoTagService.IsUnknown(track.Artist, "Unknown Artist") && !string.IsNullOrWhiteSpace(result.Artist))
+            { track.Artist = result.Artist!; changed = true; }
+            if (track.Year == 0 && result.Year > 0) { track.Year = result.Year; changed = true; }
+            if (track.TrackNumber == 0 && result.TrackNumber > 0) { track.TrackNumber = result.TrackNumber; changed = true; }
+            if (changed) updated++;
+        }
+        if (updated > 0) SaveLibrary();
+        _tagsView?.Refresh();
+        PlaybackStatus.Text = updated == 0
+            ? "Nothing to fill in — no matches, or metadata already complete"
+            : $"Auto-tagged {updated} track{(updated == 1 ? "" : "s")}" + (notFound > 0 ? $" · {notFound} not found" : "");
     }
 
     private void SetTagsArtwork(IReadOnlyList<Track> tracks)
