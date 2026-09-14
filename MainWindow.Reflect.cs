@@ -56,7 +56,8 @@ public partial class MainWindow
     /// (task 128). Matched by (Title, Artist, Album, TrackNumber) — the same
     /// identity IpodDbTrack.Key already uses for its own matching.
     /// </summary>
-    private void SyncMusicPlayCountsFromIpod(Services.Ipod.IpodLibrary library)
+    /// <summary>Returns how many new plays were folded into Reflect, for the "Sync changes" completion message.</summary>
+    private int SyncMusicPlayCountsFromIpod(Services.Ipod.IpodLibrary library)
     {
         var deviceId = library.SerialNumber;
         if (string.IsNullOrWhiteSpace(deviceId))
@@ -67,7 +68,7 @@ public partial class MainWindow
             // failure mode, the log will now say so explicitly instead of the
             // guesswork this has taken so far.
             Services.Log.Warn("Reflect: iPod has no usable SerialNumber (checked SysInfo + SysInfoExtended) — can't baseline play counts against it");
-            return;
+            return 0;
         }
         var deviceMusic = library.Tracks.Where(t => !t.IsPodcast).ToList();
         var byKey = deviceMusic.ToLookup(t => t.Key);
@@ -107,10 +108,11 @@ public partial class MainWindow
             var deviceSample = deviceMusic.Take(3).Select(t => $"\"{t.Key}\"");
             Services.Log.Warn($"Reflect music sync: zero key matches — local sample [{string.Join(", ", localSample)}] vs device sample [{string.Join(", ", deviceSample)}]");
         }
-        if (recorded == 0) return;
+        if (recorded == 0) return 0;
         ReflectStore.Save(_listenEvents);
         SaveLibrary();
         Services.Log.Info($"Reflect: folded in {recorded} iPod play{(recorded == 1 ? "" : "s")} from {deviceId}");
+        return recorded;
     }
 
     // ---- View switching -------------------------------------------------

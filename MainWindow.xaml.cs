@@ -298,28 +298,28 @@ public partial class MainWindow : Window
     /// connect event — e.g. the iPod flapping identities, see the iPod
     /// detection notes) when the user actually clicked Sync (task 157).
     /// </summary>
-    private async Task<bool> RefreshIpodLibraryFromDeviceAsync(string root)
+    private async Task<(bool ok, int songsUpdated, int podcastsUpdated)> RefreshIpodLibraryFromDeviceAsync(string root)
     {
         try
         {
             var library = await Task.Run(() => Sink.Services.Ipod.IpodReader.Read(root));
-            if (_ipodLibraryRoot != root) return false; // device changed while loading
+            if (_ipodLibraryRoot != root) return (false, 0, 0); // device changed while loading
             _ipodLibrary = library;
             _ipodTracks.Clear();
             foreach (var t in library.Tracks) _ipodTracks.Add(AdaptIpodTrack(t));
             var readableName = library.DeviceName ?? _ipodDevice?.Name ?? "iPod";
             PlaybackStatus.Text = $"Read {library.Tracks.Count} track{(library.Tracks.Count == 1 ? "" : "s")} from {readableName}";
             ApplyIpodLibraryChrome(library, readableName);
-            SyncPodcastStatusFromIpod();
-            SyncMusicPlayCountsFromIpod(library); // task 128
+            var podcastsUpdated = SyncPodcastStatusFromIpod();
+            var songsUpdated = SyncMusicPlayCountsFromIpod(library); // task 128
             EnrichIpodArtwork(_ipodTracks); // task 132
-            return true;
+            return (true, songsUpdated, podcastsUpdated);
         }
         catch (Exception ex)
         {
             Services.Log.Error("Reading iPod database failed", ex);
             PlaybackStatus.Text = $"Couldn't read the iPod database: {ex.Message}";
-            return false;
+            return (false, 0, 0);
         }
     }
 
@@ -872,8 +872,9 @@ public partial class MainWindow : Window
         // never re-triggers a fresh connect event (same drive root, or the
         // iPod's flapping identities) stayed "already loaded" and a click on
         // Sync never picked up new listens (task 157).
+        var (refreshed, songsUpdated, podcastsUpdated) = (false, 0, 0);
         if (_ipodDevice?.LibraryRoot is string syncRoot && !_ipodWriting)
-            await RefreshIpodLibraryFromDeviceAsync(syncRoot);
+            (refreshed, songsUpdated, podcastsUpdated) = await RefreshIpodLibraryFromDeviceAsync(syncRoot);
         var songsAdded = 0;
         var podcastsAdded = 0;
         if (header is "Sync all" or "Sync music")
@@ -884,7 +885,20 @@ public partial class MainWindow : Window
         if (header is "Sync all" or "Sync podcasts")
             podcastsAdded = await SyncAllPodcastsToDevice();
         if (header is not ("Sync all" or "Sync music" or "Sync podcasts"))
+        {
+            // "Sync changes" — flush play counts, podcast played status and
+            // bookmark positions only; never touch song/episode files (task:
+            // "Add Explicit Podcasts Logging" also called this out directly —
+            // it used to just spin the record and do nothing else at all).
+            // The actual flush already happened above via
+            // RefreshIpodLibraryFromDeviceAsync; this just reports it.
             StartIpodSync();
+            PlaybackStatus.Text = !refreshed
+                ? "Connect an iPod before syncing changes"
+                : songsUpdated == 0 && podcastsUpdated == 0
+                    ? "No new play counts or podcast status to sync"
+                    : $"Synced changes — {songsUpdated} song play{(songsUpdated == 1 ? "" : "s")}, {podcastsUpdated} podcast update{(podcastsUpdated == 1 ? "" : "s")}";
+        }
         if (songsAdded > 0 || podcastsAdded > 0)
             PostNotification("sync-complete", null,
                 $"Syncing complete — {songsAdded} song{(songsAdded == 1 ? "" : "s")} synced, {podcastsAdded} podcast{(podcastsAdded == 1 ? "" : "s")} synced");

@@ -578,10 +578,11 @@ public partial class MainWindow
     /// newer positions out to the device. Falls back to play-count-only when the
     /// DB library can't surface the bookmark field.
     /// </summary>
-    private void SyncPodcastStatusFromIpod()
+    /// <summary>Returns how many episodes actually changed (position pulled and/or newly marked played), for the "Sync changes" completion message.</summary>
+    private int SyncPodcastStatusFromIpod()
     {
         var root = _ipodDevice?.LibraryRoot;
-        if (_ipodLibrary is null || root is null || _podcasts.Count == 0) return;
+        if (_ipodLibrary is null || root is null || _podcasts.Count == 0) return 0;
 
         // Matching by filename never worked: the device always renames every
         // synced file to its own opaque, hashed name under iPod_Control/Music
@@ -596,6 +597,7 @@ public partial class MainWindow
         var byKey = devicePodcasts.ToLookup(t => t.Key);
 
         var changed = false;
+        var updated = 0;
         var toPush = new Dictionary<string, long>();
         var candidates = 0;
         var matched = 0;
@@ -614,12 +616,22 @@ public partial class MainWindow
             }
             matched++;
 
+            // Explicit before/after for every matched episode, on both sides
+            // (task: "Add Explicit Podcasts Logging" — a sync that finds a
+            // match but still doesn't update anything should show exactly
+            // why: library-before vs device vs library-after, not just a
+            // pass/fail count).
+            var beforePlayed = episode.IsPlayed;
+            var beforePos = episode.PositionSeconds;
+            var episodeChanged = false;
+
             // Pull: take the further-along position between library and device.
             if (deviceTrack.BookmarkMs > episode.PositionSeconds * 1000 + 1500)
             {
                 episode.PositionSeconds = deviceTrack.BookmarkMs / 1000.0;
                 episode.IpodBookmarkMs = deviceTrack.BookmarkMs;
                 changed = true;
+                episodeChanged = true;
             }
 
             var nearEnd = episode.Duration > TimeSpan.Zero && episode.PositionSeconds >= episode.Duration.TotalSeconds * 0.95;
@@ -630,7 +642,15 @@ public partial class MainWindow
                 if (episode.IsDownloaded) PodcastRules.DropDownload(episode);
                 RecordPodcastListen(episode.Id, episode.Duration, completed: true); // task 128
                 changed = true;
+                episodeChanged = true;
             }
+            if (episodeChanged) updated++;
+
+            Services.Log.Info(
+                $"Reflect podcast sync: \"{episode.Title}\" ({podcast.Title}) — " +
+                $"library before: played={beforePlayed}, position={beforePos:0}s | " +
+                $"device: playCount={deviceTrack.PlayCount}, bookmark={deviceTrack.BookmarkMs}ms | " +
+                $"library after: played={episode.IsPlayed}, position={episode.PositionSeconds:0}s");
 
             // Push: our position is ahead of the device's bookmark.
             var ourMs = (long)(episode.PositionSeconds * 1000);
@@ -643,7 +663,7 @@ public partial class MainWindow
         // sync that changes nothing should still say whether that's because
         // no downloaded episode matched a device track at all, versus
         // matches were found but nothing on the device was further along.
-        Services.Log.Info($"Reflect podcast sync: {candidates} downloaded episode(s) with a local path, {devicePodcasts.Count} device podcast track(s), {matched} matched by key, changed={changed}");
+        Services.Log.Info($"Reflect podcast sync: {candidates} downloaded episode(s) with a local path, {devicePodcasts.Count} device podcast track(s), {matched} matched by key, {updated} updated, changed={changed}");
         if (matched == 0 && candidates > 0 && devicePodcasts.Count > 0)
         {
             var deviceSample = devicePodcasts.Take(3).Select(t => $"\"{t.Key}\"");
@@ -660,7 +680,7 @@ public partial class MainWindow
                 });
         }
 
-        if (!changed) return;
+        if (!changed) return updated;
         PodcastStore.Save(_podcasts);
         if (_podcastViewActive) { RenderPodcasts(); UpdatePodcastSidebarDot(); }
         // A played episode just freed a rule slot — download its replacement
@@ -668,6 +688,7 @@ public partial class MainWindow
         // requiring a second manual sync to actually get it onto the iPod
         // (task: "sink then begins downloading episodes as syncing finishes").
         foreach (var podcast in _podcasts.ToList()) _ = AutoDownloadAndPushAsync(podcast);
+        return updated;
     }
 
     /// <summary>Downloads a podcast's currently-desired episodes, then pushes any that are newly downloaded straight to the connected device.</summary>
