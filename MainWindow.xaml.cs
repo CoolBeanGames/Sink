@@ -664,6 +664,7 @@ public partial class MainWindow : Window
         _mediaPlayer.Close();
         _nowPlaying = track;
         _simulatedPosition = TimeSpan.Zero;
+        _nowPlayingListenRecorded = false;
         _isPlaying = true;
         var filePath = track.FilePath;
         if (!string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
@@ -694,6 +695,10 @@ public partial class MainWindow : Window
             if (_simulatedPosition >= _nowPlaying.Duration) NextTrack();
         }
         UpdatePlayerProgress();
+        // Records the play as soon as it's substantial enough, live — was
+        // previously only checked on switching away or closing the app, so
+        // a song played once and left alone never got counted at all.
+        RecordSongListenIfDue();
     }
 
     private void UpdatePlayerDuration()

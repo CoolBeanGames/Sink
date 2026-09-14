@@ -6,12 +6,13 @@ using Sink.Services;
 namespace Sink;
 
 /// <summary>
-/// The Reflect page (task 127): year-to-date listening stats. Listens are
-/// logged as <see cref="ListenEvent"/>s when playback of a song or podcast
-/// episode stops — naturally finishing or being switched away from — as
-/// long as at least 30 seconds (or the whole thing, if shorter) was
-/// actually heard, so skipping through a library doesn't inflate counts.
-/// "This year" is the calendar year (Jan 1 – now).
+/// The Reflect page (task 127): year-to-date listening stats. A song listen
+/// is logged as soon as at least 30 seconds (or the whole thing, if
+/// shorter) has actually been heard — live during playback, not only once
+/// it stops — so skipping through a library doesn't inflate counts but a
+/// song played once and left alone still gets counted. A podcast listen is
+/// still logged when playback of the episode stops. "This year" is the
+/// calendar year (Jan 1 – now).
 /// </summary>
 public partial class MainWindow
 {
@@ -46,16 +47,33 @@ public partial class MainWindow
 
     // ---- Recording ---------------------------------------------------
 
-    /// <summary>Logs a listen for whatever song is currently playing, if enough of it was heard. Call right before switching _nowPlaying away from it.</summary>
+    /// <summary>True once the currently-playing song has already been recorded this play, so PlaybackTimer_Tick's live check and a later switch-away/close don't double-count it. Reset in PlayTrack.</summary>
+    private bool _nowPlayingListenRecorded;
+
+    /// <summary>
+    /// Records a listen for the current song the moment enough of it has
+    /// been heard (matching this class's own documented threshold), instead
+    /// of waiting for playback to actually stop — a song played once and
+    /// never switched away from (or the app never closed) previously never
+    /// got recorded at all, which looked exactly like "plays aren't tracked"
+    /// even though it would have counted eventually (task: "Song Play Counts").
+    /// Called every tick while playing; a no-op once already recorded or
+    /// before the threshold.
+    /// </summary>
     private void RecordSongListenIfDue()
     {
-        if (_nowPlaying is null) return;
+        if (_nowPlaying is null || _nowPlayingListenRecorded) return;
         var full = _nowPlaying.Duration;
         var threshold = TimeSpan.FromSeconds(Math.Min(30, Math.Max(1, full.TotalSeconds)));
         if (_simulatedPosition < threshold) return;
         var completed = full > TimeSpan.Zero && _simulatedPosition >= full - TimeSpan.FromSeconds(2);
         _listenEvents.Add(new ListenEvent { Kind = ListenKind.Song, ItemId = _nowPlaying.Id, Duration = _simulatedPosition, Completed = completed });
         ReflectStore.Save(_listenEvents);
+        _nowPlayingListenRecorded = true;
+        // Live-refresh the PLAYS column (and Tags page) right away rather
+        // than waiting for some unrelated re-render to happen to pick it up.
+        RenderLibrary();
+        _tagsView?.Refresh();
     }
 
     /// <summary>Logs a podcast listen. Called from StopPodcast with the elapsed position captured before it resets.</summary>
