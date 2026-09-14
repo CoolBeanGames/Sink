@@ -429,7 +429,7 @@ public static class IpodWriteService
         };
     }
 
-    private static string BackupDatabase(string root)
+    internal static string BackupDatabase(string root)
     {
         var iTunes = Path.Combine(root, "iPod_Control", "iTunes");
         var source = Path.Combine(iTunes, "iTunesDB");
@@ -447,7 +447,7 @@ public static class IpodWriteService
         return backup + "|" + source;
     }
 
-    private static void TryRestore(string backupInfo)
+    internal static void TryRestore(string backupInfo)
     {
         var parts = backupInfo.Split('|', 2);
         if (parts.Length == 2 && File.Exists(parts[0]))
