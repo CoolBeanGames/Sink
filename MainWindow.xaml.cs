@@ -25,6 +25,11 @@ public partial class MainWindow : Window
     private string? _ipodLibraryRoot;
     private LibraryCategory _category = LibraryCategory.Albums;
     private LibrarySource _source = LibrarySource.Music;
+    // Remembered per source (task 162) — so returning to Library/iPod from
+    // Downloads, Tags, Reflect, etc. lands back on whatever category (e.g.
+    // Songs) was last active there instead of always snapping to Albums.
+    private LibraryCategory _lastMusicCategory = LibraryCategory.Albums;
+    private LibraryCategory _lastIpodCategory = LibraryCategory.Albums;
     private string? _drilldown;
     private Playlist? _activePlaylist;
     private readonly MediaPlayer _mediaPlayer = new();
@@ -401,7 +406,7 @@ public partial class MainWindow : Window
     {
         if (sender is not Button button || !Enum.TryParse(button.Name.Replace("Button", ""), out LibraryCategory category)) return;
         _source = LibrarySource.Music;
-        _category = category; _drilldown = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
+        _category = category; _lastMusicCategory = category; _drilldown = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
         ApplySourceChrome();
         SetActiveNavigation(button);
         RenderLibrary();
@@ -411,7 +416,7 @@ public partial class MainWindow : Window
     {
         if (sender is not Button button || !Enum.TryParse(button.Name.Replace("Ipod", "").Replace("Button", ""), out LibraryCategory category)) return;
         _source = LibrarySource.Ipod;
-        _category = category; _drilldown = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
+        _category = category; _lastIpodCategory = category; _drilldown = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
         ApplySourceChrome();
         SetActiveNavigation(button);
         RenderLibrary();
@@ -420,15 +425,28 @@ public partial class MainWindow : Window
     private void ShowMusicSource_Click(object sender, RoutedEventArgs e) => SetSource(LibrarySource.Music);
     private void ShowIpodSource_Click(object sender, RoutedEventArgs e) => SetSource(LibrarySource.Ipod);
 
+    /// <summary>Returns to a source's last-active category (task 162) instead of always resetting to Albums.</summary>
     private void SetSource(LibrarySource source)
     {
         _source = source;
-        _category = LibraryCategory.Albums;
+        _category = source == LibrarySource.Music ? _lastMusicCategory : _lastIpodCategory;
         _drilldown = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
         ApplySourceChrome();
-        SetActiveNavigation(source == LibrarySource.Music ? AlbumsButton : IpodAlbumsButton);
+        SetActiveNavigation(CategoryButton(source, _category));
         RenderLibrary();
     }
+
+    private Button CategoryButton(LibrarySource source, LibraryCategory category) => (source, category) switch
+    {
+        (LibrarySource.Music, LibraryCategory.Artists) => ArtistsButton,
+        (LibrarySource.Music, LibraryCategory.Genres) => GenresButton,
+        (LibrarySource.Music, LibraryCategory.Songs) => SongsButton,
+        (LibrarySource.Music, _) => AlbumsButton,
+        (LibrarySource.Ipod, LibraryCategory.Artists) => IpodArtistsButton,
+        (LibrarySource.Ipod, LibraryCategory.Genres) => IpodGenresButton,
+        (LibrarySource.Ipod, LibraryCategory.Songs) => IpodSongsButton,
+        _ => IpodAlbumsButton,
+    };
 
     private void ApplySourceChrome()
     {

@@ -76,8 +76,10 @@ public partial class MainWindow
         PodcastsHeaderButton.Tag = "Active";
         SetActiveNavigation(null);
 
-        _currentShow = null;
-        _podcastMode = PodcastMode.Library;
+        // Keep whatever _podcastMode/_currentShow the user was last on —
+        // returning from another page (Downloads, Library, Tags…) used to
+        // always dump them back at the podcast library root, even mid
+        // search or inside a show's episode list (task 162).
         SetPodcastNav();
         RenderPodcasts();
         UpdatePodcastSidebarDot();
