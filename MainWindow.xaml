@@ -614,7 +614,20 @@
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
-                            <DataGridTextColumn Header="TIME" Binding="{Binding DurationText}" Width="70" IsReadOnly="True"/>
+                            <DataGridTemplateColumn Header="TIME" Width="70" SortMemberPath="DurationText" IsReadOnly="True">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <!-- A plain DataGridTextColumn's auto-generated TextBlock
+                                             didn't actually pick up VerticalContentAlignment="Center"
+                                             from the shared DataGridCell style the way every other
+                                             (template-column, explicitly-styled) field here does —
+                                             so this sets VerticalAlignment directly on the element
+                                             itself, same as the rest of the row, instead of relying
+                                             on that cascading again. -->
+                                        <TextBlock Text="{Binding DurationText}" Foreground="#BFC4CE" VerticalAlignment="Center" Padding="4,2"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
                 </Grid>
