@@ -597,10 +597,16 @@ public static partial class DownloadService
     }
 
     /// <summary>
-    /// Set once cookie extraction fails in a way that won't fix itself mid-session
-    /// (DPAPI can't decrypt Chrome/Edge's App-Bound-encrypted cookie store —
-    /// yt-dlp#10927). Skips the cookie attempt on every later call instead of
-    /// paying for — and failing — it again on every single scan and download.
+    /// Set once cookie extraction fails in a way that won't fix itself mid-session —
+    /// DPAPI can't decrypt Chrome/Edge's App-Bound-encrypted cookie store
+    /// (yt-dlp#10927), or the browser is running and holds its cookie DB locked
+    /// (yt-dlp#7271), etc. Skips the cookie attempt on every later call instead
+    /// of paying for — and failing — it again on every single scan and download
+    /// (task 156: with an explicit non-"auto" browser choice, every track in an
+    /// album paid for a doubled yt-dlp invocation because this only ever
+    /// latched on the literal word "dpapi", which #7271's "Could not copy ...
+    /// cookie database" never contains — the wasted retries were eating enough
+    /// time per track to trip YouTube's rate limiting and skip tracks outright).
     /// </summary>
     private static bool _cookiesKnownBroken;
 
@@ -690,7 +696,11 @@ public static partial class DownloadService
         var result = await RunProcessAsync([.. cookieArgs, .. arguments], onLine, token).ConfigureAwait(false);
         if (result.exit == 0 || !LooksLikeCookieProblem(result.stderr)) return result;
 
-        if (result.stderr.Contains("dpapi", StringComparison.OrdinalIgnoreCase)) _cookiesKnownBroken = true;
+        // Reaching this point already means LooksLikeCookieProblem matched, so
+        // this is a recognized cookie-read failure regardless of its exact
+        // wording — latch it so every later call in the session skips the
+        // cookie attempt instead of repeating it (and failing it) per track.
+        _cookiesKnownBroken = true;
         Log.Warn($"yt-dlp couldn't read browser cookies, retrying without them: {FirstError(result.stderr)}");
         return await RunProcessAsync(arguments, onLine, token).ConfigureAwait(false);
     }
