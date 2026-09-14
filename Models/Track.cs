@@ -31,4 +31,14 @@ public sealed class Track : ITitleTrimmable
 
     [JsonIgnore]
     public string DurationText => Duration.ToString(@"m\:ss");
+
+    /// <summary>
+    /// Total tracked listens (in-app + folded-in iPod plays) — recomputed by
+    /// MainWindow.RecomputePlayCounts from ReflectStore's ListenEvents, not
+    /// persisted itself. Surfaced directly on the Songs list so play-count
+    /// tracking is visibly verifiable rather than only inferable from Reflect
+    /// (task: "play count").
+    /// </summary>
+    [JsonIgnore]
+    public int PlayCount { get; set; }
 }

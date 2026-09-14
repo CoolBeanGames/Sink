@@ -18,7 +18,24 @@ public partial class MainWindow
     private readonly List<ListenEvent> _listenEvents = [];
     private bool _reflectViewActive;
 
-    private void InitReflect() => _listenEvents.AddRange(ReflectStore.Load());
+    private void InitReflect()
+    {
+        _listenEvents.AddRange(ReflectStore.Load());
+        RecomputePlayCounts();
+    }
+
+    /// <summary>
+    /// Refreshes every track's PlayCount from _listenEvents — cheap enough to
+    /// call right before any render, so the Songs list's PLAYS column is
+    /// always current without needing its own targeted refresh at each of
+    /// the several places listen events change (in-app plays, iPod sync).
+    /// </summary>
+    private void RecomputePlayCounts()
+    {
+        var counts = _listenEvents.Where(e => e.Kind == ListenKind.Song)
+            .GroupBy(e => e.ItemId).ToDictionary(g => g.Key, g => g.Count());
+        foreach (var track in _tracks) track.PlayCount = counts.GetValueOrDefault(track.Id, 0);
+    }
 
     /// <summary>Flushes whatever's mid-playback as a listen when the app closes, rather than losing it silently.</summary>
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)

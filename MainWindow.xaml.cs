@@ -481,6 +481,7 @@ public partial class MainWindow : Window
         IpodPodcastsArea.Visibility = Visibility.Collapsed;
         IpodPlaylistsArea.Visibility = Visibility.Collapsed;
         MetadataIndex.Rebuild(_tracks);
+        RecomputePlayCounts();
         var query = SearchBox?.Text?.Trim() ?? "";
         var ipodOnDevice = _source == LibrarySource.Ipod && _ipodLibrary is not null;
         var source = _source != LibrarySource.Ipod ? _tracks.ToList()
