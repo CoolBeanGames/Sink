@@ -17,14 +17,19 @@ public sealed class TrimTitlesWindow : SinkDialog
 {
     private readonly IReadOnlyList<ITitleTrimmable> _tracks;
 
+    private readonly CheckBox _replace = Check("Replace");
+    private readonly TextBox _replaceFind = Text(140);
+    private readonly TextBox _replaceWith = Text(140);
+    private readonly CheckBox _cutAll = Check("Remove every instance of");
+    private readonly TextBox _cutAllText = Text();
     private readonly CheckBox _removeFirst = Check("Remove first");
     private readonly TextBox _removeFirstN = Num();
     private readonly CheckBox _removeLast = Check("Remove last");
     private readonly TextBox _removeLastN = Num();
     private readonly CheckBox _upTo = Check("Cut up to & including");
-    private readonly TextBox _upToChar = Char();
+    private readonly TextBox _upToText = Text();
     private readonly CheckBox _after = Check("Cut everything after");
-    private readonly TextBox _afterChar = Char();
+    private readonly TextBox _afterText = Text();
     private readonly CheckBox _extractNumber = Check("Use leading number as track number");
     private readonly ListBox _preview = new()
     {
@@ -38,15 +43,17 @@ public sealed class TrimTitlesWindow : SinkDialog
     public TrimTitlesWindow(IReadOnlyList<ITitleTrimmable> tracks)
     {
         _tracks = tracks;
-        Width = 520;
-        Height = 520;
+        Width = 540;
+        Height = 720;
         Title = "Trim track titles";
 
         var body = new StackPanel();
+        body.Children.Add(ReplaceRow(_replace, _replaceFind, _replaceWith));
+        body.Children.Add(Row(_cutAll, _cutAllText, "e.g.  (Official Video)"));
         body.Children.Add(Row(_removeFirst, _removeFirstN, "characters"));
         body.Children.Add(Row(_removeLast, _removeLastN, "characters"));
-        body.Children.Add(Row(_upTo, _upToChar, "e.g.  -"));
-        body.Children.Add(Row(_after, _afterChar, "e.g.  ("));
+        body.Children.Add(Row(_upTo, _upToText, "e.g.  Artist -"));
+        body.Children.Add(Row(_after, _afterText, "e.g.  (feat."));
         _extractNumber.Margin = new Thickness(0, 6, 0, 0);
         body.Children.Add(_extractNumber);
         body.Children.Add(new TextBlock
@@ -56,9 +63,9 @@ public sealed class TrimTitlesWindow : SinkDialog
         });
         body.Children.Add(_preview);
 
-        foreach (var box in new[] { _removeFirst, _removeLast, _upTo, _after, _extractNumber })
+        foreach (var box in new[] { _replace, _cutAll, _removeFirst, _removeLast, _upTo, _after, _extractNumber })
             box.Click += (_, _) => Refresh();
-        foreach (var tb in new[] { _removeFirstN, _removeLastN, _upToChar, _afterChar })
+        foreach (var tb in new[] { _replaceFind, _replaceWith, _cutAllText, _removeFirstN, _removeLastN, _upToText, _afterText })
             tb.TextChanged += (_, _) => Refresh();
 
         Compose("Metadata", "Trim titles", $"{tracks.Count} track{(tracks.Count == 1 ? "" : "s")}", body,
@@ -68,20 +75,27 @@ public sealed class TrimTitlesWindow : SinkDialog
         Refresh();
     }
 
-    private readonly record struct Spec(int First, int Last, char? Up, char? After, bool Number);
+    private readonly record struct Spec(
+        string? ReplaceFind, string? ReplaceWith, string? CutAll,
+        int First, int Last, string? Up, string? After, bool Number);
 
     private Spec ReadSpec() => new(
+        _replace.IsChecked == true && _replaceFind.Text.Length > 0 ? _replaceFind.Text : null,
+        _replaceWith.Text,
+        _cutAll.IsChecked == true && _cutAllText.Text.Length > 0 ? _cutAllText.Text : null,
         _removeFirst.IsChecked == true && int.TryParse(_removeFirstN.Text, out var f) ? Math.Max(0, f) : 0,
         _removeLast.IsChecked == true && int.TryParse(_removeLastN.Text, out var l) ? Math.Max(0, l) : 0,
-        _upTo.IsChecked == true && _upToChar.Text.Length > 0 ? _upToChar.Text[0] : null,
-        _after.IsChecked == true && _afterChar.Text.Length > 0 ? _afterChar.Text[0] : null,
+        _upTo.IsChecked == true && _upToText.Text.Length > 0 ? _upToText.Text : null,
+        _after.IsChecked == true && _afterText.Text.Length > 0 ? _afterText.Text : null,
         _extractNumber.IsChecked == true);
 
     private static (string title, int track) Transform(string original, Spec s)
     {
         var t = original;
-        if (s.Up is { } u) { var i = t.IndexOf(u); if (i >= 0) t = t[(i + 1)..]; }
-        if (s.After is { } a) { var i = t.IndexOf(a); if (i >= 0) t = t[..i]; }
+        if (s.ReplaceFind is { Length: > 0 } find) t = t.Replace(find, s.ReplaceWith ?? "");
+        if (s.CutAll is { Length: > 0 } cut) t = t.Replace(cut, "");
+        if (s.Up is { Length: > 0 } u) { var i = t.IndexOf(u, StringComparison.Ordinal); if (i >= 0) t = t[(i + u.Length)..]; }
+        if (s.After is { Length: > 0 } a) { var i = t.IndexOf(a, StringComparison.Ordinal); if (i >= 0) t = t[..i]; }
         if (s.First > 0) t = s.First < t.Length ? t[s.First..] : "";
         if (s.Last > 0) t = s.Last < t.Length ? t[..^s.Last] : "";
         t = t.Trim().Trim('-', '–', '—', '.', ':', '·').Trim();
@@ -131,9 +145,9 @@ public sealed class TrimTitlesWindow : SinkDialog
         CaretBrush = Hex("#F4F6FA"), VerticalContentAlignment = VerticalAlignment.Center
     };
 
-    private static TextBox Char() => new()
+    private static TextBox Text(double width = 90) => new()
     {
-        Width = 54, MaxLength = 1, Padding = new Thickness(6, 4, 6, 4),
+        Width = width, Padding = new Thickness(6, 4, 6, 4),
         Foreground = Hex("#F4F6FA"), Background = Hex("#0F1218"), BorderBrush = Hex("#353C49"),
         CaretBrush = Hex("#F4F6FA"), VerticalContentAlignment = VerticalAlignment.Center
     };
@@ -148,6 +162,20 @@ public sealed class TrimTitlesWindow : SinkDialog
             Text = "  " + hint, Foreground = Hex("#6E7584"), FontSize = 11,
             VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0)
         });
+        return panel;
+    }
+
+    private static Panel ReplaceRow(CheckBox box, TextBox find, TextBox replaceWith)
+    {
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 4) };
+        panel.Children.Add(box);
+        panel.Children.Add(find);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "  with  ", Foreground = Hex("#6E7584"), FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        panel.Children.Add(replaceWith);
         return panel;
     }
 }
