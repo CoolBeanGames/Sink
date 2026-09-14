@@ -320,7 +320,12 @@ public static partial class DownloadService
                 var t = titleOrder[i];
                 if (t.State is DownloadState.Done or DownloadState.Failed) continue;
                 if (!FinalizeTrack(t))
-                    OnUi(() => { t.State = DownloadState.Failed; t.StatusText = "yt-dlp skipped this track"; });
+                    // Provisional — yt-dlp is still running, so the real
+                    // reason (if any) isn't known yet; the end-of-run pass
+                    // below re-checks every unfinalized track against the
+                    // complete log and overwrites this with a real reason
+                    // when one exists.
+                    OnUi(() => { t.State = DownloadState.Failed; t.StatusText = "Checking why…"; });
             }
             if (itemIndex1Based - 1 < titleOrder.Count)
             {
@@ -362,9 +367,17 @@ public static partial class DownloadService
             if (finalized.Contains(key)) continue;
             if (!FinalizeTrack(trackNode) && trackNode.Kind == DownloadKind.Track)
             {
-                var failureText = FirstError(stderr) ?? "yt-dlp skipped this track";
+                var realReason = FirstError(stderr);
+                var failureText = realReason ?? "yt-dlp skipped this track";
                 OnUi(() => { trackNode.State = DownloadState.Failed; trackNode.StatusText = failureText; });
                 Log.Warn($"Track {trackNode.Index} \"{trackNode.Name}\" of {album} did not download: {failureText}");
+                // The short UI status can't always show yt-dlp's exact wording
+                // (or there wasn't a matchable ERROR/WARNING line at all) — log
+                // the full run's stderr here too so the real reason is always
+                // at least recoverable from the log file instead of guessing
+                // at a generic message (task: better logging for skipped tracks).
+                if (realReason is null)
+                    Log.Warn($"Track {trackNode.Index} \"{trackNode.Name}\" of {album}: no matchable ERROR/WARNING line — full stderr for this download:\n{stderr}");
             }
         }
         progress.Report(1);
@@ -544,10 +557,24 @@ public static partial class DownloadService
 
     private static string? FirstError(string stderr)
     {
-        var raw = stderr
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .FirstOrDefault(l => l.StartsWith("ERROR", StringComparison.OrdinalIgnoreCase))
-            ?.Replace("ERROR:", "").Trim();
+        var lines = stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var raw = lines.FirstOrDefault(l => l.StartsWith("ERROR", StringComparison.OrdinalIgnoreCase))
+            ?.Replace("ERROR:", "").Trim()
+            // yt-dlp reports some genuinely per-item, non-fatal skips — an
+            // unavailable/private/removed/age-restricted video within an
+            // otherwise-fine playlist — as a WARNING rather than an ERROR.
+            // Those never matched the check above at all, which is why a
+            // track skipped for one of these very ordinary reasons still
+            // showed the generic "yt-dlp skipped this track" instead of the
+            // real one (task: better logging for skipped tracks).
+            ?? lines.FirstOrDefault(l => l.StartsWith("WARNING", StringComparison.OrdinalIgnoreCase) && (
+                    l.Contains("unavailable", StringComparison.OrdinalIgnoreCase)
+                    || l.Contains("private video", StringComparison.OrdinalIgnoreCase)
+                    || l.Contains("removed", StringComparison.OrdinalIgnoreCase)
+                    || l.Contains("age-restrict", StringComparison.OrdinalIgnoreCase)
+                    || l.Contains("copyright", StringComparison.OrdinalIgnoreCase)
+                    || l.Contains("not available in your country", StringComparison.OrdinalIgnoreCase)))
+                ?.Replace("WARNING:", "").Trim();
         if (raw is null) return null;
 
         // yt-dlp's generic bot-check message is meaningless to a user who has

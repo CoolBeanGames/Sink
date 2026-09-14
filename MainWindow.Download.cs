@@ -778,7 +778,23 @@ public partial class MainWindow
         if ((sender as FrameworkElement)?.DataContext is not DownloadNode node) return;
         e.Handled = true;
         if (node.State is DownloadState.Done or DownloadState.Downloading or DownloadState.Importing) return;
-        node.Enabled = node.Enabled != true;
+        if (node.State == DownloadState.Failed)
+        {
+            // GlyphHex colors Failed red unconditionally, regardless of
+            // Enabled — so toggling Enabled here (the old behavior) silently
+            // did nothing visible, giving no way to tell a retry was queued.
+            // Clicking a failed light now clears the failure back to Ready
+            // (Enabled is already true — it had to be, to have been attempted
+            // at all — so this alone reverts the glyph to orange/queued;
+            // clicking again toggles it off like any other ready track).
+            node.State = DownloadState.Ready;
+            node.StatusText = "";
+            node.Progress = 0;
+        }
+        else
+        {
+            node.Enabled = node.Enabled != true;
+        }
         UpdateDownloadButtonState();
     }
 
@@ -1099,11 +1115,31 @@ public partial class MainWindow
 
                 try
                 {
+                    // A systemic failure (broken cookies, a wall hit on every
+                    // track) can make yt-dlp's own per-track retries plus
+                    // DownloadAsync's own multi-client fallback ladder grind
+                    // through a large album for a very long time with zero
+                    // visible progress — indistinguishable from the app being
+                    // stuck, and previously had no ceiling of its own; only
+                    // the user noticing and hitting Stop would ever move the
+                    // queue on (task: album never advances to the next link).
+                    // Resets on every sign of real progress below, so a
+                    // large-but-genuinely-working album is never cut off —
+                    // only a stretch with truly nothing happening trips it.
+                    using var itemTimeoutCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+                    void ResetIdleTimeout()
+                    {
+                        try { itemTimeoutCts.CancelAfter(TimeSpan.FromMinutes(10)); }
+                        catch (ObjectDisposedException) { }
+                    }
+                    ResetIdleTimeout();
+
                     var progress = new Progress<double>(p =>
                     {
                         node.Progress = p;
                         node.StatusText = $"Downloading {p * 100:0}%";
                         UpdateAggregateProgress(queue);
+                        ResetIdleTimeout();
                     });
                     var status = new Progress<string>(s => SetDownloadStatus(s + linkLabel));
 
@@ -1115,18 +1151,30 @@ public partial class MainWindow
                     var fileReady = new Progress<string>(path =>
                     {
                         if (alreadyImported.Add(path)) pendingImports.Add(ImportFinalizedFileAsync(path));
+                        ResetIdleTimeout();
                     });
                     // Removes one track from the queue the instant it succeeds,
                     // rather than leaving it sitting there (already imported)
                     // until the whole album finishes too (task 163).
-                    var trackDone = new Progress<DownloadNode>(PruneNodeNow);
+                    var trackDone = new Progress<DownloadNode>(n => { PruneNodeNow(n); ResetIdleTimeout(); });
 
                     IReadOnlyList<string> paths;
                     var partialFailure = false;
                     var partialReason = "";
                     try
                     {
-                        paths = await DownloadService.DownloadAsync(node, options, progress, status, fileReady, trackDone, token);
+                        paths = await DownloadService.DownloadAsync(node, options, progress, status, fileReady, trackDone, itemTimeoutCts.Token);
+                    }
+                    catch (OperationCanceledException) when (!token.IsCancellationRequested)
+                    {
+                        // Our own idle timeout fired, not the user's Stop
+                        // button — fail just this item and let the queue
+                        // continue to the next one instead of stopping dead.
+                        node.State = DownloadState.Failed;
+                        node.StatusText = "Timed out — no progress for 10 minutes, likely a systemic download issue";
+                        Log.Warn($"Download timed out for {node.Name} ({node.Url}) — no progress for 10 minutes");
+                        SaveFailedDownloadQueue();
+                        continue;
                     }
                     catch (DownloadService.PartialDownloadException partial)
                     {
