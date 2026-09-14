@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
+using Sink.Models;
 
 namespace Sink.Services.Download;
 
@@ -18,7 +19,7 @@ public enum DownloadKind { Single, Album, Artist, Track }
 /// Every node carries an include toggle; a parent's toggle cascades to its children
 /// and reads back as indeterminate when they disagree.
 /// </summary>
-public sealed class DownloadNode : INotifyPropertyChanged
+public sealed class DownloadNode : INotifyPropertyChanged, ITitleTrimmable
 {
     private string _url = "";
     private string _title = "";

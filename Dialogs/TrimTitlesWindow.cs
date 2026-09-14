@@ -1,19 +1,21 @@
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
-using Sink.Services.Download;
+using Sink.Models;
 
 namespace Sink.Dialogs;
 
 /// <summary>
-/// Bulk-cleans an album's downloaded track titles: trim a fixed number of
-/// characters off either end, cut everything before/after a chosen character,
-/// and optionally pull a leading number out into the track-number field.
-/// A live before → after list previews every track before you apply.
+/// Bulk-cleans a batch of track titles: trim a fixed number of characters
+/// off either end, cut everything before/after a chosen character, and
+/// optionally pull a leading number out into the track-number field. A live
+/// before → after list previews every track before you apply. Works on
+/// anything implementing <see cref="ITitleTrimmable"/> — the download tree
+/// and the Tags page's library tracks alike (task 159).
 /// </summary>
 public sealed class TrimTitlesWindow : SinkDialog
 {
-    private readonly IReadOnlyList<DownloadNode> _tracks;
+    private readonly IReadOnlyList<ITitleTrimmable> _tracks;
 
     private readonly CheckBox _removeFirst = Check("Remove first");
     private readonly TextBox _removeFirstN = Num();
@@ -33,7 +35,7 @@ public sealed class TrimTitlesWindow : SinkDialog
         FontSize = 11,
     };
 
-    public TrimTitlesWindow(IReadOnlyList<DownloadNode> tracks)
+    public TrimTitlesWindow(IReadOnlyList<ITitleTrimmable> tracks)
     {
         _tracks = tracks;
         Width = 520;

@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Sink.Models;
 
-public sealed class Track
+public sealed class Track : ITitleTrimmable
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public required string Title { get; set; }

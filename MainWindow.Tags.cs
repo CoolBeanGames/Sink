@@ -140,11 +140,26 @@ public partial class MainWindow
         menu.Items.Add(Item("Play", () => PlayTracks(tracks)));
         menu.Items.Add(Item(tracks.Any(t => !t.IsFavorite) ? "♥ Favorite" : "♡ Remove favorite", () => { ToggleFavorite(tracks); }));
         menu.Items.Add(Item("Edit metadata…", () => EditTagsMetadata(tracks)));
+        menu.Items.Add(Item("Trim titles…", () => TrimTagsTrackTitles(tracks)));
         menu.Items.Add(Item(tracks.Count == 1 ? "Translate title to English" : "Translate titles to English", () => _ = TranslateTracksAsync(tracks)));
         menu.Items.Add(Item("Set cover art…", () => SetTagsArtwork(tracks)));
         menu.Items.Add(Item("Crop album art", () => CropTagsArtwork(tracks)));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Delete from library", () => { FlushTagsIfDirty(); DeleteTracks(tracks); }));
+    }
+
+    /// <summary>Mirrors the download page's title-trimming tool (task 159), reusing the same dialog via <see cref="ITitleTrimmable"/>.</summary>
+    private void TrimTagsTrackTitles(IReadOnlyList<Track> tracks)
+    {
+        FlushTagsIfDirty();
+        var dialog = new TrimTitlesWindow(tracks) { Owner = this };
+        BlurBehind(true);
+        var ok = dialog.ShowDialog() == true;
+        BlurBehind(false);
+        if (!ok) return;
+        SaveLibrary();
+        _tagsView?.Refresh();
+        PlaybackStatus.Text = $"Trimmed {tracks.Count} track title{(tracks.Count == 1 ? "" : "s")}";
     }
 
     private void EditTagsMetadata(IReadOnlyList<Track> tracks)
