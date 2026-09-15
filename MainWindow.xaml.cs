@@ -31,6 +31,14 @@ public partial class MainWindow : Window
     private LibraryCategory _lastMusicCategory = LibraryCategory.Albums;
     private LibraryCategory _lastIpodCategory = LibraryCategory.Albums;
     private string? _drilldown;
+    /// <summary>
+    /// Set when an Artist card was double-clicked (task: artist click should
+    /// land on Albums filtered to them, not a flat song list) — narrows the
+    /// Albums grid to that artist's own albums until Back is pressed or the
+    /// view changes; a further drilldown into one of those albums layers
+    /// _drilldown on top exactly as it already does everywhere else.
+    /// </summary>
+    private string? _artistFilter;
     private Playlist? _activePlaylist;
     private readonly MediaPlayer _mediaPlayer = new();
     private readonly DispatcherTimer _playbackTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
@@ -101,7 +109,7 @@ public partial class MainWindow : Window
         PreviewMouseDown += MiddleDragPan_Down;
         PreviewMouseMove += MiddleDragPan_Move;
         PreviewMouseUp += MiddleDragPan_Up;
-        LostMouseCapture += (_, _) => _panScrollViewer = null;
+        LostMouseCapture += (_, _) => { _panScrollViewer = null; _edgeScrollTimer?.Stop(); };
     }
 
     // ---- Middle-mouse drag to scroll (task 98) -------------------------
@@ -109,6 +117,15 @@ public partial class MainWindow : Window
     private ScrollViewer? _panScrollViewer;
     private Point _panOrigin;
     private double _panOffsetV, _panOffsetH;
+
+    // Holding the cursor at the window's edge keeps scrolling in that
+    // direction on its own, instead of requiring scroll-to-edge, release,
+    // move back, scroll-again cycles once a list is taller than the screen.
+    private DispatcherTimer? _edgeScrollTimer;
+    private int _edgeDirectionV;
+    private int _edgeDirectionH;
+    private const double EdgeScrollZone = 32;
+    private const double EdgeScrollStep = 14;
 
     private void MiddleDragPan_Down(object sender, MouseButtonEventArgs e)
     {
@@ -131,15 +148,47 @@ public partial class MainWindow : Window
         _panScrollViewer.ScrollToVerticalOffset(_panOffsetV + (p.Y - _panOrigin.Y) * 1.6);
         if (_panScrollViewer.ScrollableWidth > 0)
             _panScrollViewer.ScrollToHorizontalOffset(_panOffsetH + (p.X - _panOrigin.X) * 1.6);
+        UpdateEdgeAutoScroll(p);
     }
 
     private void MiddleDragPan_Up(object sender, MouseButtonEventArgs e)
     {
         if (_panScrollViewer is null || e.ChangedButton != MouseButton.Middle) return;
         _panScrollViewer = null;
+        _edgeScrollTimer?.Stop();
         Mouse.Capture(null);
         Cursor = Cursors.Arrow;
         e.Handled = true;
+    }
+
+    private void UpdateEdgeAutoScroll(Point p)
+    {
+        _edgeDirectionV = p.Y <= EdgeScrollZone ? -1 : p.Y >= ActualHeight - EdgeScrollZone ? 1 : 0;
+        _edgeDirectionH = _panScrollViewer!.ScrollableWidth > 0
+            ? (p.X <= EdgeScrollZone ? -1 : p.X >= ActualWidth - EdgeScrollZone ? 1 : 0)
+            : 0;
+        if (_edgeDirectionV == 0 && _edgeDirectionH == 0) { _edgeScrollTimer?.Stop(); return; }
+        if (_edgeScrollTimer is null)
+        {
+            _edgeScrollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
+            _edgeScrollTimer.Tick += (_, _) => EdgeAutoScrollTick();
+        }
+        if (!_edgeScrollTimer.IsEnabled) _edgeScrollTimer.Start();
+    }
+
+    private void EdgeAutoScrollTick()
+    {
+        if (_panScrollViewer is null) { _edgeScrollTimer?.Stop(); return; }
+        if (_edgeDirectionV != 0)
+            _panScrollViewer.ScrollToVerticalOffset(_panScrollViewer.VerticalOffset + _edgeDirectionV * EdgeScrollStep);
+        if (_edgeDirectionH != 0)
+            _panScrollViewer.ScrollToHorizontalOffset(_panScrollViewer.HorizontalOffset + _edgeDirectionH * EdgeScrollStep);
+        // Re-anchor the proportional drag formula above to this new position
+        // so the very next (even sub-pixel) mouse-move event doesn't snap the
+        // scroll straight back to wherever the raw cursor offset implies.
+        _panOffsetV = _panScrollViewer.VerticalOffset;
+        _panOffsetH = _panScrollViewer.HorizontalOffset;
+        _panOrigin = Mouse.GetPosition(this);
     }
 
     private static ScrollViewer? FindScrollViewer(DependencyObject? node)
@@ -410,7 +459,7 @@ public partial class MainWindow : Window
     {
         if (sender is not Button button || !Enum.TryParse(button.Name.Replace("Button", ""), out LibraryCategory category)) return;
         _source = LibrarySource.Music;
-        _category = category; _lastMusicCategory = category; _drilldown = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
+        _category = category; _lastMusicCategory = category; _drilldown = null; _artistFilter = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
         ApplySourceChrome();
         SetActiveNavigation(button);
         RenderLibrary();
@@ -420,7 +469,7 @@ public partial class MainWindow : Window
     {
         if (sender is not Button button || !Enum.TryParse(button.Name.Replace("Ipod", "").Replace("Button", ""), out LibraryCategory category)) return;
         _source = LibrarySource.Ipod;
-        _category = category; _lastIpodCategory = category; _drilldown = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
+        _category = category; _lastIpodCategory = category; _drilldown = null; _artistFilter = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
         ApplySourceChrome();
         SetActiveNavigation(button);
         RenderLibrary();
@@ -434,7 +483,7 @@ public partial class MainWindow : Window
     {
         _source = source;
         _category = source == LibrarySource.Music ? _lastMusicCategory : _lastIpodCategory;
-        _drilldown = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
+        _drilldown = null; _artistFilter = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
         ApplySourceChrome();
         SetActiveNavigation(CategoryButton(source, _category));
         RenderLibrary();
@@ -487,6 +536,7 @@ public partial class MainWindow : Window
         var source = _source != LibrarySource.Ipod ? _tracks.ToList()
             : ipodOnDevice ? _ipodTracks.ToList()
             : _tracks.Where(track => _syncedTrackIds.Contains(track.Id)).ToList();
+        if (_artistFilter is not null) source = source.Where(track => track.Artist == _artistFilter).ToList();
         IEnumerable<Track> visible = source;
         if (_activePlaylist is not null) visible = visible.Where(track => _activePlaylist.TrackIds.Contains(track.Id));
         if (_drilldown is not null) visible = _category switch
@@ -501,7 +551,7 @@ public partial class MainWindow : Window
         var showTracks = _category is LibraryCategory.Songs or LibraryCategory.Playlist || _drilldown is not null;
         GroupsScroller.Visibility = showTracks ? Visibility.Collapsed : Visibility.Visible;
         TracksBorder.Visibility = showTracks ? Visibility.Visible : Visibility.Collapsed;
-        BackButton.Visibility = _drilldown is null ? Visibility.Collapsed : Visibility.Visible;
+        BackButton.Visibility = _drilldown is null && _artistFilter is null ? Visibility.Collapsed : Visibility.Visible;
 
         if (showTracks)
         {
@@ -520,7 +570,7 @@ public partial class MainWindow : Window
         };
         var cards = groups.Where(card => query.Length == 0 || card.Name.Contains(query, StringComparison.OrdinalIgnoreCase)).OrderBy(card => card.Name).ToList();
         GroupsView.ItemsSource = cards;
-        ViewTitle.Text = _source == LibrarySource.Ipod ? $"iPod · {_category}" : _category.ToString();
+        ViewTitle.Text = _artistFilter ?? (_source == LibrarySource.Ipod ? $"iPod · {_category}" : _category.ToString());
         ViewSubtitle.Text = IpodSubtitle(cards.Count) ?? $"{cards.Count} {_category.ToString().ToLowerInvariant()}";
     }
 
@@ -620,7 +670,20 @@ public partial class MainWindow : Window
     private void GroupCard_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (GroupsView.SelectedItem is not GroupCard card) return;
-        _drilldown = card.Name;
+        // An artist isn't itself a place to list flat songs (task: artist
+        // click should land on Albums filtered to them) — narrow to their
+        // albums instead, exactly like actually opening the Albums category
+        // pre-filtered. Drilling further into one of those albums below still
+        // works the same way it already does for a real Albums-category card.
+        if (_category == LibraryCategory.Artists)
+        {
+            _artistFilter = card.Name;
+            _category = LibraryCategory.Albums;
+        }
+        else
+        {
+            _drilldown = card.Name;
+        }
         RenderLibrary();
         e.Handled = true;
     }
@@ -1372,7 +1435,16 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void BackButton_Click(object sender, RoutedEventArgs e) { _drilldown = null; RenderLibrary(); }
+    private void BackButton_Click(object sender, RoutedEventArgs e)
+    {
+        // One step at a time: out of a specific album's tracks back to the
+        // (possibly artist-filtered) album grid first, then out of an
+        // artist-filtered album grid back to the plain Artists grid.
+        if (_drilldown is not null) _drilldown = null;
+        else if (_artistFilter is not null) { _artistFilter = null; _category = LibraryCategory.Artists; }
+        RenderLibrary();
+    }
+
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) { if (IsLoaded) RenderLibrary(); }
 
     private void NewPlaylist_Click(object sender, RoutedEventArgs e)
@@ -1390,7 +1462,7 @@ public partial class MainWindow : Window
     {
         if (PlaylistList.SelectedItem is not Playlist playlist) return;
         _source = LibrarySource.Music; ApplySourceChrome();
-        _activePlaylist = playlist; _category = LibraryCategory.Playlist; _drilldown = null; SetActiveNavigation(null); RenderLibrary();
+        _activePlaylist = playlist; _category = LibraryCategory.Playlist; _drilldown = null; _artistFilter = null; SetActiveNavigation(null); RenderLibrary();
     }
 
     // A ListBox doesn't select on right-click either (see the identical note

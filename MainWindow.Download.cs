@@ -1132,10 +1132,31 @@ public partial class MainWindow
         var playlistTrackIds = new Dictionary<DownloadNode, List<Guid>>();
         var playlistsChanged = false;
 
-        static DownloadNode? PlaylistSourceOf(DownloadNode unit) =>
-            unit.Kind == DownloadKind.Album && unit.IsMixedPlaylist ? unit
-            : unit.Kind == DownloadKind.Single && unit.Parent is { Kind: DownloadKind.Artist, IsMixedPlaylist: true } parent ? parent
-            : null;
+        // IsMixedPlaylist alone isn't enough to tell a real custom playlist
+        // from a genuine album — both got marked mixed to stop a translated
+        // container name from cascading onto every track's artist (a separate
+        // fix). A real album's tracks overwhelmingly share one artist; a
+        // custom playlist's don't. Snapshotted once per container, the first
+        // time it's seen, since successful tracks get pruned out of Children
+        // as they finish and would otherwise make a later look here see only
+        // whatever's left rather than the whole original list.
+        var playlistEligibility = new Dictionary<DownloadNode, bool>();
+        bool LooksLikeCustomPlaylist(DownloadNode container)
+        {
+            if (playlistEligibility.TryGetValue(container, out var cached)) return cached;
+            var artists = container.Children.Select(c => c.Artist).Where(a => !string.IsNullOrWhiteSpace(a)).Select(a => a.Trim()).ToList();
+            var result = artists.Count > 0 && artists.Distinct(StringComparer.OrdinalIgnoreCase).Count() > artists.Count * 0.5;
+            playlistEligibility[container] = result;
+            return result;
+        }
+
+        DownloadNode? PlaylistSourceOf(DownloadNode unit)
+        {
+            var candidate = unit.Kind == DownloadKind.Album && unit.IsMixedPlaylist ? unit
+                : unit.Kind == DownloadKind.Single && unit.Parent is { Kind: DownloadKind.Artist, IsMixedPlaylist: true } parent ? parent
+                : null;
+            return candidate is not null && LooksLikeCustomPlaylist(candidate) ? candidate : null;
+        }
 
         void AddToPlaylistAccumulator(DownloadNode unit, Guid trackId)
         {
@@ -1200,7 +1221,14 @@ public partial class MainWindow
                 // instead of leaving it permanently one behind Total.
                 if (node.Parent is { Kind: DownloadKind.Artist } artistNode)
                 {
-                    artistNode.DownloadTotalOverride ??= queue.Count(n => n.Parent == artistNode);
+                    if (artistNode.DownloadTotalOverride is null)
+                    {
+                        artistNode.DownloadTotalOverride = queue.Count(n => n.Parent == artistNode);
+                        // Snapshot artist diversity now, before this artist's
+                        // first sibling gets a chance to prune itself out of
+                        // Children on success.
+                        LooksLikeCustomPlaylist(artistNode);
+                    }
                     artistNode.DownloadStartedCount++;
                     artistNode.StatusText = $"Downloading Album {artistNode.DownloadStartedCount}/{artistNode.DownloadTotalOverride}";
                 }
@@ -1234,6 +1262,11 @@ public partial class MainWindow
                         continue;
                     }
                 }
+                // Snapshot artist diversity right after scanning populates
+                // Children, before this unit's own successful tracks start
+                // pruning themselves out during the actual download below.
+                if (node.Kind == DownloadKind.Album && node.IsMixedPlaylist)
+                    LooksLikeCustomPlaylist(node);
 
                 // Skip whatever's already sitting in the library instead of
                 // re-fetching it — matched the same way tags actually get
