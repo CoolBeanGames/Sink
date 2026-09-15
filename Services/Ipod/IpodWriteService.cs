@@ -67,21 +67,37 @@ public static class IpodWriteService
             ipod.AcquireLock();
             locked = true;
 
+            var byKey = BuildKeyIndex(ipod);
             for (var i = 0; i < eligible.Count; i++)
             {
                 token.ThrowIfCancellationRequested(); // task 129 — Stop syncing button
                 var src = eligible[i];
                 progress?.Report((i, eligible.Count, $"Copying {src.Title}"));
-                CwTrack? onDevice;
-                try
+                var currentKey = IpodDbTrack.MakeKey(src.Title, src.Artist, src.Album, src.TrackNumber);
+                var onDevice = FindDriftedTrack(byKey, src, currentKey);
+                if (onDevice is not null)
                 {
-                    onDevice = ipod.Tracks.Add(NewTrackFrom(src));
-                    MarkPodcast(onDevice, src);
-                    added++;
-                    changedDb = true;
+                    present++;
+                    if (ApplyMetadata(onDevice, src)) changedDb = true;
                 }
-                catch (TrackAlreadyExistsException existing) { present++; onDevice = existing.ExistingTrack; }
-                catch (OutOfDiskSpaceException) { skipped += eligible.Count - i; break; }
+                else
+                {
+                    try
+                    {
+                        onDevice = ipod.Tracks.Add(NewTrackFrom(src));
+                        MarkPodcast(onDevice, src);
+                        added++;
+                        changedDb = true;
+                    }
+                    catch (TrackAlreadyExistsException existing)
+                    {
+                        present++;
+                        onDevice = existing.ExistingTrack;
+                        if (ApplyMetadata(onDevice, src)) changedDb = true;
+                    }
+                    catch (OutOfDiskSpaceException) { skipped += eligible.Count - i; break; }
+                }
+                src.LastSyncedKey = currentKey;
 
                 if (PushPlayCount(onDevice, src, deviceId)) changedDb = true;
                 if (onDevice is not null && IpodShuffleFlag.Set(onDevice, src.ExcludedFromShuffle)) changedDb = true;
@@ -165,39 +181,51 @@ public static class IpodWriteService
             playlist ??= ipod.Playlists.Add(playlistName);
             Log.Info($"iPod playlist sync: \"{playlistName}\" {(isNewPlaylist ? "created" : "found existing")}, had {playlist.TrackCount} track(s), {ipod.Playlists.Count} playlist(s) total on device");
 
+            var byKey = BuildKeyIndex(ipod);
             for (var i = 0; i < eligible.Count; i++)
             {
                 token.ThrowIfCancellationRequested(); // task 129 — Stop syncing button
                 var src = eligible[i];
                 progress?.Report((i, eligible.Count, $"Copying {src.Title}"));
-                CwTrack? onDevice;
-                try
+                var currentKey = IpodDbTrack.MakeKey(src.Title, src.Artist, src.Album, src.TrackNumber);
+                var onDevice = FindDriftedTrack(byKey, src, currentKey);
+                if (onDevice is not null)
                 {
-                    onDevice = ipod.Tracks.Add(NewTrackFrom(src));
-                    MarkPodcast(onDevice, src);
-                    added++;
-                    changedDb = true;
-                }
-                catch (TrackAlreadyExistsException existing)
-                {
-                    // Clickwheel rewrites a track's FilePath to its on-device
-                    // location the moment it's copied, so re-deriving "the
-                    // existing track" by comparing that resolved on-device
-                    // path against the original source path could never
-                    // match — it was comparing D:\iPod_Control\Music\... to
-                    // Z:\Sink\Music\... and always came up empty. The
-                    // exception already carries the real match directly
-                    // (Clickwheel dedupes by title/artist/album/track number,
-                    // not by path at all). Every song already synced before
-                    // adding it to a playlist hit this path, so a playlist
-                    // whose tracks were already on the device (the normal
-                    // case) never got any track linked to it, changedDb
-                    // stayed false, and the whole playlist silently never
-                    // reached SaveChanges (task 141).
                     present++;
-                    onDevice = existing.ExistingTrack;
+                    if (ApplyMetadata(onDevice, src)) changedDb = true;
                 }
-                catch (OutOfDiskSpaceException) { skipped += eligible.Count - i; break; }
+                else
+                {
+                    try
+                    {
+                        onDevice = ipod.Tracks.Add(NewTrackFrom(src));
+                        MarkPodcast(onDevice, src);
+                        added++;
+                        changedDb = true;
+                    }
+                    catch (TrackAlreadyExistsException existing)
+                    {
+                        // Clickwheel rewrites a track's FilePath to its on-device
+                        // location the moment it's copied, so re-deriving "the
+                        // existing track" by comparing that resolved on-device
+                        // path against the original source path could never
+                        // match — it was comparing D:\iPod_Control\Music\... to
+                        // Z:\Sink\Music\... and always came up empty. The
+                        // exception already carries the real match directly
+                        // (Clickwheel dedupes by title/artist/album/track number,
+                        // not by path at all). Every song already synced before
+                        // adding it to a playlist hit this path, so a playlist
+                        // whose tracks were already on the device (the normal
+                        // case) never got any track linked to it, changedDb
+                        // stayed false, and the whole playlist silently never
+                        // reached SaveChanges (task 141).
+                        present++;
+                        onDevice = existing.ExistingTrack;
+                        if (ApplyMetadata(onDevice, src)) changedDb = true;
+                    }
+                    catch (OutOfDiskSpaceException) { skipped += eligible.Count - i; break; }
+                }
+                src.LastSyncedKey = currentKey;
 
                 if (PushPlayCount(onDevice, src, deviceId)) changedDb = true;
                 if (onDevice is not null && IpodShuffleFlag.Set(onDevice, src.ExcludedFromShuffle)) changedDb = true;
@@ -319,6 +347,58 @@ public static class IpodWriteService
     }
 
     /// <summary>
+    /// Removes on-device tracks matched by identity key (Title+Artist+Album+
+    /// TrackNumber, see <see cref="IpodDbTrack.MakeKey"/>) rather than by file
+    /// path. Used when a track is deleted from the local library: at that
+    /// point the local <c>Track</c> object (and so its <c>FilePath</c>) is
+    /// already gone, so <see cref="Remove"/>'s path-based matching — which
+    /// needs a live local track to resolve a device path the way "Unsync
+    /// from iPod" does — has nothing to compare against.
+    /// </summary>
+    public static IpodSyncResult RemoveByKey(string root, IReadOnlyCollection<string> keys)
+    {
+        var targets = keys.Where(k => !string.IsNullOrWhiteSpace(k)).ToHashSet();
+        if (targets.Count == 0) return new IpodSyncResult(0, 0, 0, null);
+
+        Log.Info($"iPod remove by key: {targets.Count} target key(s), root {root}");
+        IPod ipod;
+        try { ipod = IpodReader.Open(root); ipod.AssertIsWritable(); }
+        catch (Exception ex) { Log.Error("iPod remove by key: open failed", ex); return new IpodSyncResult(0, 0, 0, ex.Message); }
+
+        string? backup = null;
+        var locked = false;
+        var removed = 0;
+        try
+        {
+            backup = BackupDatabase(root);
+            IPodBackup.EnableBackups = false;
+            ipod.AcquireLock();
+            locked = true;
+
+            var toRemove = new List<CwTrack>();
+            foreach (var track in ipod.Tracks)
+            {
+                var key = IpodDbTrack.MakeKey(track.Title, track.Artist, track.Album, IpodReader.SafeInt(track.TrackNumber));
+                if (targets.Contains(key)) toRemove.Add(track);
+            }
+            foreach (var track in toRemove)
+                if (ipod.Tracks.Remove(track)) removed++;
+            if (removed > 0) { ipod.SaveChanges(); DriveEject.Flush(root); }
+            return new IpodSyncResult(0, 0, 0, null, Removed: removed);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("iPod remove by key failed", ex);
+            if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
+            return new IpodSyncResult(0, 0, 0, ex.Message);
+        }
+        finally
+        {
+            if (locked) { try { ipod.ReleaseLock(); } catch { } }
+        }
+    }
+
+    /// <summary>
     /// Pushes podcast resume positions onto the device: for each iPod track whose
     /// Title+Artist+Album+TrackNumber identity (see <see cref="IpodDbTrack.MakeKey"/>)
     /// is a key in <paramref name="positionsByKey"/>, sets its bookmark. Returns
@@ -385,7 +465,15 @@ public static class IpodWriteService
         catch (Exception) { return 0; }
 
         var byKey = new Dictionary<string, Track>();
-        foreach (var t in tracks) byKey.TryAdd(IpodDbTrack.MakeKey(t.Title, t.Artist, t.Album, t.TrackNumber), t);
+        foreach (var t in tracks)
+        {
+            var currentKey = IpodDbTrack.MakeKey(t.Title, t.Artist, t.Album, t.TrackNumber);
+            byKey.TryAdd(currentKey, t);
+            // Also index by the identity as of the last sync, so a track
+            // retagged since then is still found under its old on-device
+            // identity instead of silently never matching again.
+            if (t.LastSyncedKey is not null && t.LastSyncedKey != currentKey) byKey.TryAdd(t.LastSyncedKey, t);
+        }
         Log.Info($"iPod metadata push: {tracks.Count} local track(s), {byKey.Count} distinct key(s), root {root}");
 
         string? backup = null;
@@ -406,8 +494,10 @@ public static class IpodWriteService
                 if (!byKey.TryGetValue(key, out var src)) continue;
                 matched++;
                 var changed = false;
+                if (ApplyMetadata(onDevice, src)) changed = true;
                 if (PushPlayCount(onDevice, src, deviceId)) changed = true;
                 if (IpodShuffleFlag.Set(onDevice, src.ExcludedFromShuffle)) changed = true;
+                src.LastSyncedKey = IpodDbTrack.MakeKey(src.Title, src.Artist, src.Album, src.TrackNumber);
                 if (!changed) continue;
                 updated++;
                 changedDb = true;
@@ -464,6 +554,49 @@ public static class IpodWriteService
         if (onDevice is null || !string.Equals(src.Genre, "Podcast", StringComparison.OrdinalIgnoreCase)) return;
         onDevice.PodcastFlag = true;
         onDevice.MediaType = CwMediaType.Podcast;
+    }
+
+    /// <summary>Snapshot of every on-device track's current identity, for matching a local track to its existing copy without relying on Clickwheel's own (exact, case-sensitive) Add() dedup.</summary>
+    private static Dictionary<string, CwTrack> BuildKeyIndex(IPod ipod)
+    {
+        var byKey = new Dictionary<string, CwTrack>();
+        foreach (var t in ipod.Tracks)
+            byKey.TryAdd(IpodDbTrack.MakeKey(t.Title, t.Artist, t.Album, IpodReader.SafeInt(t.TrackNumber)), t);
+        return byKey;
+    }
+
+    /// <summary>
+    /// Resolves the on-device track for a local track about to be synced when
+    /// its identity (Title/Artist/Album/TrackNumber) drifted since the last
+    /// sync — a retag. Looking it up by its recorded old identity finds the
+    /// existing on-device copy so its metadata gets updated in place, instead
+    /// of Add()'s own exact-match dedup missing it and silently copying the
+    /// file again as a duplicate. Returns null when there's no old identity
+    /// to look up (never synced, or nothing changed); callers fall back to
+    /// Add()/its TrackAlreadyExistsException dedup as before.
+    /// </summary>
+    private static CwTrack? FindDriftedTrack(Dictionary<string, CwTrack> byKey, Track src, string currentKey) =>
+        src.LastSyncedKey is not null && src.LastSyncedKey != currentKey && byKey.TryGetValue(src.LastSyncedKey, out var stale)
+            ? stale
+            : null;
+
+    /// <summary>
+    /// Pushes Title/Artist/Album/Genre/TrackNumber onto an already-matched
+    /// on-device track. Genre isn't part of the identity match key at all, so
+    /// even a track found by its unchanged, exact-matching identity could
+    /// still have a stale on-device Genre; this catches that too. Returns
+    /// true if anything actually changed.
+    /// </summary>
+    private static bool ApplyMetadata(CwTrack onDevice, Track src)
+    {
+        var changed = false;
+        if (onDevice.Title != src.Title) { onDevice.Title = src.Title; changed = true; }
+        if (onDevice.Artist != src.Artist) { onDevice.Artist = src.Artist; changed = true; }
+        if (onDevice.Album != src.Album) { onDevice.Album = src.Album; changed = true; }
+        if (onDevice.Genre != src.Genre) { onDevice.Genre = src.Genre; changed = true; }
+        var trackNumber = (uint)Math.Max(0, src.TrackNumber);
+        if (onDevice.TrackNumber != trackNumber) { onDevice.TrackNumber = trackNumber; changed = true; }
+        return changed;
     }
 
     /// <summary>

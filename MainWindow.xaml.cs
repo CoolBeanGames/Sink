@@ -1789,9 +1789,18 @@ public partial class MainWindow : Window
         PlaybackStatus.Text = $"Cropped album art for {album}";
     }
 
-    private void DeleteTracks(IReadOnlyList<Track> tracks)
+    private async void DeleteTracks(IReadOnlyList<Track> tracks)
     {
         var ids = tracks.Select(t => t.Id).ToHashSet();
+        // A track already synced has a copy sitting on the device that no
+        // sync operation ever prunes on its own — capture its identity
+        // before the local record (and the synced-ness that gates this)
+        // disappears below, so it can still be found and removed by key.
+        var syncedKeys = tracks
+            .Where(t => _syncedTrackIds.Contains(t.Id))
+            .Select(t => t.LastSyncedKey ?? Sink.Services.Ipod.IpodDbTrack.MakeKey(t.Title, t.Artist, t.Album, t.TrackNumber))
+            .ToList();
+
         foreach (var track in _tracks.Where(t => ids.Contains(t.Id)).ToList()) _tracks.Remove(track);
         foreach (var playlist in _playlists)
             foreach (var id in playlist.TrackIds.Where(ids.Contains).ToList())
@@ -1807,6 +1816,17 @@ public partial class MainWindow : Window
         SaveLibrary();
         RenderLibrary();
         PlaybackStatus.Text = $"Deleted {tracks.Count} track{(tracks.Count == 1 ? "" : "s")}";
+
+        if (syncedKeys.Count == 0) return;
+        if (_ipodDevice?.LibraryRoot is not string root || _ipodWriting) return;
+        _ipodWriting = true;
+        try
+        {
+            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.RemoveByKey(root, syncedKeys));
+            if (result.Removed > 0)
+                PlaybackStatus.Text = $"Deleted {tracks.Count} track{(tracks.Count == 1 ? "" : "s")}, removed {result.Removed} from the iPod";
+        }
+        finally { _ipodWriting = false; }
     }
 
     private sealed record GroupCard(string Name, string Detail, string Initial, Brush Color, ImageSource? Art = null);

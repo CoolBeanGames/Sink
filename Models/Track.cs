@@ -16,6 +16,17 @@ public sealed class Track : ITitleTrimmable
     public TimeSpan Duration { get; init; }
     public bool ExcludedFromShuffle { get; set; }
 
+    /// <summary>
+    /// This track's Title+Artist+Album+TrackNumber identity (see
+    /// <see cref="Sink.Services.Ipod.IpodDbTrack.MakeKey"/>) as of the last
+    /// successful iPod sync. A later metadata edit changes that identity,
+    /// so it's kept here to find the existing on-device copy by its old
+    /// identity and update it in place, instead of the sync silently
+    /// treating it as a new track and copying the file again as a
+    /// duplicate.
+    /// </summary>
+    public string? LastSyncedKey { get; set; }
+
     /// <summary>Heart-icon favorite (task 127 — Reflect).</summary>
     public bool IsFavorite { get; set; }
 
