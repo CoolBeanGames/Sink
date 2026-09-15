@@ -370,6 +370,11 @@ public partial class MainWindow
         var container = new DownloadNode(DownloadKind.Artist)
         {
             Url = url,
+            // Each track below already carries its own independently-resolved
+            // artist (task 168) — unlike a real YouTube artist link's albums,
+            // they don't all share one artist, so the container's own name
+            // must never cascade down onto them (e.g. via translation).
+            IsMixedPlaylist = true,
             Artist = info.Name,
             Genre = "Unknown",
             State = DownloadState.Ready,

@@ -98,7 +98,14 @@ public sealed class DownloadNode : INotifyPropertyChanged, ITitleTrimmable
         {
             if (!Set(ref _artist, value)) return;
             OnPropertyChanged(nameof(Name));
-            if (Kind == DownloadKind.Artist)
+            // Only cascades when every child genuinely shares one real artist
+            // (a normal YouTube artist link's albums). A Spotify playlist/album
+            // container is also Artist-kind but IsMixedPlaylist, since each
+            // track was independently resolved to its own real artist — e.g.
+            // translating the container's own display name (say, into "This")
+            // must not stomp every track's correct, already-fetched artist
+            // with that same string.
+            if (Kind == DownloadKind.Artist && !IsMixedPlaylist)
                 foreach (var c in Children) c.Artist = value;
         }
     }
