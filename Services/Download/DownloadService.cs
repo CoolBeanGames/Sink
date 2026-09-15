@@ -228,6 +228,12 @@ public static partial class DownloadService
             "--sleep-requests", "1",
             "--sleep-interval", "1",
             "--max-sleep-interval", "3",
+            // Lets yt-dlp solve YouTube's JS signature/PO-token challenges
+            // itself when Node.js happens to be installed — sibling app
+            // htunes does this unconditionally. Purely additive: yt-dlp just
+            // has no JS runtime available (today's default) if Node isn't on
+            // the machine, so this never makes things worse.
+            "--js-runtimes", "node",
             "--ffmpeg-location", ToolManager.Directory,
             "-o", Path.Combine(workDir, isPlaylist ? "%(playlist_index)03d - %(title)s.%(ext)s" : "%(title)s.%(ext)s"),
         };
@@ -436,6 +442,7 @@ public static partial class DownloadService
             "--audio-quality", "5",
             "--no-warnings", "--newline", "--no-overwrites",
             "--embed-thumbnail", "--convert-thumbnails", "jpg",
+            "--js-runtimes", "node",
             "--ffmpeg-location", ToolManager.Directory,
             "-o", Path.Combine(workDir, "%(title)s.%(ext)s"),
         };
@@ -693,22 +700,31 @@ public static partial class DownloadService
          || stderr.Contains("database", StringComparison.OrdinalIgnoreCase)));
 
     /// <summary>
-    /// Runs yt-dlp with browser cookies attached when configured, and falls back
-    /// to a cookie-less run automatically if reading them failed (a locked
-    /// profile, no matching browser, etc.) rather than breaking downloads that
-    /// worked fine before. If that still hits YouTube's bot-check / PO-token
-    /// wall, retries with alternate player clients, and finally with cookies
-    /// combined with one of those clients — multiple independent fallback
-    /// levels so one blocked path (e.g. a browser whose cookie store yt-dlp
-    /// can't decrypt at all) doesn't take the whole download down (task 153).
+    /// Tries a plain, cookie-less request first, and only reaches for browser
+    /// cookies as a fallback when that specifically hits a sign-in/bot-check
+    /// wall — confirmed directly (both by a user report and by inspecting the
+    /// actual yt-dlp format list) that attaching cookies can make YouTube hand
+    /// back a *worse* result than an anonymous request for perfectly ordinary,
+    /// unrestricted videos: an authenticated request for one track returned
+    /// only storyboard placeholders (no audio, no video at all) while the same
+    /// request with no cookies returned the full normal format list. Cookies
+    /// are still genuinely necessary for content that requires sign-in (age-
+    /// restricted, members-only), so they remain in the ladder — just no
+    /// longer tried first by default. If a client-level wall follows, retries
+    /// with alternate player clients, and finally with cookies combined with
+    /// one of those clients (task 153; reordered after a fresh report).
     /// </summary>
     private static async Task<(int exit, string stdout, string stderr)> RunAsync(
         IReadOnlyList<string> arguments, Action<string>? onLine, CancellationToken token)
     {
         var cookieArgs = CookieArgs();
-        var first = cookieArgs.Count == 0
-            ? await RunProcessAsync(arguments, onLine, token).ConfigureAwait(false)
-            : await RunWithCookieRetryAsync(cookieArgs, arguments, onLine, token).ConfigureAwait(false);
+        var plain = await RunProcessAsync(arguments, onLine, token).ConfigureAwait(false);
+        var first = plain;
+        if (plain.exit != 0 && NeedsClientFallback(plain.stderr) && cookieArgs.Count > 0)
+        {
+            Log.Warn($"yt-dlp blocked without cookies ({FirstError(plain.stderr)}), retrying signed in…");
+            first = await RunWithCookieRetryAsync(cookieArgs, arguments, onLine, token).ConfigureAwait(false);
+        }
         if (first.exit == 0 || !NeedsClientFallback(first.stderr)) return first;
 
         // Checked directly against live YouTube while building this: most
