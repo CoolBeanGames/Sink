@@ -8,7 +8,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>Sink</AssemblyName>
     <RootNamespace>Sink</RootNamespace>
-    <Version>1.0.16</Version>
+    <Version>1.0.17</Version>
     <ApplicationIcon>Assets\sink.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
