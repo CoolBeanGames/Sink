@@ -386,10 +386,12 @@ public static class IpodWriteService
 
         var byKey = new Dictionary<string, Track>();
         foreach (var t in tracks) byKey.TryAdd(IpodDbTrack.MakeKey(t.Title, t.Artist, t.Album, t.TrackNumber), t);
+        Log.Info($"iPod metadata push: {tracks.Count} local track(s), {byKey.Count} distinct key(s), root {root}");
 
         string? backup = null;
         var locked = false;
         var updated = 0;
+        var matched = 0;
         try
         {
             backup = BackupDatabase(root);
@@ -402,6 +404,7 @@ public static class IpodWriteService
             {
                 var key = IpodDbTrack.MakeKey(onDevice.Title, onDevice.Artist, onDevice.Album, IpodReader.SafeInt(onDevice.TrackNumber));
                 if (!byKey.TryGetValue(key, out var src)) continue;
+                matched++;
                 var changed = false;
                 if (PushPlayCount(onDevice, src, deviceId)) changed = true;
                 if (IpodShuffleFlag.Set(onDevice, src.ExcludedFromShuffle)) changed = true;
@@ -409,6 +412,7 @@ public static class IpodWriteService
                 updated++;
                 changedDb = true;
             }
+            Log.Info($"iPod metadata push: {matched} on-device track(s) matched by key, {updated} actually changed, changedDb={changedDb}");
             if (changedDb) { ipod.SaveChanges(); DriveEject.Flush(root); }
             return updated;
         }

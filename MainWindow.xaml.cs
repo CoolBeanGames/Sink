@@ -304,7 +304,20 @@ public partial class MainWindow : Window
                 _ipodDevice = device;
                 SetIpodConnected(true);
             }
-            if (device.LibraryRoot != _ipodLibraryRoot) LoadIpodLibrary(device.LibraryRoot);
+            // Never open the device for a poll-triggered read while a sync is
+            // mid-write — this iPod's flapping identity (see the iPod
+            // detection notes) means device.Key can change on its own every
+            // couple of polls even though it's the same physical device
+            // still on the same drive letter, and each of those looked like
+            // a "new" connection worth refreshing. A refresh opens its own
+            // IPod instance and reads the iTunesDB concurrently with
+            // whatever Sync()/PushTrackMetadata() has open for writing,
+            // which the log showed colliding (iTunesLock in use / "Reading
+            // iPod database failed") right after a sync started — silently
+            // costing that write's in-memory changes since the condition
+            // just re-fires on the next tick once _ipodWriting clears, and
+            // the write's own finally block already refreshes on completion.
+            if (device.LibraryRoot != _ipodLibraryRoot && !_ipodWriting) LoadIpodLibrary(device.LibraryRoot);
             if (isNew)
             {
                 Services.Log.Info($"iPod connected: {device.Name} ({device.LibraryRoot ?? "no library root"})");
