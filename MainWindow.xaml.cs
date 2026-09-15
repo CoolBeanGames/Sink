@@ -586,6 +586,8 @@ public partial class MainWindow : Window
         GroupsScroller.Visibility = showTracks ? Visibility.Collapsed : Visibility.Visible;
         TracksBorder.Visibility = showTracks ? Visibility.Visible : Visibility.Collapsed;
         BackButton.Visibility = _drilldown is null && _artistFilter is null ? Visibility.Collapsed : Visibility.Visible;
+        CleanupTitlesButton.Visibility = _category == LibraryCategory.Songs && _source == LibrarySource.Music
+            && _activePlaylist is null && _drilldown is null ? Visibility.Visible : Visibility.Collapsed;
 
         if (showTracks)
         {
@@ -915,7 +917,88 @@ public partial class MainWindow : Window
         }
         EjectTransportButton.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
         UpdateRecordSpin();
+        AnimateIpodSidebar(connected);
+        AnimateIpodButton(connected);
     }
+
+    /// <summary>
+    /// The iPod sidebar entry only makes sense while a device is actually
+    /// connected (task 199) — slides it away instead of just toggling
+    /// Visibility so the appear/disappear reads as intentional motion, not
+    /// a flicker.
+    /// </summary>
+    private void AnimateIpodSidebar(bool connected)
+    {
+        var duration = TimeSpan.FromMilliseconds(280);
+        var ease = new QuadraticEase { EasingMode = connected ? EasingMode.EaseOut : EasingMode.EaseIn };
+
+        if (connected) IpodSidebarSection.Visibility = Visibility.Visible;
+
+        var fade = new DoubleAnimation(connected ? 1 : 0, duration) { EasingFunction = ease };
+        if (!connected) fade.Completed += (_, _) => IpodSidebarSection.Visibility = Visibility.Collapsed;
+        IpodSidebarSection.BeginAnimation(UIElement.OpacityProperty, fade);
+        IpodSidebarTransform.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(connected ? 0 : -260, duration) { EasingFunction = ease });
+    }
+
+    private bool _ipodButtonShown;
+
+    /// <summary>
+    /// The iPod image/drag-target only makes sense while a device is
+    /// actually connected (task 199) — slides it away from the bottom-right
+    /// corner instead of just toggling Visibility. Completely independent
+    /// of playback (task 200's disc animation below) — connecting an iPod
+    /// with nothing playing still shows this.
+    /// </summary>
+    private void AnimateIpodButton(bool connected)
+    {
+        if (connected == _ipodButtonShown) return;
+        _ipodButtonShown = connected;
+        var duration = TimeSpan.FromMilliseconds(280);
+        var ease = new QuadraticEase { EasingMode = connected ? EasingMode.EaseOut : EasingMode.EaseIn };
+
+        if (connected)
+        {
+            IpodButton.Visibility = Visibility.Visible;
+            IpodButton.IsHitTestVisible = true;
+        }
+
+        var fade = new DoubleAnimation(connected ? 1 : 0, duration) { EasingFunction = ease };
+        if (!connected)
+        {
+            fade.Completed += (_, _) =>
+            {
+                IpodButton.Visibility = Visibility.Collapsed;
+                IpodButton.IsHitTestVisible = false;
+            };
+        }
+        IpodButton.BeginAnimation(UIElement.OpacityProperty, fade);
+        IpodButtonTransform.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(connected ? 0 : 300, duration) { EasingFunction = ease });
+        IpodButtonTransform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(connected ? 0 : 300, duration) { EasingFunction = ease });
+    }
+
+    private bool _recordDiscShown;
+
+    /// <summary>
+    /// The spinning record disc inside the iPod button only shows while
+    /// something is actually playing or syncing (task 200) — entirely
+    /// unrelated to whether an iPod is connected (that only gates the
+    /// button itself, above). Fades independently of the button's own
+    /// show/hide so it reads as its own layer, not tied to the button's
+    /// appearance.
+    /// </summary>
+    private void AnimateRecordDisc(bool visible)
+    {
+        if (visible == _recordDiscShown) return;
+        _recordDiscShown = visible;
+        var duration = TimeSpan.FromMilliseconds(280);
+        var ease = new QuadraticEase { EasingMode = visible ? EasingMode.EaseOut : EasingMode.EaseIn };
+        RecordSpinGroup.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(visible ? 1 : 0, duration) { EasingFunction = ease });
+        RecordDiscTransform.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(visible ? 0 : 300, duration) { EasingFunction = ease });
+        RecordDiscTransform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(visible ? 0 : 300, duration) { EasingFunction = ease });
+    }
+
+    private bool ShouldShowRecord() =>
+        _ipodSyncing || (_isPlaying && _nowPlaying is not null) || (_playingEpisode is not null && !_podcastPaused);
 
     /// <summary>Shows / hides a small spinning wheel next to a sidebar section button.</summary>
     private static void SpinIndicator(FrameworkElement spinner, bool on)
@@ -936,6 +1019,7 @@ public partial class MainWindow : Window
 
     private void UpdateRecordSpin()
     {
+        AnimateRecordDisc(ShouldShowRecord());
         if (_ipodSyncing) return;
         var shouldSpin = (_isPlaying && _nowPlaying is not null)
                          || (_playingEpisode is not null && !_podcastPaused);
@@ -1280,6 +1364,7 @@ public partial class MainWindow : Window
         if (!_ipodConnected || _ipodSyncing) return;
         _ipodSyncing = true;
         _recordSpinning = false;
+        AnimateRecordDisc(ShouldShowRecord()); // a sync can start while nothing's playing -- the disc still needs to appear for it
         SpinIndicator(IpodSpinner, true);
         IpodStateText.Text = "SYNCING";
         StopSyncButton.Visibility = Visibility.Visible;
@@ -1509,6 +1594,34 @@ public partial class MainWindow : Window
         RenderLibrary();
         SaveLibrary();
         PlaybackStatus.Text = $"Removed {ids.Count} duplicate{(ids.Count == 1 ? "" : "s")}";
+    }
+
+    /// <summary>
+    /// Strips "Official (Music) Video"/"Cover"/"feat." tags and the "Album -"/
+    /// own-Artist-/own-Album-name prefixes out of every track's title (see
+    /// Services.TitleCleanup). A retag like this is exactly what
+    /// IpodWriteService's LastSyncedKey drift-detection exists for — the next
+    /// sync updates each already-synced track's on-device title in place
+    /// instead of copying it again as a duplicate, same as the manual retags
+    /// already verified tonight.
+    /// </summary>
+    private void CleanupTitles_Click(object sender, RoutedEventArgs e)
+    {
+        var changed = 0;
+        foreach (var track in _tracks)
+        {
+            var cleaned = Sink.Services.TitleCleanup.Clean(track.Title, track.Artist, track.Album);
+            if (string.IsNullOrWhiteSpace(cleaned) || cleaned == track.Title) continue;
+            // No undo and LibraryStore.Save() keeps no backup, so this is the
+            // only record of what a title used to say once this runs.
+            Services.Log.Info($"Title cleanup: \"{track.Title}\" -> \"{cleaned}\" ({track.Artist} / {track.Album})");
+            track.Title = cleaned;
+            changed++;
+        }
+        if (changed == 0) { PlaybackStatus.Text = "No track titles needed cleaning"; return; }
+        SaveLibrary();
+        RenderLibrary();
+        PlaybackStatus.Text = $"Cleaned up {changed} track title{(changed == 1 ? "" : "s")}";
     }
 
     private static bool HasFileDrop(DragEventArgs e) => e.Data.GetDataPresent(DataFormats.FileDrop);

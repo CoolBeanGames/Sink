@@ -143,31 +143,34 @@
                 </ListBox>
                 <Button Grid.Row="4" Content="＋  New playlist" Click="NewPlaylist_Click" Style="{StaticResource PrimaryButtonStyle}" Background="#272243" Foreground="#CBC5FF"/>
                 <StackPanel Grid.Row="5" Margin="0,16,0,0">
-                    <Button x:Name="IpodHeaderButton" Click="ShowIpodSource_Click" Style="{StaticResource SectionHeaderButtonStyle}"
-                            AllowDrop="True" DragOver="IpodNav_DragOver" DragLeave="IpodNav_DragLeave" Drop="IpodNav_Drop">
-                        <StackPanel Orientation="Horizontal">
-                            <Border Width="11" Height="17" CornerRadius="2.5" Background="#8B7CFF" Margin="0,0,7,0">
-                                <Grid>
-                                    <Grid.RowDefinitions><RowDefinition Height="7"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                                    <Border Background="#1B1E27" Margin="1.5,1.5,1.5,0" CornerRadius="1"/>
-                                    <Ellipse Grid.Row="1" Width="6" Height="6" Fill="#1B1E27" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <StackPanel x:Name="IpodSidebarSection" Visibility="Collapsed" Opacity="0">
+                        <StackPanel.RenderTransform><TranslateTransform x:Name="IpodSidebarTransform" X="-260"/></StackPanel.RenderTransform>
+                        <Button x:Name="IpodHeaderButton" Click="ShowIpodSource_Click" Style="{StaticResource SectionHeaderButtonStyle}"
+                                AllowDrop="True" DragOver="IpodNav_DragOver" DragLeave="IpodNav_DragLeave" Drop="IpodNav_Drop">
+                            <StackPanel Orientation="Horizontal">
+                                <Border Width="11" Height="17" CornerRadius="2.5" Background="#8B7CFF" Margin="0,0,7,0">
+                                    <Grid>
+                                        <Grid.RowDefinitions><RowDefinition Height="7"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                                        <Border Background="#1B1E27" Margin="1.5,1.5,1.5,0" CornerRadius="1"/>
+                                        <Ellipse Grid.Row="1" Width="6" Height="6" Fill="#1B1E27" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+                                <TextBlock Text="IPOD" VerticalAlignment="Center"/>
+                                <Grid x:Name="IpodSpinner" Width="12" Height="12" Margin="7,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" RenderTransformOrigin="0.5,0.5">
+                                    <Grid.RenderTransform><RotateTransform/></Grid.RenderTransform>
+                                    <Ellipse Stroke="#8B7CFF" StrokeThickness="1.7" StrokeDashArray="3.1 1.5" StrokeDashCap="Round"/>
                                 </Grid>
-                            </Border>
-                            <TextBlock Text="IPOD" VerticalAlignment="Center"/>
-                            <Grid x:Name="IpodSpinner" Width="12" Height="12" Margin="7,0,0,0" VerticalAlignment="Center" Visibility="Collapsed" RenderTransformOrigin="0.5,0.5">
-                                <Grid.RenderTransform><RotateTransform/></Grid.RenderTransform>
-                                <Ellipse Stroke="#8B7CFF" StrokeThickness="1.7" StrokeDashArray="3.1 1.5" StrokeDashCap="Round"/>
-                            </Grid>
+                            </StackPanel>
+                        </Button>
+                        <StackPanel x:Name="IpodNav" Visibility="Collapsed">
+                            <Button x:Name="IpodArtistsButton" Content="●    Artists" Tag="Artists" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
+                            <Button x:Name="IpodAlbumsButton" Content="▣    Albums" Tag="Albums" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
+                            <Button x:Name="IpodGenresButton" Content="◇    Genres" Tag="Genres" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
+                            <Button x:Name="IpodSongsButton" Content="♫    Songs" Tag="Songs" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
+                            <Button x:Name="IpodPodcastsButton" Content="◔    Podcasts" Click="IpodPodcastsButton_Click" Style="{StaticResource NavButtonStyle}"/>
+                            <Button x:Name="IpodPlaylistsButton" Content="☰    Playlists" Click="IpodPlaylistsButton_Click" Style="{StaticResource NavButtonStyle}"/>
+                            <TextBlock x:Name="IpodNavHint" Text="Drag music onto IPOD to sync" Foreground="#6E7584" FontSize="10" Margin="12,7,0,2"/>
                         </StackPanel>
-                    </Button>
-                    <StackPanel x:Name="IpodNav" Visibility="Collapsed">
-                        <Button x:Name="IpodArtistsButton" Content="●    Artists" Tag="Artists" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
-                        <Button x:Name="IpodAlbumsButton" Content="▣    Albums" Tag="Albums" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
-                        <Button x:Name="IpodGenresButton" Content="◇    Genres" Tag="Genres" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
-                        <Button x:Name="IpodSongsButton" Content="♫    Songs" Tag="Songs" Click="IpodCategory_Click" Style="{StaticResource NavButtonStyle}"/>
-                        <Button x:Name="IpodPodcastsButton" Content="◔    Podcasts" Click="IpodPodcastsButton_Click" Style="{StaticResource NavButtonStyle}"/>
-                        <Button x:Name="IpodPlaylistsButton" Content="☰    Playlists" Click="IpodPlaylistsButton_Click" Style="{StaticResource NavButtonStyle}"/>
-                        <TextBlock x:Name="IpodNavHint" Text="Drag music onto IPOD to sync" Foreground="#6E7584" FontSize="10" Margin="12,7,0,2"/>
                     </StackPanel>
                     <Button x:Name="DownloadHeaderButton" Click="ShowDownloadSource_Click" Style="{StaticResource SectionHeaderButtonStyle}" Margin="0,14,0,0">
                         <Button.ContextMenu>
@@ -202,7 +205,10 @@
                         </StackPanel>
                     </Button>
                 </StackPanel>
-                <TextBlock x:Name="VersionText" Grid.Row="6" Margin="10,14,0,0" Foreground="#5A616E" FontSize="10" Text="v0.13.0"/>
+                <DockPanel Grid.Row="6" Margin="10,14,0,0" LastChildFill="False">
+                    <TextBlock x:Name="VersionText" Foreground="#5A616E" FontSize="10" Text="v0.13.0" VerticalAlignment="Center"/>
+                    <Button Content="🐞 Report a bug" Click="ReportBug_Click" DockPanel.Dock="Right" Background="Transparent" Foreground="#6E7584" BorderThickness="0" Padding="0" FontSize="10" ToolTip="File a bug straight into Zen, tagged for wherever you are right now"/>
+                </DockPanel>
             </Grid>
         </Border>
         <Grid x:Name="MusicPage" Grid.Column="1" Margin="38,32,38,30">
@@ -215,7 +221,7 @@
                     <TextBlock x:Name="ViewSubtitle" Foreground="#7D8493" FontSize="12"/>
                     <TextBlock x:Name="PlaybackStatus" Foreground="#A79DFF" FontSize="11" Margin="0,5,0,0"/>
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"><Button Content="⚙" Click="Settings_Click" ToolTip="Settings" Margin="0,0,9,0" Padding="11,8" FontSize="14" Background="#161A22" Foreground="#BCC2CD" BorderBrush="#303744"/><Button Content="⊙  Duplicates" Click="Duplicates_Click" Margin="0,0,9,0" Padding="13,8" Background="#161A22" Foreground="#BCC2CD" BorderBrush="#303744"/><Border Width="260" Height="39" Background="#12151C" BorderBrush="#262C38" BorderThickness="1" CornerRadius="10" Padding="12,7"><DockPanel><TextBlock Text="⌕" Foreground="#747B8B" Margin="0,0,8,0"/><TextBox x:Name="SearchBox" TextChanged="SearchBox_TextChanged" Background="Transparent" BorderThickness="0" Foreground="#F4F6FA" CaretBrush="#F4F6FA"/></DockPanel></Border></StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"><Button Content="⚙" Click="Settings_Click" ToolTip="Settings" Margin="0,0,9,0" Padding="11,8" FontSize="14" Background="#161A22" Foreground="#BCC2CD" BorderBrush="#303744"/><Button Content="⊙  Duplicates" Click="Duplicates_Click" Margin="0,0,9,0" Padding="13,8" Background="#161A22" Foreground="#BCC2CD" BorderBrush="#303744"/><Button x:Name="CleanupTitlesButton" Content="🧹  Clean up" Click="CleanupTitles_Click" ToolTip="Strip Official Video/Cover/feat. tags and Album/Artist-name prefixes out of every track title" Visibility="Collapsed" Margin="0,0,9,0" Padding="13,8" Background="#161A22" Foreground="#BCC2CD" BorderBrush="#303744"/><Border Width="260" Height="39" Background="#12151C" BorderBrush="#262C38" BorderThickness="1" CornerRadius="10" Padding="12,7"><DockPanel><TextBlock Text="⌕" Foreground="#747B8B" Margin="0,0,8,0"/><TextBox x:Name="SearchBox" TextChanged="SearchBox_TextChanged" Background="Transparent" BorderThickness="0" Foreground="#F4F6FA" CaretBrush="#F4F6FA"/></DockPanel></Border></StackPanel>
             </Grid>
             <ScrollViewer x:Name="GroupsScroller" Grid.Row="1" Margin="0,28,0,0" VerticalScrollBarVisibility="Auto">
                 <ListBox x:Name="GroupsView" Background="Transparent" BorderThickness="0" SelectionMode="Extended"
@@ -939,7 +945,45 @@
             </Grid>
         </Border>
         <Canvas x:Name="IpodCanvas" Grid.Row="0" Grid.Column="1" Panel.ZIndex="12" IsHitTestVisible="True" ClipToBounds="True">
-            <Button x:Name="IpodButton" Style="{StaticResource IpodButtonStyle}" Width="300" Height="300" Canvas.Right="-150" Canvas.Bottom="-150" Click="IpodButton_Click" AllowDrop="True" DragOver="IpodButton_DragOver" DragLeave="IpodButton_DragLeave" Drop="IpodButton_Drop" ToolTip="No iPod connected · Click to simulate connection">
+            <!-- A sibling of IpodButton, not a child of it (task 200): the
+                 spinning disc shows purely from playback/sync state,
+                 completely independent of whether an iPod is connected, so
+                 it can't be nested inside something that only renders while
+                 connected. Placed before IpodButton so the button's own
+                 label chrome still renders on top of it, matching how the
+                 disc used to sit behind the label when nested inside it.
+                 Same size/position as the button so it lines up exactly. -->
+            <Grid x:Name="RecordSpinGroup" Width="300" Height="300" Canvas.Right="-150" Canvas.Bottom="-150" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5" Opacity="0">
+                <Grid.RenderTransform>
+                    <TransformGroup>
+                        <RotateTransform x:Name="RecordRotation"/>
+                        <TranslateTransform x:Name="RecordDiscTransform" X="300" Y="300"/>
+                    </TransformGroup>
+                </Grid.RenderTransform>
+                <Ellipse x:Name="RecordDisc" Fill="#0B0B0E" Stroke="#000000" StrokeThickness="1"/>
+                <Ellipse Margin="14" Stroke="#171719" StrokeThickness="1"/>
+                <Ellipse Margin="22" Stroke="#202024" StrokeThickness="1"/>
+                <Ellipse Margin="32" Stroke="#171719" StrokeThickness="1"/>
+                <Ellipse Margin="44" Stroke="#202024" StrokeThickness="1"/>
+                <Ellipse Margin="58" Stroke="#171719" StrokeThickness="1"/>
+                <Ellipse Margin="74" Stroke="#202024" StrokeThickness="1"/>
+                <Ellipse Margin="92" Stroke="#171719" StrokeThickness="1"/>
+                <Ellipse>
+                    <Ellipse.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#22FFFFFF" Offset="0"/>
+                            <GradientStop Color="#00FFFFFF" Offset="0.42"/>
+                            <GradientStop Color="#00FFFFFF" Offset="0.58"/>
+                            <GradientStop Color="#18FFFFFF" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Ellipse.Fill>
+                </Ellipse>
+                <Ellipse x:Name="RecordLabel" Width="108" Height="108" Fill="#3A404B"/>
+                <Ellipse Width="34" Height="34" Fill="#0B0B0E"/>
+                <Ellipse Width="8" Height="8" Fill="#000000"/>
+            </Grid>
+            <Button x:Name="IpodButton" Style="{StaticResource IpodButtonStyle}" Width="300" Height="300" Canvas.Right="-150" Canvas.Bottom="-150" Click="IpodButton_Click" AllowDrop="True" DragOver="IpodButton_DragOver" DragLeave="IpodButton_DragLeave" Drop="IpodButton_Drop" ToolTip="No iPod connected · Click to simulate connection" Visibility="Collapsed">
+                <Button.RenderTransform><TranslateTransform x:Name="IpodButtonTransform" X="300" Y="300"/></Button.RenderTransform>
                 <Button.ContextMenu>
                     <!-- The single, systemic iPod actions menu (task 164) —
                          also assigned to IpodHeaderButton in the sidebar from
@@ -959,30 +1003,6 @@
                     </ContextMenu>
                 </Button.ContextMenu>
                 <Grid>
-                    <Grid x:Name="RecordSpinGroup" RenderTransformOrigin="0.5,0.5">
-                        <Grid.RenderTransform><RotateTransform x:Name="RecordRotation"/></Grid.RenderTransform>
-                        <Ellipse x:Name="RecordDisc" Fill="#0B0B0E" Stroke="#000000" StrokeThickness="1"/>
-                        <Ellipse Margin="14" Stroke="#171719" StrokeThickness="1"/>
-                        <Ellipse Margin="22" Stroke="#202024" StrokeThickness="1"/>
-                        <Ellipse Margin="32" Stroke="#171719" StrokeThickness="1"/>
-                        <Ellipse Margin="44" Stroke="#202024" StrokeThickness="1"/>
-                        <Ellipse Margin="58" Stroke="#171719" StrokeThickness="1"/>
-                        <Ellipse Margin="74" Stroke="#202024" StrokeThickness="1"/>
-                        <Ellipse Margin="92" Stroke="#171719" StrokeThickness="1"/>
-                        <Ellipse>
-                            <Ellipse.Fill>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                    <GradientStop Color="#22FFFFFF" Offset="0"/>
-                                    <GradientStop Color="#00FFFFFF" Offset="0.42"/>
-                                    <GradientStop Color="#00FFFFFF" Offset="0.58"/>
-                                    <GradientStop Color="#18FFFFFF" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Ellipse.Fill>
-                        </Ellipse>
-                        <Ellipse x:Name="RecordLabel" Width="108" Height="108" Fill="#3A404B"/>
-                        <Ellipse Width="34" Height="34" Fill="#0B0B0E"/>
-                        <Ellipse Width="8" Height="8" Fill="#000000"/>
-                    </Grid>
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                         <StackPanel.RenderTransform><TranslateTransform X="-74" Y="-74"/></StackPanel.RenderTransform>
                         <Border Width="34" Height="50" CornerRadius="5" Background="#D5DAE2" BorderBrush="#FFFFFF" BorderThickness="2" Padding="4">
