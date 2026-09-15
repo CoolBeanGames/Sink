@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 
 namespace Sink.Services.Download;
@@ -93,6 +94,13 @@ public static class SunnifyService
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
+            // Without this, .NET decodes Sunnify's UTF-8 stdout using the
+            // system's single-byte console codepage — every non-ASCII title
+            // (Japanese, accented Latin, etc.) came out as mojibake, and once
+            // mangled that way it's no longer recognizable as any real
+            // language, so "translate to English" had nothing to detect.
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
         };
         foreach (var arg in arguments) psi.ArgumentList.Add(arg);
 

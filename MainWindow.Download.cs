@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -768,17 +769,31 @@ public partial class MainWindow
             menu.Items.Add(Item("Number tracks by list order", () => NumberTracksByOrder(node.Parent)));
         if (node.Kind == DownloadKind.Album)
             menu.Items.Add(Item("Rescan tracks", () => { node.Scanned = false; node.IsExpanded = true; _ = ScanAlbumTracksAsync(node); }));
-        menu.Items.Add(Item("Copy link", () =>
-        {
-            try { Clipboard.SetText(node.Url); }
-            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or OutOfMemoryException) { }
-        }));
+        menu.Items.Add(Item("Copy link", () => CopyToClipboard(node.Url)));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Remove", () =>
         {
             if (node.Parent is null) _rootNodes.Remove(node);
             else node.Parent.Children.Remove(node);
         }));
+    }
+
+    /// <summary>
+    /// Clipboard.SetText briefly throws COMException whenever another app
+    /// (a clipboard manager, Remote Desktop, Discord, etc.) has the clipboard
+    /// open at that exact moment — the previous "Copy link" swallowed that and
+    /// gave up on the first try, so the button silently did nothing on an
+    /// ordinary, common race instead of actually copying anything.
+    /// </summary>
+    private void CopyToClipboard(string text)
+    {
+        for (var attempt = 1; attempt <= 5; attempt++)
+        {
+            try { Clipboard.SetText(text); return; }
+            catch (System.Runtime.InteropServices.COMException) when (attempt < 5) { Thread.Sleep(40); }
+            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or OutOfMemoryException) { break; }
+        }
+        SetDownloadStatus("Couldn't copy to clipboard — another app may be holding it open, try again");
     }
 
     /// <summary>Clicking a row's status light toggles it between "will download" and "skip" (task 110).</summary>
