@@ -372,6 +372,9 @@ public sealed class DownloadOptions
 
     /// <summary>Write each album track's playlist position as its track number when it has none of its own.</summary>
     public bool NumberTracks { get; set; }
+
+    /// <summary>When a downloaded unit is a playlist (Spotify or YouTube), also build a library playlist with the same name/tracks.</summary>
+    public bool CreateMatchingPlaylist { get; set; }
     public AudioFormat Format { get; set; } = AudioFormat.Mp3;
 
     /// <summary>Audio bitrate in kbps, or 0 for "best available".</summary>

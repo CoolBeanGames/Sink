@@ -10,6 +10,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Threading;
 using Sink.Dialogs;
+using Sink.Models;
 using Sink.Services;
 using Sink.Services.Download;
 
@@ -841,6 +842,7 @@ public partial class MainWindow
         EmbedAlbumArt = OptAlbumArt.IsChecked == true,
         PreferMusicMetadata = OptMusicMeta.IsChecked == true,
         NumberTracks = OptNumberTracks.IsChecked == true,
+        CreateMatchingPlaylist = OptCreatePlaylist.IsChecked == true,
         Format = OptFormat.SelectedIndex switch
         {
             1 => AudioFormat.M4a,
@@ -1116,6 +1118,70 @@ public partial class MainWindow
         StopPreview("starting download");
         var options = ReadOptions();
         _downloading = true;
+
+        // ---- "Create matching playlist in library" (per-source accumulation) ----
+        //
+        // A downloaded playlist is either one unit (a YouTube mixed-playlist
+        // Album — the whole thing is one DownloadAsync call) or many units (a
+        // Spotify playlist/album, whose tracks are independent Single queue
+        // items sharing one Artist-kind, IsMixedPlaylist container). Either
+        // way, accumulate every successfully-imported track's id against its
+        // source, then build/update the actual library Playlist once nothing
+        // more from that source is still pending (reusing the artist counter
+        // above to know when a multi-unit source is fully drained).
+        var playlistTrackIds = new Dictionary<DownloadNode, List<Guid>>();
+        var playlistsChanged = false;
+
+        static DownloadNode? PlaylistSourceOf(DownloadNode unit) =>
+            unit.Kind == DownloadKind.Album && unit.IsMixedPlaylist ? unit
+            : unit.Kind == DownloadKind.Single && unit.Parent is { Kind: DownloadKind.Artist, IsMixedPlaylist: true } parent ? parent
+            : null;
+
+        void AddToPlaylistAccumulator(DownloadNode unit, Guid trackId)
+        {
+            if (!options.CreateMatchingPlaylist || PlaylistSourceOf(unit) is not { } source) return;
+            if (!playlistTrackIds.TryGetValue(source, out var ids)) playlistTrackIds[source] = ids = [];
+            ids.Add(trackId);
+        }
+
+        void AddOrUpdatePlaylist(string name, List<Guid> newTrackIds)
+        {
+            if (string.IsNullOrWhiteSpace(name) || newTrackIds.Count == 0) return;
+            var playlist = _playlists.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (playlist is null)
+            {
+                playlist = new Playlist { Name = name };
+                _playlists.Add(playlist);
+            }
+            foreach (var id in newTrackIds)
+                if (!playlist.TrackIds.Contains(id)) { playlist.TrackIds.Add(id); playlistsChanged = true; }
+            SetDownloadStatus($"Playlist “{name}” ready in your library ({playlist.TrackIds.Count} track{(playlist.TrackIds.Count == 1 ? "" : "s")})");
+        }
+
+        // Called once per unit regardless of outcome (see the per-item finally
+        // below) so a source's last unit failing or timing out still finalizes
+        // whatever siblings of it did succeed, instead of leaving them stuck
+        // in the accumulator forever.
+        void FinalizePlaylistIfComplete(DownloadNode unit)
+        {
+            if (!options.CreateMatchingPlaylist || PlaylistSourceOf(unit) is not { } source) return;
+            var complete = ReferenceEquals(source, unit) // single-unit case: this download WAS the whole playlist
+                || source.DownloadStartedCount >= (source.DownloadTotalOverride ?? int.MaxValue);
+            if (complete && playlistTrackIds.Remove(source, out var ids))
+                AddOrUpdatePlaylist(source.Name, ids);
+        }
+
+        // ---- Skip tracks that already exist in the library ----
+        //
+        // Matches on Artist+Album+Title exactly the way tags actually get
+        // written (DownloadService.cs) — a non-mixed album's own shared
+        // Artist/Album, or a mixed playlist's own per-track values.
+        Track? FindInLibrary(string artist, string album, string title) =>
+            _tracks.FirstOrDefault(t => TagEquals(t.Artist, artist) && TagEquals(t.Album, album) && TagEquals(t.Title, title));
+        static bool TagEquals(string a, string b) => string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
+        static (string Artist, string Album) EffectiveTags(DownloadNode unit, DownloadNode track) =>
+            unit.IsMixedPlaylist ? (track.Artist, track.Album) : (unit.Artist, unit.Album);
+
         _downloadCts = new CancellationTokenSource();
         var token = _downloadCts.Token;
         DownloadButton.Content = "Stop";
@@ -1169,6 +1235,40 @@ public partial class MainWindow
                     }
                 }
 
+                // Skip whatever's already sitting in the library instead of
+                // re-fetching it — matched the same way tags actually get
+                // written, so this lines up with what a real duplicate means
+                // here (same artist, same album, same title).
+                if (node.Kind == DownloadKind.Single)
+                {
+                    if (FindInLibrary(node.Artist, node.Album, node.Title) is { } existingSingle)
+                    {
+                        node.State = DownloadState.Done;
+                        node.StatusText = "Already in library — skipped";
+                        Log.Info($"Skipped \"{node.Name}\" — already in library");
+                        AddToPlaylistAccumulator(node, existingSingle.Id);
+                        continue;
+                    }
+                }
+                else if (node.Kind == DownloadKind.Album)
+                {
+                    foreach (var t in node.Children.Where(c => c.Kind == DownloadKind.Track && c.Enabled == true && c.State != DownloadState.Done))
+                    {
+                        var (tagArtist, tagAlbum) = EffectiveTags(node, t);
+                        if (FindInLibrary(tagArtist, tagAlbum, t.Title) is not { } existingTrack) continue;
+                        t.State = DownloadState.Done;
+                        t.StatusText = "Already in library — skipped";
+                        Log.Info($"Skipped \"{t.Name}\" of {node.Name} — already in library");
+                        AddToPlaylistAccumulator(node, existingTrack.Id);
+                    }
+                    if (node.Children.Count > 0 && !node.Children.Any(c => c.Kind == DownloadKind.Track && c.Enabled == true && c.State != DownloadState.Done))
+                    {
+                        node.State = DownloadState.Done;
+                        node.StatusText = "Already in library — skipped";
+                        continue;
+                    }
+                }
+
                 node.State = DownloadState.Downloading;
                 node.Progress = 0;
                 var linkLabel = queue.Count > 1 ? $"  (item {index + 1}/{queue.Count})" : "";
@@ -1216,7 +1316,7 @@ public partial class MainWindow
                     // finalized, instead of waiting for the whole album to
                     // finish and flushing it all at once (task 121).
                     var alreadyImported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    var pendingImports = new List<Task<int>>();
+                    var pendingImports = new List<Task<IReadOnlyList<Track>>>();
                     var fileReady = new Progress<string>(path =>
                     {
                         if (alreadyImported.Add(path)) pendingImports.Add(ImportFinalizedFileAsync(path));
@@ -1263,17 +1363,19 @@ public partial class MainWindow
 
                     node.State = DownloadState.Importing;
                     node.StatusText = "Importing…";
-                    var progressiveCounts = await Task.WhenAll(pendingImports);
+                    var progressiveTrackLists = await Task.WhenAll(pendingImports);
                     var remainder = paths.Where(p => alreadyImported.Add(p)).ToList(); // safety net
                     var tracks = remainder.Count > 0 ? await Task.Run(() => MusicImporter.Import(remainder)) : [];
                     foreach (var track in tracks) _tracks.Add(track);
-                    imported += progressiveCounts.Sum() + tracks.Count;
+                    var allNewTracks = progressiveTrackLists.SelectMany(l => l).Concat(tracks).ToList();
+                    imported += allNewTracks.Count;
+                    foreach (var newTrack in allNewTracks) AddToPlaylistAccumulator(node, newTrack.Id);
 
                     if (partialFailure)
                     {
                         node.State = DownloadState.Failed;
                         var missing = node.Children.Count(c => c.Kind == DownloadKind.Track && c.State == DownloadState.Failed);
-                        node.StatusText = $"{tracks.Count} done, {missing} failed — {Shorten(partialReason)}";
+                        node.StatusText = $"{allNewTracks.Count} done, {missing} failed — {Shorten(partialReason)}";
                         SetDownloadStatus($"{node.Name}: {missing} track{(missing == 1 ? "" : "s")} failed — {partialReason} (see Settings ▸ Open logs)");
                         Log.Warn($"{node.Name}: {missing} track(s) failed — {partialReason}");
                     }
@@ -1281,7 +1383,7 @@ public partial class MainWindow
                     {
                         node.State = DownloadState.Done;
                         node.Progress = 1;
-                        node.StatusText = tracks.Count > 1 ? $"Done · {tracks.Count} tracks" : "Done";
+                        node.StatusText = allNewTracks.Count > 1 ? $"Done · {allNewTracks.Count} tracks" : "Done";
                         // Drop this unit out of the visible queue once
                         // nothing real is left inside it, instead of waiting
                         // for the rest of the batch too (task 163) —
@@ -1313,6 +1415,7 @@ public partial class MainWindow
                 }
                 finally
                 {
+                    FinalizePlaylistIfComplete(node);
                     MaybeResetArtistText(node);
                 }
             }
@@ -1325,7 +1428,7 @@ public partial class MainWindow
             DownloadButton.Content = "⭳  Download";
             SpinIndicator(DownloadSpinner, false);
 
-            if (imported > 0)
+            if (imported > 0 || playlistsChanged)
             {
                 SaveLibrary();
                 RenderLibrary();
@@ -1352,19 +1455,19 @@ public partial class MainWindow
     /// the album (task 121). Adds it to the library immediately so it shows up
     /// while the rest keeps downloading.
     /// </summary>
-    private async Task<int> ImportFinalizedFileAsync(string path)
+    private async Task<IReadOnlyList<Track>> ImportFinalizedFileAsync(string path)
     {
         try
         {
             var tracks = await Task.Run(() => MusicImporter.Import([path]));
             foreach (var track in tracks) _tracks.Add(track);
             if (tracks.Count > 0 && _source == LibrarySource.Music) RenderLibrary();
-            return tracks.Count;
+            return tracks;
         }
         catch (Exception ex)
         {
             Log.Warn($"Progressive import failed for {path}: {ex.Message}");
-            return 0;
+            return [];
         }
     }
 

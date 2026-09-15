@@ -517,6 +517,8 @@
                         <CheckBox x:Name="OptMusicMeta" Content="Prefer YouTube Music details" IsChecked="True" Foreground="#C7CCD6" Margin="0,0,26,10"/>
                         <CheckBox x:Name="OptNumberTracks" Content="Number tracks by list order" Foreground="#C7CCD6" Margin="0,0,26,10"
                                   ToolTip="Write each album track's position (1, 2, 3…) as its track number when it doesn't already have one"/>
+                        <CheckBox x:Name="OptCreatePlaylist" Content="Create matching playlist in library" Foreground="#C7CCD6" Margin="0,0,26,10"
+                                  ToolTip="When downloading a playlist (Spotify, YouTube, or any future source), also build a library playlist with the same name and tracks"/>
                     </WrapPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                         <StackPanel Margin="0,0,26,0">
