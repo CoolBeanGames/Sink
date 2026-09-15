@@ -588,6 +588,17 @@ public partial class MainWindow : Window
         BackButton.Visibility = _drilldown is null && _artistFilter is null ? Visibility.Collapsed : Visibility.Visible;
         CleanupTitlesButton.Visibility = _category == LibraryCategory.Songs && _source == LibrarySource.Music
             && _activePlaylist is null && _drilldown is null ? Visibility.Visible : Visibility.Collapsed;
+        // The iPod view's rows are freshly adapted from the device's own
+        // read-model each time (AdaptIpodTrack), never carrying a real
+        // LastSyncedKey, so the dot would just show every row as "unsynced"
+        // there — meaningless since that view already IS the device state.
+        UnsyncedDotColumn.Visibility = _source == LibrarySource.Music ? Visibility.Visible : Visibility.Collapsed;
+        // Track numbers only mean anything within a single album's own
+        // ordering — everywhere else (general Songs, a playlist, an Artist/
+        // Genre drilldown) the list mixes tracks from different albums, so
+        // the numbers would just look like arbitrary noise (task 205).
+        TrackNumberColumn.Visibility = _drilldown is not null && _category == LibraryCategory.Albums
+            ? Visibility.Visible : Visibility.Collapsed;
 
         if (showTracks)
         {
@@ -598,11 +609,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Same reason as UnsyncedDotColumn above: iPod-view rows are freshly
+        // adapted with no real LastSyncedKey, so the dot would be meaningless there.
+        var trackSyncDot = _source == LibrarySource.Music;
         var groups = _category switch
         {
-            LibraryCategory.Artists => source.GroupBy(track => track.Artist).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key, group, $"artist:{group.Key}")),
-            LibraryCategory.Genres => source.GroupBy(track => track.Genre).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key, group, $"genre:{group.Key}")),
-            _ => source.GroupBy(track => track.Album).Select(group => Card(group.Key, group.First().Artist, group.Key, group))
+            LibraryCategory.Artists => source.GroupBy(track => track.Artist).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key, group, $"artist:{group.Key}", trackSyncDot)),
+            LibraryCategory.Genres => source.GroupBy(track => track.Genre).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key, group, $"genre:{group.Key}", trackSyncDot)),
+            _ => source.GroupBy(track => track.Album).Select(group => Card(group.Key, group.First().Artist, group.Key, group, null, trackSyncDot))
         };
         var cards = groups.Where(card => query.Length == 0 || card.Name.Contains(query, StringComparison.OrdinalIgnoreCase)).OrderBy(card => card.Name).ToList();
         GroupsView.ItemsSource = cards;
@@ -624,7 +638,7 @@ public partial class MainWindow : Window
         return _syncedTrackIds.Count == 0 ? "Nothing synced to iPod yet — drag music onto IPOD" : null;
     }
 
-    private static GroupCard Card(string name, string detail, string colorSeed, IEnumerable<Track> members, string? artworkOverrideKey = null)
+    private static GroupCard Card(string name, string detail, string colorSeed, IEnumerable<Track> members, string? artworkOverrideKey = null, bool trackSyncDot = false)
     {
         var palette = new[] { "#273A78", "#6E354B", "#285D56", "#6C4D31" };
         var initial = string.IsNullOrEmpty(name) ? "?" : name[..1].ToUpperInvariant();
@@ -632,7 +646,8 @@ public partial class MainWindow : Window
             ?? members.Select(t => t.ArtworkPath).FirstOrDefault(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p));
         return new GroupCard(name, detail, initial,
             new SolidColorBrush((Color)ColorConverter.ConvertFromString(palette[Math.Abs(colorSeed.GetHashCode()) % palette.Length])),
-            LoadArtwork(artPath));
+            LoadArtwork(artPath),
+            trackSyncDot && members.Any(t => t.HasUnsyncedChanges));
     }
 
     private static readonly Dictionary<string, ImageSource> _artCache = [];
@@ -1533,6 +1548,59 @@ public partial class MainWindow : Window
         DragDrop.DoDragDrop(GroupsView, data, DragDropEffects.Copy);
     }
 
+    private static readonly string[] CardImageExtensions = [".jpg", ".jpeg", ".png", ".bmp", ".gif"];
+
+    private static bool HasImageFileDrop(IDataObject data) =>
+        data.GetDataPresent(DataFormats.FileDrop) &&
+        data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } files &&
+        CardImageExtensions.Contains(Path.GetExtension(files[0]), StringComparer.OrdinalIgnoreCase);
+
+    private void GroupCard_DragOver(object sender, DragEventArgs e)
+    {
+        if (sender is not ListBoxItem item || !HasImageFileDrop(e.Data)) { e.Effects = DragDropEffects.None; return; }
+        item.Tag = "DragOver";
+        e.Effects = DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    private void GroupCard_DragLeave(object sender, DragEventArgs e)
+    {
+        if (sender is ListBoxItem item) item.Tag = null;
+    }
+
+    /// <summary>Drop an image from Explorer onto an Album/Artist/Genre card to replace its art (task 202) — same override-key mechanism as the right-click "Set genre/artist artwork…" / album art tools, just via drag instead of a file picker.</summary>
+    private void GroupCard_Drop(object sender, DragEventArgs e)
+    {
+        if (sender is ListBoxItem droppedItem) droppedItem.Tag = null;
+        if (sender is not ListBoxItem { DataContext: GroupCard card } || !HasImageFileDrop(e.Data)) return;
+        var path = ((string[])e.Data.GetData(DataFormats.FileDrop)!)[0];
+
+        byte[] fileBytes;
+        try { fileBytes = File.ReadAllBytes(path); }
+        catch (IOException) { return; }
+        catch (UnauthorizedAccessException) { return; }
+
+        string? saved;
+        if (_category == LibraryCategory.Albums)
+        {
+            var artist = _tracks.FirstOrDefault(t => t.Album == card.Name)?.Artist ?? "";
+            saved = Artwork.SaveOverride($"{card.Name}|{artist}", fileBytes);
+            if (saved is null) { PlaybackStatus.Text = $"Couldn't use that image for {card.Name}"; return; }
+            foreach (var track in _tracks.Where(t => t.Album == card.Name)) track.ArtworkPath = saved;
+            SaveLibrary();
+        }
+        else
+        {
+            var kind = _category == LibraryCategory.Artists ? "artist" : "genre";
+            saved = Artwork.SaveOverride($"{kind}:{card.Name}", fileBytes);
+            if (saved is null) { PlaybackStatus.Text = $"Couldn't use that image for {card.Name}"; return; }
+        }
+        _artCache.Clear();
+        RenderLibrary();
+        PlaybackStatus.Text = $"Updated artwork for {card.Name}";
+        e.Handled = true;
+    }
+
     private void PlaylistItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) => _trackDragStart = e.GetPosition(PlaylistList);
 
     private void PlaylistItem_PreviewMouseMove(object sender, MouseEventArgs e)
@@ -1885,6 +1953,7 @@ public partial class MainWindow : Window
     {
         var dialog = new MetadataWindow(tracks) { Owner = this };
         if (dialog.ShowDialog() != true) return;
+        _artCache.Clear();
         SaveLibrary();
         RenderLibrary();
         PlaybackStatus.Text = $"Updated {tracks.Count} track{(tracks.Count == 1 ? "" : "s")}";
@@ -2026,5 +2095,5 @@ public partial class MainWindow : Window
         finally { _ipodWriting = false; }
     }
 
-    private sealed record GroupCard(string Name, string Detail, string Initial, Brush Color, ImageSource? Art = null);
+    private sealed record GroupCard(string Name, string Detail, string Initial, Brush Color, ImageSource? Art = null, bool HasUnsyncedChanges = false);
 }

@@ -52,4 +52,14 @@ public sealed class Track : ITitleTrimmable
     /// </summary>
     [JsonIgnore]
     public int PlayCount { get; set; }
+
+    /// <summary>
+    /// True when this track's current Title+Artist+Album+TrackNumber
+    /// identity doesn't match what was last pushed to the iPod — either it
+    /// was never synced at all (LastSyncedKey is still null) or it's been
+    /// retagged since its last sync. Drives the unsynced-changes dot.
+    /// </summary>
+    [JsonIgnore]
+    public bool HasUnsyncedChanges =>
+        LastSyncedKey != Sink.Services.Ipod.IpodDbTrack.MakeKey(Title, Artist, Album, TrackNumber);
 }
