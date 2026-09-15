@@ -954,7 +954,7 @@ public partial class MainWindow : Window
         var podcastsAdded = 0;
         if (header is "Sync all" or "Sync music")
         {
-            songsAdded = await SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
+            songsAdded = await SyncTracksToDevice(_tracks.ToList());
             await SyncAllPlaylistsToDevice();
         }
         if (header is "Sync all" or "Sync podcasts")
@@ -962,17 +962,32 @@ public partial class MainWindow : Window
         if (header is not ("Sync all" or "Sync music" or "Sync podcasts"))
         {
             // "Sync changes" — flush play counts, podcast played status and
-            // bookmark positions only; never touch song/episode files (task:
-            // "Add Explicit Podcasts Logging" also called this out directly —
-            // it used to just spin the record and do nothing else at all).
-            // The actual flush already happened above via
-            // RefreshIpodLibraryFromDeviceAsync; this just reports it.
+            // bookmark positions (device→app, already happened above via
+            // RefreshIpodLibraryFromDeviceAsync), then push app→device
+            // metadata-only updates — in-app play counts and the
+            // exclude-from-shuffle flag — onto tracks already on the device.
+            // Never touches song/episode files; a never-synced track still
+            // needs "Sync all"/"Sync music".
+            var metadataUpdated = 0;
+            if (_ipodDevice?.LibraryRoot is string metaRoot && !_ipodWriting)
+            {
+                RecomputePlayCounts();
+                var snapshot = _tracks.ToList();
+                var metaDeviceId = _ipodLibrary?.SerialNumber;
+                _ipodWriting = true;
+                try
+                {
+                    metadataUpdated = await Task.Run(() =>
+                        Sink.Services.Ipod.IpodWriteService.PushTrackMetadata(metaRoot, snapshot, metaDeviceId));
+                }
+                finally { _ipodWriting = false; }
+            }
             StartIpodSync();
             PlaybackStatus.Text = !refreshed
                 ? "Connect an iPod before syncing changes"
-                : songsUpdated == 0 && podcastsUpdated == 0
+                : songsUpdated == 0 && podcastsUpdated == 0 && metadataUpdated == 0
                     ? "No new play counts or podcast status to sync"
-                    : $"Synced changes — {songsUpdated} song play{(songsUpdated == 1 ? "" : "s")}, {podcastsUpdated} podcast update{(podcastsUpdated == 1 ? "" : "s")}";
+                    : $"Synced changes — {songsUpdated} song play{(songsUpdated == 1 ? "" : "s")}, {podcastsUpdated} podcast update{(podcastsUpdated == 1 ? "" : "s")}, {metadataUpdated} track update{(metadataUpdated == 1 ? "" : "s")}";
         }
         if (songsAdded > 0 || podcastsAdded > 0)
             PostNotification("sync-complete", null,
@@ -988,7 +1003,7 @@ public partial class MainWindow : Window
     /// <summary>Auto-sync on connect (task 138 — only tracks were pushed, playlist membership never followed).</summary>
     private async Task SyncOnConnectAsync()
     {
-        var added = await SyncTracksToDevice(_tracks.Where(t => !t.ExcludedFromShuffle).ToList());
+        var added = await SyncTracksToDevice(_tracks.ToList());
         await SyncAllPlaylistsToDevice();
         if (added > 0) PostNotification("sync-complete", null, $"Syncing complete — {added} song{(added == 1 ? "" : "s")} synced, 0 podcasts synced");
     }
@@ -1000,7 +1015,7 @@ public partial class MainWindow : Window
         var root = _ipodDevice?.LibraryRoot;
         if (root is null)
         {
-            MarkSynced(tracks.Where(t => !t.ExcludedFromShuffle).Select(t => t.Id), announce: true);
+            MarkSynced(tracks.Select(t => t.Id), announce: true);
             if (_ipodConnected) StartIpodSync();
             return 0;
         }
@@ -1050,7 +1065,7 @@ public partial class MainWindow : Window
     /// <summary>Syncs one playlist's tracks to the connected iPod, and (when the device's database is writable) also creates/updates the matching on-device playlist.</summary>
     private async Task SyncPlaylistToDevice(Playlist playlist)
     {
-        var tracks = _tracks.Where(t => playlist.TrackIds.Contains(t.Id) && !t.ExcludedFromShuffle).ToList();
+        var tracks = _tracks.Where(t => playlist.TrackIds.Contains(t.Id)).ToList();
         if (tracks.Count == 0) { PlaybackStatus.Text = $"\"{playlist.Name}\" has no syncable tracks"; return; }
         if (_ipodWriting) { PlaybackStatus.Text = "iPod is busy…"; return; }
         var root = _ipodDevice?.LibraryRoot;
@@ -1106,7 +1121,7 @@ public partial class MainWindow : Window
         {
             foreach (var playlist in _playlists.ToList())
             {
-                var tracks = _tracks.Where(t => playlist.TrackIds.Contains(t.Id) && !t.ExcludedFromShuffle).ToList();
+                var tracks = _tracks.Where(t => playlist.TrackIds.Contains(t.Id)).ToList();
                 if (tracks.Count == 0) continue;
                 await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks, token: token, deviceId: deviceId));
             }
@@ -1220,7 +1235,7 @@ public partial class MainWindow : Window
         }
         if (e.Data.GetData(TrackDragFormat) is not Guid[] trackIds) return;
         e.Handled = true;
-        _ = SyncTracksToDevice(_tracks.Where(t => trackIds.Contains(t.Id) && !t.ExcludedFromShuffle).ToList());
+        _ = SyncTracksToDevice(_tracks.Where(t => trackIds.Contains(t.Id)).ToList());
     }
 
     private void StartIpodSync(bool indefinite = false)
@@ -1310,7 +1325,7 @@ public partial class MainWindow : Window
             PlaybackStatus.Text = "Connect an iPod before syncing";
             return;
         }
-        var syncable = _tracks.Where(track => trackIds.Contains(track.Id) && !track.ExcludedFromShuffle).ToList();
+        var syncable = _tracks.Where(track => trackIds.Contains(track.Id)).ToList();
         if (syncable.Count == 0) { PlaybackStatus.Text = "Nothing to sync"; return; }
         _ = SyncTracksToDevice(syncable);
     }
@@ -1640,21 +1655,23 @@ public partial class MainWindow : Window
 
     private MenuItem ExcludeFromShuffleItem(IReadOnlyList<Track> tracks)
     {
+        // Mirrors iTunes: the label itself flips instead of a checkmark, and
+        // a mixed selection reads as "still has some included" so it defaults
+        // to Exclude — click again once they're all excluded and it reads
+        // Include.
         var allExcluded = tracks.All(t => t.ExcludedFromShuffle);
-        var item = new MenuItem { Header = "Exclude from iPod shuffle", IsCheckable = true, IsChecked = allExcluded };
+        var item = new MenuItem { Header = allExcluded ? "Include in shuffle" : "Exclude from shuffle" };
         item.Click += (_, _) =>
         {
             var exclude = !allExcluded;
             foreach (var track in tracks) track.ExcludedFromShuffle = exclude;
             SaveLibrary();
-            PlaybackStatus.Text = exclude
+            // The tracks stay on the device either way — only the on-device
+            // "skip when shuffling" bit changes, and that's pushed by the
+            // next Sync all/Sync changes (IpodWriteService.PushTrackMetadata).
+            PlaybackStatus.Text = (exclude
                 ? $"Excluded {tracks.Count} track{(tracks.Count == 1 ? "" : "s")} from shuffle"
-                : $"Included {tracks.Count} track{(tracks.Count == 1 ? "" : "s")} in shuffle";
-            // The flag alone only gates *future* syncs — anything already on
-            // the device stays there and keeps playing in its shuffle until
-            // actually removed. Excluding a whole genre that was already
-            // synced did nothing for exactly this reason (task 166).
-            if (exclude) UnsyncTracks(tracks);
+                : $"Included {tracks.Count} track{(tracks.Count == 1 ? "" : "s")} in shuffle") + " — takes effect on the next sync";
         };
         return item;
     }
@@ -1704,9 +1721,7 @@ public partial class MainWindow : Window
 
     private void SyncTracksToIpod(IReadOnlyList<Track> tracks)
     {
-        var syncable = tracks.Where(t => !t.ExcludedFromShuffle).ToList();
-        if (syncable.Count == 0) { PlaybackStatus.Text = "Nothing to sync"; return; }
-        _ = SyncTracksToDevice(syncable);
+        _ = SyncTracksToDevice(tracks.ToList());
     }
 
     private void EditMetadata(IReadOnlyList<Track> tracks)

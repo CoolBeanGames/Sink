@@ -46,7 +46,7 @@ public static class IpodWriteService
         CancellationToken token = default,
         string? deviceId = null)
     {
-        var eligible = tracks.Where(t => IsSyncable(t.FilePath) && !t.ExcludedFromShuffle).ToList();
+        var eligible = tracks.Where(t => IsSyncable(t.FilePath)).ToList();
         var skipped = tracks.Count - eligible.Count;
         if (eligible.Count == 0) return new IpodSyncResult(0, 0, skipped, null);
         Log.Info($"iPod sync: {eligible.Count} eligible track(s), {skipped} skipped, root {root}");
@@ -84,6 +84,7 @@ public static class IpodWriteService
                 catch (OutOfDiskSpaceException) { skipped += eligible.Count - i; break; }
 
                 if (PushPlayCount(onDevice, src, deviceId)) changedDb = true;
+                if (onDevice is not null && IpodShuffleFlag.Set(onDevice, src.ExcludedFromShuffle)) changedDb = true;
 
                 // A track only shows under the device's own Podcasts menu when
                 // it's a member of the special "Podcasts" playlist — the
@@ -139,7 +140,7 @@ public static class IpodWriteService
         CancellationToken token = default,
         string? deviceId = null)
     {
-        var eligible = tracks.Where(t => IsSyncable(t.FilePath) && !t.ExcludedFromShuffle).ToList();
+        var eligible = tracks.Where(t => IsSyncable(t.FilePath)).ToList();
         var skipped = tracks.Count - eligible.Count;
         if (eligible.Count == 0) return new IpodSyncResult(0, 0, skipped, null);
         Log.Info($"iPod playlist sync: \"{playlistName}\", {eligible.Count} eligible track(s), root {root}");
@@ -199,6 +200,7 @@ public static class IpodWriteService
                 catch (OutOfDiskSpaceException) { skipped += eligible.Count - i; break; }
 
                 if (PushPlayCount(onDevice, src, deviceId)) changedDb = true;
+                if (onDevice is not null && IpodShuffleFlag.Set(onDevice, src.ExcludedFromShuffle)) changedDb = true;
 
                 if (onDevice is not null && !playlist.ContainsTrack(onDevice))
                 {
@@ -356,6 +358,63 @@ public static class IpodWriteService
         catch (Exception ex)
         {
             Log.Error("iPod podcast-position write failed", ex);
+            if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
+            return 0;
+        }
+        finally
+        {
+            if (locked) { try { ipod.ReleaseLock(); } catch { } }
+        }
+    }
+
+    /// <summary>
+    /// Pushes metadata-only updates — play counts and the shuffle-skip flag —
+    /// onto tracks already present on the device, matched by the same
+    /// Title/Artist/Album/TrackNumber identity as <see cref="WritePodcastPositions"/>.
+    /// Never adds a track or copies a file, so it stays cheap even on a large
+    /// library; that's what <see cref="Sync"/>/<see cref="SyncPlaylist"/> are
+    /// for. Used by "Sync changes" so toggling exclude-from-shuffle (or any
+    /// future in-app play) reaches an already-synced track without a full
+    /// re-sync.
+    /// </summary>
+    public static int PushTrackMetadata(string root, IReadOnlyList<Track> tracks, string? deviceId)
+    {
+        if (tracks.Count == 0) return 0;
+        IPod ipod;
+        try { ipod = IpodReader.Open(root); ipod.AssertIsWritable(); }
+        catch (Exception) { return 0; }
+
+        var byKey = new Dictionary<string, Track>();
+        foreach (var t in tracks) byKey.TryAdd(IpodDbTrack.MakeKey(t.Title, t.Artist, t.Album, t.TrackNumber), t);
+
+        string? backup = null;
+        var locked = false;
+        var updated = 0;
+        try
+        {
+            backup = BackupDatabase(root);
+            IPodBackup.EnableBackups = false;
+            ipod.AcquireLock();
+            locked = true;
+
+            var changedDb = false;
+            foreach (var onDevice in ipod.Tracks)
+            {
+                var key = IpodDbTrack.MakeKey(onDevice.Title, onDevice.Artist, onDevice.Album, IpodReader.SafeInt(onDevice.TrackNumber));
+                if (!byKey.TryGetValue(key, out var src)) continue;
+                var changed = false;
+                if (PushPlayCount(onDevice, src, deviceId)) changed = true;
+                if (IpodShuffleFlag.Set(onDevice, src.ExcludedFromShuffle)) changed = true;
+                if (!changed) continue;
+                updated++;
+                changedDb = true;
+            }
+            if (changedDb) { ipod.SaveChanges(); DriveEject.Flush(root); }
+            return updated;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("iPod metadata push failed", ex);
             if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
             return 0;
         }
