@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
 using Sink.Services;
+using Sink.Services.Download;
 
 namespace Sink.Dialogs;
 
@@ -11,13 +12,15 @@ namespace Sink.Dialogs;
 /// </summary>
 public sealed class SettingsWindow : SinkDialog
 {
-    private static readonly string[] CookieChoices = ["auto", "none", "edge", "chrome", "firefox", "brave"];
+    private static readonly string[] CookieChoices = ["auto", "none", "edge", "chrome", "firefox", "brave", "file"];
 
     private readonly TextBox _library = Field();
     private readonly TextBox _podcasts = Field();
     private readonly CheckBox _syncOnConnect = new() { Content = "Sync as soon as an iPod is connected", Foreground = Hex("#C7CCD6") };
     private readonly ComboBox _importMode = new() { Width = 220, HorizontalAlignment = HorizontalAlignment.Left };
     private readonly ComboBox _youTubeCookies = new() { Width = 260, HorizontalAlignment = HorizontalAlignment.Left };
+    private readonly TextBox _cookieFile = Field();
+    private readonly UIElement _cookieFileRow;
 
     private readonly Func<int> _refresh;
     private readonly Action _export;
@@ -52,8 +55,43 @@ public sealed class SettingsWindow : SinkDialog
         _youTubeCookies.Items.Add("Google Chrome");
         _youTubeCookies.Items.Add("Firefox");
         _youTubeCookies.Items.Add("Brave");
+        _youTubeCookies.Items.Add("Cookie file…");
         var cookieIndex = Array.IndexOf(CookieChoices, (settings.YouTubeCookies ?? "auto").Trim().ToLowerInvariant());
         _youTubeCookies.SelectedIndex = Math.Max(0, cookieIndex);
+
+        _cookieFile.Text = settings.CookieFilePath;
+        var browseCookieFile = SecondaryButton("Browse…", (_, _) =>
+        {
+            var dialog = new OpenFileDialog { Title = "Choose a cookies.txt file", Filter = "Cookie files|*.txt|All files|*.*" };
+            if (dialog.ShowDialog(this) == true) _cookieFile.Text = dialog.FileName;
+        });
+        browseCookieFile.Margin = new Thickness(8, 0, 0, 0);
+        var exportFirefoxCookies = SecondaryButton("Export Firefox cookies…", (_, _) =>
+        {
+            var result = FirefoxCookieExporter.Export();
+            if (!result.Ok)
+            {
+                MessageBox.Show(this, result.Error ?? "Couldn't export cookies from Firefox.", "Export Firefox cookies",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            _cookieFile.Text = result.Path;
+            _youTubeCookies.SelectedIndex = Array.IndexOf(CookieChoices, "file");
+            MessageBox.Show(this, $"Exported {result.Count} cookie{(result.Count == 1 ? "" : "s")} from Firefox.", "Export Firefox cookies",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        });
+        exportFirefoxCookies.Margin = new Thickness(8, 0, 0, 0);
+        var cookieFileRow = new DockPanel { Margin = new Thickness(0, 8, 0, 0), Visibility = Visibility.Collapsed };
+        DockPanel.SetDock(exportFirefoxCookies, Dock.Right);
+        cookieFileRow.Children.Add(exportFirefoxCookies);
+        DockPanel.SetDock(browseCookieFile, Dock.Right);
+        cookieFileRow.Children.Add(browseCookieFile);
+        cookieFileRow.Children.Add(_cookieFile);
+        _cookieFileRow = cookieFileRow;
+        void UpdateCookieFileRowVisibility() =>
+            cookieFileRow.Visibility = CookieChoices[Math.Max(0, _youTubeCookies.SelectedIndex)] == "file" ? Visibility.Visible : Visibility.Collapsed;
+        UpdateCookieFileRowVisibility();
+        _youTubeCookies.SelectionChanged += (_, _) => UpdateCookieFileRowVisibility();
 
         var body = new StackPanel { Margin = new Thickness(26, 24, 26, 22) };
         body.Children.Add(Eyebrow("SETTINGS"));
@@ -67,9 +105,12 @@ public sealed class SettingsWindow : SinkDialog
 
         body.Children.Add(Label("YouTube cookies"));
         body.Children.Add(_youTubeCookies);
+        body.Children.Add(_cookieFileRow);
         body.Children.Add(new TextBlock
         {
-            Text = "Lets yt-dlp borrow a signed-in browser's cookies so YouTube doesn't ask Sink to \"confirm you're not a bot\".",
+            Text = "Lets yt-dlp borrow a signed-in browser's cookies so YouTube doesn't ask Sink to \"confirm you're not a bot\". " +
+                   "\"Cookie file\" uses a cookies.txt you point at directly instead of reading live from a browser — more reliable than Chrome/Edge (their cookie store can't always be read at all) and immune to a browser being open. " +
+                   "\"Export Firefox cookies…\" builds one for you straight from Firefox, since its cookie store is the one browser Sink can read directly and safely.",
             Foreground = Hex("#6E7584"), FontSize = 11, Margin = new Thickness(0, 5, 0, 0), TextWrapping = TextWrapping.Wrap,
         });
 
@@ -126,6 +167,7 @@ public sealed class SettingsWindow : SinkDialog
             SyncOnConnect = _syncOnConnect.IsChecked == true,
             ImportMode = (ImportMode)Math.Max(0, _importMode.SelectedIndex),
             YouTubeCookies = cookieChoice,
+            CookieFilePath = _cookieFile.Text.Trim(),
         };
         // A cookie failure earlier this session (e.g. Chrome's DPAPI-encrypted
         // store) latches "give up on cookies" for the rest of the process —

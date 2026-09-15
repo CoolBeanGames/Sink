@@ -633,6 +633,15 @@ public static partial class DownloadService
         if (_cookiesKnownBroken) return [];
         var choice = (AppSettings.Current.YouTubeCookies ?? "auto").Trim().ToLowerInvariant();
         if (choice is "none" or "off" or "") return [];
+        // A manually-supplied cookies.txt sidesteps live browser-cookie
+        // extraction entirely (Chrome/Edge's DPAPI store, a locked profile
+        // while the browser's open) — it's just a static file yt-dlp reads
+        // directly, no extraction step to fail.
+        if (choice == "file")
+        {
+            var path = AppSettings.Current.CookieFilePath;
+            return string.IsNullOrWhiteSpace(path) || !File.Exists(path) ? [] : ["--cookies", path];
+        }
         var browser = choice == "auto" ? DetectInstalledBrowser() : choice;
         return browser is null ? [] : ["--cookies-from-browser", browser];
     }

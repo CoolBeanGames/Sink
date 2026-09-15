@@ -41,10 +41,21 @@ public sealed class AppSettings
 
     /// <summary>
     /// Which browser's cookies yt-dlp borrows to get past YouTube's "confirm
-    /// you're not a bot" wall: "auto" (detect an installed browser), "none", or
-    /// an explicit yt-dlp browser name (edge, chrome, firefox, brave, …).
+    /// you're not a bot" wall: "auto" (detect an installed browser), "none",
+    /// "file" (a manually-supplied cookies.txt, see <see cref="CookieFilePath"/>),
+    /// or an explicit yt-dlp browser name (edge, chrome, firefox, brave, …).
     /// </summary>
     public string YouTubeCookies { get; set; } = "auto";
+
+    /// <summary>
+    /// Path to a Netscape-format cookies.txt used when YouTubeCookies is "file" —
+    /// either hand-exported by the user, or written by "Export Firefox
+    /// cookies…" in Settings. Sidesteps live browser-cookie extraction
+    /// entirely (Chrome/Edge's DPAPI-encrypted store, a locked profile while
+    /// the browser is open, etc.) since it's just a static file yt-dlp reads
+    /// with --cookies.
+    /// </summary>
+    public string CookieFilePath { get; set; } = "";
 
     [JsonIgnore]
     public static AppSettings Current { get; private set; } = new();
@@ -80,5 +91,6 @@ public sealed class AppSettings
         SyncOnConnect = SyncOnConnect,
         ImportMode = ImportMode,
         YouTubeCookies = YouTubeCookies,
+        CookieFilePath = CookieFilePath,
     };
 }
