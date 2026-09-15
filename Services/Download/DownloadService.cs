@@ -754,6 +754,12 @@ public static partial class DownloadService
         _cookiesKnownBroken = true;
         var browser = cookieArgs.Count > 1 ? cookieArgs[1] : "?";
         Log.Warn($"yt-dlp couldn't read cookies from {browser}, retrying without them: {FirstError(result.stderr)}");
+        // FirstError's rewrite is a friendly paraphrase and can obscure which
+        // browser-specific failure actually happened (e.g. a genuine DPAPI
+        // failure reads identically to a locked/unreadable profile of a
+        // completely different browser) — keep the real stderr recoverable
+        // here instead of only ever showing the laundered version.
+        Log.Warn($"Raw yt-dlp cookie failure for {browser}:\n{result.stderr}");
         return await RunProcessAsync(arguments, onLine, token).ConfigureAwait(false);
     }
 
