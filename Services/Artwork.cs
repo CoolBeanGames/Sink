@@ -2,6 +2,7 @@ using System.IO;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 
@@ -90,6 +91,59 @@ public static class Artwork
             return path;
         }
         catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Searches the iTunes Search API (public, no key required) for an
+    /// album's cover art by album+artist name and downloads the highest
+    /// resolution version offered, cached under the given key. iTunes cover
+    /// art is always already square. Blocking — call from a worker thread.
+    /// Returns null when nothing matched or the request failed; never throws.
+    /// </summary>
+    public static string? SearchAndDownloadAlbumArt(string album, string artist, string key)
+    {
+        if (string.IsNullOrWhiteSpace(album)) return null;
+        try
+        {
+            var term = Uri.EscapeDataString($"{album} {artist}".Trim());
+            var searchUrl = $"https://itunes.apple.com/search?term={term}&entity=album&limit=1";
+            var json = Http.GetStringAsync(searchUrl).GetAwaiter().GetResult();
+            using var doc = JsonDocument.Parse(json);
+            var results = doc.RootElement.GetProperty("results");
+            if (results.GetArrayLength() == 0) return null;
+            var artworkUrl = results[0].GetProperty("artworkUrl100").GetString();
+            if (string.IsNullOrWhiteSpace(artworkUrl)) return null;
+            var bigUrl = artworkUrl.Replace("100x100bb", "1200x1200bb");
+            var data = Http.GetByteArrayAsync(bigUrl).GetAwaiter().GetResult();
+            return SaveOverride(key, data);
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Force-saves image bytes under a key, overwriting any existing cached
+    /// file at that key — unlike <see cref="Save"/>'s write-once cache
+    /// semantics, this is for a deliberate one-off override (a downloaded
+    /// album cover, or a manually chosen genre/artist image) that should
+    /// take effect even if something was already cached there.
+    /// </summary>
+    public static string? SaveOverride(string key, byte[] data)
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(Directory);
+            var name = Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(key)))[..16] + ".jpg";
+            var path = Path.Combine(Directory, name);
+            SquareCropTo(data, path);
+            return path;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException or ImageFormatException or InvalidImageContentException)
         {
             return null;
         }

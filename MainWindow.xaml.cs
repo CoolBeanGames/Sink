@@ -131,7 +131,7 @@ public partial class MainWindow : Window
     {
         if (e.ChangedButton != MouseButton.Middle) return;
         var sv = FindScrollViewer(e.OriginalSource as DependencyObject);
-        if (sv is null || (sv.ScrollableHeight == 0 && sv.ScrollableWidth == 0)) return;
+        if (sv is null) return;
         _panScrollViewer = sv;
         _panOrigin = e.GetPosition(this);
         _panOffsetV = sv.VerticalOffset;
@@ -197,11 +197,26 @@ public partial class MainWindow : Window
         _panOrigin = Mouse.GetPosition(this);
     }
 
+    /// <summary>
+    /// Walks up from a click's OriginalSource for the nearest ScrollViewer
+    /// that's actually scrollable — skipping past one that reports zero
+    /// ScrollableHeight/Width instead of stopping at it. GroupsView (the
+    /// Albums/Artists/Genres card grid) sits inside an outer GroupsScroller
+    /// but also carries ScrollViewer.VerticalScrollBarVisibility="Disabled"
+    /// on itself, which deliberately makes its own internal template
+    /// ScrollViewer never scroll — walking up hits that inner, permanently
+    /// non-scrollable one first and used to stop there, so middle-drag
+    /// found "a" ScrollViewer and correctly (by its own logic) treated it as
+    /// nothing to scroll, never reaching the real GroupsScroller one level
+    /// further up. TracksGrid only has a single ScrollViewer in its chain
+    /// (its own, actually scrollable one), so it was never affected.
+    /// </summary>
     private static ScrollViewer? FindScrollViewer(DependencyObject? node)
     {
         while (node is not null)
         {
-            if (node is ScrollViewer sv) return sv;
+            if (node is ScrollViewer { ScrollableHeight: > 0 } or ScrollViewer { ScrollableWidth: > 0 })
+                return (ScrollViewer)node;
             node = node is Visual or System.Windows.Media.Media3D.Visual3D
                 ? VisualTreeHelper.GetParent(node)
                 : LogicalTreeHelper.GetParent(node);
@@ -583,8 +598,8 @@ public partial class MainWindow : Window
 
         var groups = _category switch
         {
-            LibraryCategory.Artists => source.GroupBy(track => track.Artist).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key, group)),
-            LibraryCategory.Genres => source.GroupBy(track => track.Genre).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key, group)),
+            LibraryCategory.Artists => source.GroupBy(track => track.Artist).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key, group, $"artist:{group.Key}")),
+            LibraryCategory.Genres => source.GroupBy(track => track.Genre).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key, group, $"genre:{group.Key}")),
             _ => source.GroupBy(track => track.Album).Select(group => Card(group.Key, group.First().Artist, group.Key, group))
         };
         var cards = groups.Where(card => query.Length == 0 || card.Name.Contains(query, StringComparison.OrdinalIgnoreCase)).OrderBy(card => card.Name).ToList();
@@ -607,11 +622,12 @@ public partial class MainWindow : Window
         return _syncedTrackIds.Count == 0 ? "Nothing synced to iPod yet — drag music onto IPOD" : null;
     }
 
-    private static GroupCard Card(string name, string detail, string colorSeed, IEnumerable<Track> members)
+    private static GroupCard Card(string name, string detail, string colorSeed, IEnumerable<Track> members, string? artworkOverrideKey = null)
     {
         var palette = new[] { "#273A78", "#6E354B", "#285D56", "#6C4D31" };
         var initial = string.IsNullOrEmpty(name) ? "?" : name[..1].ToUpperInvariant();
-        var artPath = members.Select(t => t.ArtworkPath).FirstOrDefault(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p));
+        var artPath = (artworkOverrideKey is not null ? Artwork.CachedPath(artworkOverrideKey) : null)
+            ?? members.Select(t => t.ArtworkPath).FirstOrDefault(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p));
         return new GroupCard(name, detail, initial,
             new SolidColorBrush((Color)ColorConverter.ConvertFromString(palette[Math.Abs(colorSeed.GetHashCode()) % palette.Length])),
             LoadArtwork(artPath));
@@ -994,6 +1010,7 @@ public partial class MainWindow : Window
                         Sink.Services.Ipod.IpodWriteService.PushTrackMetadata(metaRoot, snapshot, metaDeviceId));
                 }
                 finally { _ipodWriting = false; }
+                SaveLibrary(); // persists LastSyncedKey/SyncedIpodPlayCounts set above
             }
             StartIpodSync();
             PlaybackStatus.Text = !refreshed
@@ -1070,6 +1087,11 @@ public partial class MainWindow : Window
             _ipodSyncCts?.Dispose();
             _ipodSyncCts = null;
             StopIpodSync();
+            // Sync() may have set LastSyncedKey/SyncedIpodPlayCounts on these
+            // tracks in memory — persist it, or a retag synced once and never
+            // saved again would hit the exact same cold-start duplicate on
+            // its next sync as if the identity had never been recorded.
+            SaveLibrary();
             LoadIpodLibrary(root);
         }
         return added;
@@ -1116,6 +1138,7 @@ public partial class MainWindow : Window
             _ipodSyncCts?.Dispose();
             _ipodSyncCts = null;
             StopIpodSync();
+            SaveLibrary();
             LoadIpodLibrary(root);
         }
     }
@@ -1152,6 +1175,7 @@ public partial class MainWindow : Window
             _ipodWriting = false;
             _ipodSyncCts?.Dispose();
             _ipodSyncCts = null;
+            SaveLibrary();
             LoadIpodLibrary(root);
         }
     }
@@ -1628,7 +1652,14 @@ public partial class MainWindow : Window
         else
             menu.Items.Add(Item("Edit metadata…", () => EditMetadata(tracks)));
         if (kind == LibraryCategory.Albums && single)
+        {
             menu.Items.Add(Item("Crop album art", () => CropAlbumArt(cards[0].Name, tracks)));
+            menu.Items.Add(Item("Download album art", () => DownloadAlbumArt(cards[0].Name, tracks)));
+        }
+        if (kind == LibraryCategory.Genres && single)
+            menu.Items.Add(Item("Set genre artwork…", () => SetGroupArtwork("genre", cards[0].Name)));
+        if (kind == LibraryCategory.Artists && single)
+            menu.Items.Add(Item("Set artist artwork…", () => SetGroupArtwork("artist", cards[0].Name)));
         menu.Items.Add(AddToPlaylistMenu(tracks));
         if (_source == LibrarySource.Ipod)
             menu.Items.Add(Item("Unsync from iPod", () => UnsyncTracks(tracks)));
@@ -1787,6 +1818,59 @@ public partial class MainWindow : Window
         SaveLibrary();
         RenderLibrary();
         PlaybackStatus.Text = $"Cropped album art for {album}";
+    }
+
+    /// <summary>Searches online for the album's cover art and applies it to every track in the album, same as a manual crop. Does nothing but report it when no match is found.</summary>
+    private async void DownloadAlbumArt(string album, IReadOnlyList<Track> tracks)
+    {
+        var artist = tracks.Select(t => t.Artist).FirstOrDefault() ?? "";
+        var key = $"{album}|{artist}";
+        PlaybackStatus.Text = $"Searching for cover art for {album}…";
+        var path = await Task.Run(() => Artwork.SearchAndDownloadAlbumArt(album, artist, key));
+        if (path is null)
+        {
+            PlaybackStatus.Text = $"No cover art found for {album}";
+            return;
+        }
+        foreach (var track in tracks) track.ArtworkPath = path;
+        _artCache.Clear();
+        SaveLibrary();
+        RenderLibrary();
+        PlaybackStatus.Text = $"Downloaded cover art for {album}";
+    }
+
+    /// <summary>
+    /// Lets the user manually pick an image file to represent a genre or
+    /// artist in the browse grid. Stored under its own "genre:"/"artist:"
+    /// artwork-cache key, separate from any track's ArtworkPath — this only
+    /// ever changes what the card shows, never any track's own art.
+    /// </summary>
+    private void SetGroupArtwork(string kindKey, string name)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = $"Choose artwork for \"{name}\"",
+            Filter = "Image files|*.jpg;*.jpeg;*.png;*.bmp;*.gif|All files|*.*"
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        byte[] data;
+        try { data = File.ReadAllBytes(dialog.FileName); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            PlaybackStatus.Text = $"Couldn't read that file";
+            return;
+        }
+
+        var saved = Artwork.SaveOverride($"{kindKey}:{name}", data);
+        if (saved is null)
+        {
+            PlaybackStatus.Text = $"Couldn't use that image for {name}";
+            return;
+        }
+        _artCache.Clear();
+        RenderLibrary();
+        PlaybackStatus.Text = $"Updated artwork for {name}";
     }
 
     private async void DeleteTracks(IReadOnlyList<Track> tracks)
