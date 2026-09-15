@@ -43,7 +43,8 @@ public static class IpodWriteService
         string root,
         IReadOnlyList<Track> tracks,
         IProgress<(int done, int total, string message)>? progress = null,
-        CancellationToken token = default)
+        CancellationToken token = default,
+        string? deviceId = null)
     {
         var eligible = tracks.Where(t => IsSyncable(t.FilePath) && !t.ExcludedFromShuffle).ToList();
         var skipped = tracks.Count - eligible.Count;
@@ -81,6 +82,8 @@ public static class IpodWriteService
                 }
                 catch (TrackAlreadyExistsException existing) { present++; onDevice = existing.ExistingTrack; }
                 catch (OutOfDiskSpaceException) { skipped += eligible.Count - i; break; }
+
+                if (PushPlayCount(onDevice, src, deviceId)) changedDb = true;
 
                 // A track only shows under the device's own Podcasts menu when
                 // it's a member of the special "Podcasts" playlist — the
@@ -133,7 +136,8 @@ public static class IpodWriteService
         string playlistName,
         IReadOnlyList<Track> tracks,
         IProgress<(int done, int total, string message)>? progress = null,
-        CancellationToken token = default)
+        CancellationToken token = default,
+        string? deviceId = null)
     {
         var eligible = tracks.Where(t => IsSyncable(t.FilePath) && !t.ExcludedFromShuffle).ToList();
         var skipped = tracks.Count - eligible.Count;
@@ -193,6 +197,8 @@ public static class IpodWriteService
                     onDevice = existing.ExistingTrack;
                 }
                 catch (OutOfDiskSpaceException) { skipped += eligible.Count - i; break; }
+
+                if (PushPlayCount(onDevice, src, deviceId)) changedDb = true;
 
                 if (onDevice is not null && !playlist.ContainsTrack(onDevice))
                 {
@@ -367,6 +373,29 @@ public static class IpodWriteService
     /// landed as an indistinguishable, invisible-under-Podcasts plain Music
     /// track even though the write itself fully succeeded (task 140/146).
     /// </summary>
+    /// <summary>
+    /// Pushes Sink's own play count for this track up to the device, so a
+    /// song played inside Sink (not on the device itself) shows an updated
+    /// count on the iPod after the next sync — previously only the reverse
+    /// direction (device plays folding into Sink, see
+    /// MainWindow.SyncMusicPlayCountsFromIpod) was ever wired up. Shares the
+    /// same SyncedIpodPlayCounts baseline that reverse direction diffs
+    /// against, and never lowers whatever the device itself already reports
+    /// in case a play happened on-device between this sync's read and write
+    /// halves. Returns true if the device's own record actually changed
+    /// (contributing to changedDb so this alone still triggers a save).
+    /// </summary>
+    private static bool PushPlayCount(CwTrack? onDevice, Track src, string? deviceId)
+    {
+        if (onDevice is null || string.IsNullOrWhiteSpace(deviceId)) return false;
+        var target = Math.Max(onDevice.PlayCount, src.PlayCount);
+        src.SyncedIpodPlayCounts ??= [];
+        src.SyncedIpodPlayCounts[deviceId] = target;
+        if (target == onDevice.PlayCount) return false;
+        onDevice.PlayCount = target;
+        return true;
+    }
+
     private static void MarkPodcast(CwTrack? onDevice, Track src)
     {
         if (onDevice is null || !string.Equals(src.Genre, "Podcast", StringComparison.OrdinalIgnoreCase)) return;

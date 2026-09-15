@@ -124,7 +124,7 @@ public partial class MainWindow : Window
     private DispatcherTimer? _edgeScrollTimer;
     private int _edgeDirectionV;
     private int _edgeDirectionH;
-    private const double EdgeScrollZone = 32;
+    private const double EdgeScrollZone = 150;
     private const double EdgeScrollStep = 14;
 
     private void MiddleDragPan_Down(object sender, MouseButtonEventArgs e)
@@ -145,10 +145,16 @@ public partial class MainWindow : Window
     {
         if (_panScrollViewer is null) return;
         var p = e.GetPosition(this);
-        _panScrollViewer.ScrollToVerticalOffset(_panOffsetV + (p.Y - _panOrigin.Y) * 1.6);
-        if (_panScrollViewer.ScrollableWidth > 0)
-            _panScrollViewer.ScrollToHorizontalOffset(_panOffsetH + (p.X - _panOrigin.X) * 1.6);
         UpdateEdgeAutoScroll(p);
+        // Inside the edge zone, the timer below drives scrolling on its own at
+        // a constant rate — blending it with the proportional formula here
+        // made even a tiny mouse twitch while holding the edge fight with the
+        // timer's own adjustment and jitter/overshoot instead of scrolling
+        // smoothly in one direction.
+        if (_edgeDirectionV == 0)
+            _panScrollViewer.ScrollToVerticalOffset(_panOffsetV + (p.Y - _panOrigin.Y) * 1.6);
+        if (_edgeDirectionH == 0 && _panScrollViewer.ScrollableWidth > 0)
+            _panScrollViewer.ScrollToHorizontalOffset(_panOffsetH + (p.X - _panOrigin.X) * 1.6);
     }
 
     private void MiddleDragPan_Up(object sender, MouseButtonEventArgs e)
@@ -1000,6 +1006,13 @@ public partial class MainWindow : Window
         }
 
         var payload = tracks.ToList();
+        // Fresh PlayCount for every track before it's pushed below — a song
+        // played inside Sink itself only shows up on the device from here
+        // (task: play counts should also flow app-to-device, not just the
+        // reverse), so this must reflect every listen recorded so far,
+        // including whatever RefreshIpodLibraryFromDeviceAsync just folded in.
+        RecomputePlayCounts();
+        var deviceId = _ipodLibrary?.SerialNumber;
         _ipodWriting = true;
         StartIpodSync(indefinite: true);
         var progress = SyncProgress();
@@ -1008,7 +1021,7 @@ public partial class MainWindow : Window
         var added = 0;
         try
         {
-            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.Sync(root, payload, progress, token));
+            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.Sync(root, payload, progress, token, deviceId));
             PlaybackStatus.Text = result.Summary;
             added = result.Added;
         }
@@ -1048,6 +1061,8 @@ public partial class MainWindow : Window
             return;
         }
 
+        RecomputePlayCounts();
+        var deviceId = _ipodLibrary?.SerialNumber;
         _ipodWriting = true;
         StartIpodSync(indefinite: true);
         var progress = SyncProgress();
@@ -1055,7 +1070,7 @@ public partial class MainWindow : Window
         var token = _ipodSyncCts.Token;
         try
         {
-            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks, progress, token));
+            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks, progress, token, deviceId));
             PlaybackStatus.Text = result.Summary;
         }
         catch (OperationCanceledException)
@@ -1082,6 +1097,8 @@ public partial class MainWindow : Window
     {
         var root = _ipodDevice?.LibraryRoot;
         if (root is null || _ipodWriting) return;
+        RecomputePlayCounts();
+        var deviceId = _ipodLibrary?.SerialNumber;
         _ipodWriting = true;
         _ipodSyncCts = new CancellationTokenSource();
         var token = _ipodSyncCts.Token;
@@ -1091,7 +1108,7 @@ public partial class MainWindow : Window
             {
                 var tracks = _tracks.Where(t => playlist.TrackIds.Contains(t.Id) && !t.ExcludedFromShuffle).ToList();
                 if (tracks.Count == 0) continue;
-                await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks, token: token));
+                await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks, token: token, deviceId: deviceId));
             }
         }
         catch (OperationCanceledException)
@@ -1298,7 +1315,51 @@ public partial class MainWindow : Window
         _ = SyncTracksToDevice(syncable);
     }
 
-    private void TracksGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) => _trackDragStart = e.GetPosition(TracksGrid);
+    // ---- Ctrl+click a field to edit it in place (task: inline retag from
+    // any song list, not just Downloads/Tags which already always show
+    // editable fields) ------------------------------------------------------
+
+    private static readonly HashSet<string> EditableTrackColumns = new(StringComparer.Ordinal) { "#", "TITLE", "ARTIST", "ALBUM", "GENRE" };
+
+    private void TracksGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _trackDragStart = e.GetPosition(TracksGrid);
+        if (Keyboard.Modifiers != ModifierKeys.Control) return;
+        // The iPod side shows a read-only mirror of what's on the device
+        // (or a snapshot of what's synced) — not something to hand-edit
+        // directly here; edit the real library track and re-sync instead.
+        if (_source != LibrarySource.Music) return;
+        if (FindAncestor<DataGridCell>(e.OriginalSource as DependencyObject) is not { } cell) return;
+        if (cell.Column?.Header is not string header || !EditableTrackColumns.Contains(header)) return;
+        TracksGrid.IsReadOnly = false;
+        TracksGrid.CurrentCell = new DataGridCellInfo(cell.DataContext, cell.Column);
+        TracksGrid.BeginEdit();
+        e.Handled = true;
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? node) where T : DependencyObject
+    {
+        while (node is not null && node is not T)
+            node = VisualTreeHelper.GetParent(node);
+        return node as T;
+    }
+
+    /// <summary>
+    /// The grid stays IsReadOnly the rest of the time (single-click select,
+    /// double-click play, drag-select, drag-to-playlist all rely on that) —
+    /// only a Ctrl+click above briefly lifts it for exactly one cell's edit.
+    /// CellEditEnding fires before the edit actually commits into the Track,
+    /// so the flag is reset (and the library saved) one dispatcher pass later.
+    /// </summary>
+    private void TracksGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
+    {
+        var commit = e.EditAction == DataGridEditAction.Commit;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            TracksGrid.IsReadOnly = true;
+            if (commit) SaveLibrary();
+        }), DispatcherPriority.Background);
+    }
 
     private void TracksGrid_PreviewMouseMove(object sender, MouseEventArgs e)
     {

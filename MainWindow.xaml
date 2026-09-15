@@ -48,6 +48,19 @@
              visibly out of line with the rest of the row. -->
         <Style TargetType="DataGridCell"><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="12,9"/><Setter Property="Foreground" Value="#BFC4CE"/><Setter Property="Background" Value="Transparent"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/><Setter Property="VerticalContentAlignment" Value="Center"/></Style>
         <Style TargetType="DataGridRow"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="#20252F"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="MinHeight" Value="48"/><Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#1B1F28"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#2B2850"/><Setter Property="Foreground" Value="#F4F6FA"/></Trigger></Style.Triggers></Style>
+        <!-- Ctrl+click briefly begins editing a single TracksGrid cell (task:
+             inline retag anywhere a song list is shown) — without this the
+             editor falls back to a plain white WPF TextBox that clashes with
+             the rest of the dark UI. -->
+        <Style x:Key="TracksEditingCellStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="#0F1218"/>
+            <Setter Property="Foreground" Value="#F4F6FA"/>
+            <Setter Property="CaretBrush" Value="#F4F6FA"/>
+            <Setter Property="BorderBrush" Value="#8B7CFF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="11,8"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
     </Window.Resources>
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="94"/></Grid.RowDefinitions>
@@ -238,7 +251,7 @@
             <Border x:Name="TracksBorder" Grid.Row="1" Margin="0,28,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#12151C" Visibility="Collapsed">
                 <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                 <Border x:Name="SelectionBar" Visibility="Collapsed" Background="Transparent" BorderBrush="#262C38" BorderThickness="0,0,0,1" Padding="15,9"><DockPanel><Button Content="Clear" DockPanel.Dock="Right" Click="ClearSelection_Click" Background="Transparent" Foreground="#9D91FF" BorderThickness="0"/><TextBlock x:Name="SelectionText" Foreground="#7D8493" FontSize="11" VerticalAlignment="Center"/></DockPanel></Border>
-                <DataGrid x:Name="TracksGrid" Grid.Row="1" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="None" Background="Transparent" BorderThickness="0" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow" VirtualizingPanel.ScrollUnit="Pixel" SelectionChanged="TracksGrid_SelectionChanged" MouseDoubleClick="TracksGrid_MouseDoubleClick" PreviewMouseLeftButtonDown="TracksGrid_PreviewMouseLeftButtonDown" PreviewMouseMove="TracksGrid_PreviewMouseMove" ContextMenuOpening="TracksGrid_ContextMenuOpening">
+                <DataGrid x:Name="TracksGrid" Grid.Row="1" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="None" Background="Transparent" BorderThickness="0" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow" VirtualizingPanel.ScrollUnit="Pixel" SelectionChanged="TracksGrid_SelectionChanged" MouseDoubleClick="TracksGrid_MouseDoubleClick" PreviewMouseLeftButtonDown="TracksGrid_PreviewMouseLeftButtonDown" PreviewMouseMove="TracksGrid_PreviewMouseMove" ContextMenuOpening="TracksGrid_ContextMenuOpening" CellEditEnding="TracksGrid_CellEditEnding">
                     <DataGrid.ContextMenu><ContextMenu/></DataGrid.ContextMenu>
                     <DataGrid.Columns>
                         <DataGridTemplateColumn Header="♥" Width="30">
@@ -265,7 +278,7 @@
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="#" Binding="{Binding TrackNumber}" Width="48"/><DataGridTextColumn Header="TITLE" Binding="{Binding Title}" Width="2*"/><DataGridTextColumn Header="ARTIST" Binding="{Binding Artist}" Width="*"/><DataGridTextColumn Header="ALBUM" Binding="{Binding Album}" Width="*"/><DataGridTextColumn Header="GENRE" Binding="{Binding Genre}" Width="110"/><DataGridTextColumn Header="TIME" Binding="{Binding DurationText}" Width="70"/>
+                        <DataGridTextColumn Header="#" Binding="{Binding TrackNumber}" Width="48" EditingElementStyle="{StaticResource TracksEditingCellStyle}"/><DataGridTextColumn Header="TITLE" Binding="{Binding Title}" Width="2*" EditingElementStyle="{StaticResource TracksEditingCellStyle}"/><DataGridTextColumn Header="ARTIST" Binding="{Binding Artist}" Width="*" EditingElementStyle="{StaticResource TracksEditingCellStyle}"/><DataGridTextColumn Header="ALBUM" Binding="{Binding Album}" Width="*" EditingElementStyle="{StaticResource TracksEditingCellStyle}"/><DataGridTextColumn Header="GENRE" Binding="{Binding Genre}" Width="110" EditingElementStyle="{StaticResource TracksEditingCellStyle}"/><DataGridTextColumn Header="TIME" Binding="{Binding DurationText}" Width="70"/>
                         <!-- Template column with an explicit VerticalAlignment, not a plain
                              DataGridTextColumn — see the Tags-page TIME column fix; a plain
                              text column's auto-generated TextBlock doesn't reliably pick up
