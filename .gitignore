@@ -4,3 +4,5 @@ obj/
 publish/
 *.log
 *.zip
+builds/
+.zen-queue.json

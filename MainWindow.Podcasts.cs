@@ -67,9 +67,9 @@ public partial class MainWindow
         PodcastPage.Visibility = Visibility.Visible;
         IpodCanvas.Visibility = Visibility.Visible;
 
-        MusicNav.Visibility = Visibility.Collapsed;
-        IpodNav.Visibility = Visibility.Collapsed;
-        PodcastNav.Visibility = Visibility.Visible;
+        SetNavExpanded(MusicNav, MusicNavTransform, false);
+        SetNavExpanded(IpodNav, IpodNavTransform, false);
+        SetNavExpanded(PodcastNav, PodcastNavTransform, true);
         MusicHeaderButton.Tag = null;
         IpodHeaderButton.Tag = null;
         DownloadHeaderButton.Tag = null;
@@ -92,7 +92,7 @@ public partial class MainWindow
         _podcastViewActive = false;
         PodcastPage.Visibility = Visibility.Collapsed;
         MusicPage.Visibility = Visibility.Visible;
-        PodcastNav.Visibility = Visibility.Collapsed;
+        SetNavExpanded(PodcastNav, PodcastNavTransform, false);
         PodcastsHeaderButton.Tag = null;
     }
 

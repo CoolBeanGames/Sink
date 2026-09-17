@@ -1,0 +1,678 @@
+{
+  "schemaVersion": 1,
+  "projectId": "2fe841d9532447b7b9eaf5db78bbadde",
+  "name": "Sink",
+  "nextCardIndex": 215,
+  "latestExePath": "bin/Release/net10.0-windows/Sink.exe",
+  "latestReleasePath": "bin/Release/net10.0-windows/Sink.exe",
+  "tagCatalog": [
+    {
+      "name": "bug",
+      "color": "#7A2632"
+    },
+    {
+      "name": "task",
+      "color": "#8A4F78"
+    },
+    {
+      "name": "music",
+      "color": "#6557B8"
+    },
+    {
+      "name": "ui",
+      "color": "#2F7A68"
+    },
+    {
+      "name": "playback",
+      "color": "#8C553E"
+    },
+    {
+      "name": "ipod",
+      "color": "#8A4F78"
+    },
+    {
+      "name": "syncing",
+      "color": "#57742F"
+    },
+    {
+      "name": "import",
+      "color": "#8C553E"
+    },
+    {
+      "name": "playlists",
+      "color": "#6557B8"
+    },
+    {
+      "name": "drag and drop",
+      "color": "#704F9B"
+    },
+    {
+      "name": "selection",
+      "color": "#3F6F77"
+    },
+    {
+      "name": "right click",
+      "color": "#6557B8"
+    },
+    {
+      "name": "window",
+      "color": "#8A4F78"
+    },
+    {
+      "name": "effects",
+      "color": "#2F7A68"
+    },
+    {
+      "name": "polish",
+      "color": "#2F7A68"
+    },
+    {
+      "name": "library",
+      "color": "#6557B8"
+    },
+    {
+      "name": "data",
+      "color": "#3F6F77"
+    },
+    {
+      "name": "cleanup",
+      "color": "#2F7A68"
+    },
+    {
+      "name": "in progress",
+      "color": "#8B7CFF"
+    },
+    {
+      "name": "metadata",
+      "color": "#815B32"
+    },
+    {
+      "name": "album art",
+      "color": "#3F6F77"
+    },
+    {
+      "name": "branches",
+      "color": "#386D9A"
+    },
+    {
+      "name": "download",
+      "color": "#57742F"
+    },
+    {
+      "name": "downloads",
+      "color": "#6557B8"
+    },
+    {
+      "name": "merge",
+      "color": "#386D9A"
+    },
+    {
+      "name": "settings dialog",
+      "color": "#8C553E"
+    },
+    {
+      "name": "Podcasts",
+      "color": "#57742F"
+    },
+    {
+      "name": "crash",
+      "color": "#2F7A68"
+    },
+    {
+      "name": "files",
+      "color": "#6557B8"
+    },
+    {
+      "name": "do",
+      "color": "#8A4F78"
+    },
+    {
+      "name": "input",
+      "color": "#704F9B"
+    },
+    {
+      "name": "d",
+      "color": "#386D9A"
+    },
+    {
+      "name": "buttons",
+      "color": "#704F9B"
+    },
+    {
+      "name": "notifications",
+      "color": "#815B32"
+    },
+    {
+      "name": "tags",
+      "color": "#3F6F77"
+    },
+    {
+      "name": "reflect",
+      "color": "#6557B8"
+    },
+    {
+      "name": "playlist",
+      "color": "#57742F"
+    },
+    {
+      "name": "yt-dlp",
+      "color": "#815B32"
+    },
+    {
+      "name": "feature",
+      "color": "#8C553E"
+    },
+    {
+      "name": "sunnify",
+      "color": "#815B32"
+    },
+    {
+      "name": "New Feature",
+      "color": "#3F6F77"
+    },
+    {
+      "name": "Field",
+      "color": "#57742F"
+    },
+    {
+      "name": "debug",
+      "color": "#3F6F77"
+    },
+    {
+      "name": "description",
+      "color": "#2F7A68"
+    },
+    {
+      "name": "Version",
+      "color": "#815B32"
+    },
+    {
+      "name": "Planned",
+      "color": "#8A4F78"
+    },
+    {
+      "name": "Stretch",
+      "color": "#2F7A68"
+    },
+    {
+      "name": "Broken",
+      "color": "#2F7A68"
+    },
+    {
+      "name": "Finished",
+      "color": "#3F6F77"
+    },
+    {
+      "name": "Status",
+      "color": "#6557B8"
+    },
+    {
+      "name": "only close on finished",
+      "color": "#815B32"
+    },
+    {
+      "name": "test",
+      "color": "#2F7A68"
+    },
+    {
+      "name": "Choice",
+      "color": "#2F7A68"
+    },
+    {
+      "name": "some",
+      "color": "#386D9A"
+    },
+    {
+      "name": "tag",
+      "color": "#8C553E"
+    },
+    {
+      "name": "thing",
+      "color": "#6557B8"
+    },
+    {
+      "name": "verified-fix",
+      "color": "#386D9A"
+    },
+    {
+      "name": "sync",
+      "color": "#386D9A"
+    },
+    {
+      "name": "animations",
+      "color": "#9A6334"
+    }
+  ],
+  "customCardTypes": [
+    {
+      "id": "4a2da523c083488b995637914686fd31",
+      "name": "new feature",
+      "instructions": "this defines a new feature, the description details what the feature should actually do.",
+      "cardColor": "#B99473",
+      "outlineColor": "#2A303D",
+      "headerTextColor": "#0E1117",
+      "mainTextColor": "#1D222C",
+      "textBoxColor": "#F4F6FA",
+      "outlineWidth": 1,
+      "shrinkExpandedToContent": false,
+      "shrinkCompactToContent": false,
+      "fields": [
+        {
+          "id": "328be7c2963d4d8a93d1c51c9e992743",
+          "name": "description",
+          "type": "text",
+          "defaultValue": "enter feature description",
+          "options": [],
+          "showOnExpanded": false,
+          "showOnCollapsed": false,
+          "x": 12,
+          "y": 60,
+          "width": 576,
+          "height": 120,
+          "expandedX": 0,
+          "expandedY": 12,
+          "expandedWidth": 228,
+          "expandedHeight": 60,
+          "compactX": 12,
+          "compactY": 12,
+          "compactWidth": 160,
+          "compactHeight": 48
+        },
+        {
+          "id": "6e6f7795a64141b286d63c76478e6292",
+          "name": "Version",
+          "type": "number",
+          "defaultValue": "0",
+          "options": [],
+          "showOnExpanded": true,
+          "showOnCollapsed": true,
+          "x": 480,
+          "y": 0,
+          "width": 108,
+          "height": 60,
+          "expandedX": 156,
+          "expandedY": 0,
+          "expandedWidth": 60,
+          "expandedHeight": 60,
+          "compactX": 120,
+          "compactY": 0,
+          "compactWidth": 60,
+          "compactHeight": 48
+        },
+        {
+          "id": "560fb637afc848acbc321015d2acb057",
+          "name": "Planned",
+          "type": "checkbox",
+          "defaultValue": "",
+          "options": [],
+          "showOnExpanded": true,
+          "showOnCollapsed": false,
+          "x": 216,
+          "y": 192,
+          "width": 108,
+          "height": 60,
+          "expandedX": 0,
+          "expandedY": 132,
+          "expandedWidth": 120,
+          "expandedHeight": 36,
+          "compactX": 36,
+          "compactY": 48,
+          "compactWidth": 156,
+          "compactHeight": 48
+        },
+        {
+          "id": "3cf81c3e07b548d3bb2b1ef3762d3780",
+          "name": "Stretch",
+          "type": "checkbox",
+          "defaultValue": "",
+          "options": [],
+          "showOnExpanded": true,
+          "showOnCollapsed": false,
+          "x": 132,
+          "y": 192,
+          "width": 108,
+          "height": 60,
+          "expandedX": 0,
+          "expandedY": 108,
+          "expandedWidth": 228,
+          "expandedHeight": 36,
+          "compactX": 12,
+          "compactY": 48,
+          "compactWidth": 156,
+          "compactHeight": 48
+        },
+        {
+          "id": "27b9f038dbd94db0887f50df46fe2122",
+          "name": "Broken",
+          "type": "checkbox",
+          "defaultValue": "",
+          "options": [],
+          "showOnExpanded": true,
+          "showOnCollapsed": true,
+          "x": 24,
+          "y": 192,
+          "width": 108,
+          "height": 60,
+          "expandedX": 0,
+          "expandedY": 60,
+          "expandedWidth": 60,
+          "expandedHeight": 36,
+          "compactX": -0,
+          "compactY": 24,
+          "compactWidth": 156,
+          "compactHeight": 48
+        },
+        {
+          "id": "e93627ebb79a4910a114a842f1659bce",
+          "name": "Finished",
+          "type": "checkbox",
+          "defaultValue": "",
+          "options": [],
+          "showOnExpanded": true,
+          "showOnCollapsed": true,
+          "x": 324,
+          "y": 192,
+          "width": 108,
+          "height": 60,
+          "expandedX": 0,
+          "expandedY": 84,
+          "expandedWidth": 72,
+          "expandedHeight": 36,
+          "compactX": 0,
+          "compactY": -0,
+          "compactWidth": 132,
+          "compactHeight": 60
+        },
+        {
+          "id": "58f9abe66fa941e68ee055961889232e",
+          "name": "Status",
+          "type": "dropdown",
+          "defaultValue": "",
+          "options": [
+            "planned",
+            "in progress",
+            "bugged",
+            "broken",
+            "finished"
+          ],
+          "showOnExpanded": true,
+          "showOnCollapsed": false,
+          "x": 204,
+          "y": 0,
+          "width": 108,
+          "height": 72,
+          "expandedX": 120,
+          "expandedY": 72,
+          "expandedWidth": 96,
+          "expandedHeight": 48,
+          "compactX": 12,
+          "compactY": 12,
+          "compactWidth": 156,
+          "compactHeight": 48
+        },
+        {
+          "id": "e034add4b47e4a1ebc3c418130016bf6",
+          "name": "only close on finished",
+          "type": "checkbox",
+          "defaultValue": "",
+          "options": [],
+          "showOnExpanded": true,
+          "showOnCollapsed": false,
+          "x": 432,
+          "y": 192,
+          "width": 156,
+          "height": 60,
+          "expandedX": 0,
+          "expandedY": 36,
+          "expandedWidth": 144,
+          "expandedHeight": 36,
+          "compactX": 0,
+          "compactY": 48,
+          "compactWidth": 156,
+          "compactHeight": 48
+        },
+        {
+          "id": "45208b93597341ab95accacfd616176e",
+          "name": "Items",
+          "type": "list",
+          "defaultValue": "List item\nAnother item",
+          "options": [],
+          "showOnExpanded": false,
+          "showOnCollapsed": false,
+          "x": 12,
+          "y": 240,
+          "width": 576,
+          "height": 60,
+          "expandedX": 0,
+          "expandedY": 48,
+          "expandedWidth": 228,
+          "expandedHeight": 60,
+          "compactX": 12,
+          "compactY": 48,
+          "compactWidth": 168,
+          "compactHeight": 48
+        },
+        {
+          "id": "23f3fbeeccd24c0daeac25a9fbc04d30",
+          "name": "Tags",
+          "type": "tags",
+          "defaultValue": "",
+          "options": [],
+          "showOnExpanded": true,
+          "showOnCollapsed": false,
+          "x": 12,
+          "y": 0,
+          "width": 144,
+          "height": 60,
+          "expandedX": 0,
+          "expandedY": -0,
+          "expandedWidth": 144,
+          "expandedHeight": 60,
+          "compactX": 12,
+          "compactY": 48,
+          "compactWidth": 168,
+          "compactHeight": 48
+        }
+      ]
+    },
+    {
+      "id": "077e549f9634451b926b3fdcff199f76",
+      "name": "test",
+      "instructions": "",
+      "cardColor": "#1D222C",
+      "outlineColor": "#2A303D",
+      "headerTextColor": "#8992A5",
+      "mainTextColor": "#F4F6FA",
+      "textBoxColor": "#0E1117",
+      "outlineWidth": 1,
+      "shrinkExpandedToContent": false,
+      "shrinkCompactToContent": false,
+      "fields": [
+        {
+          "id": "3abb557c43304844ad73488044f9b189",
+          "name": "Field",
+          "type": "text",
+          "defaultValue": "",
+          "options": [],
+          "showOnExpanded": true,
+          "showOnCollapsed": true,
+          "x": 8,
+          "y": 13.486666666666679,
+          "width": 220,
+          "height": 72,
+          "expandedX": 12,
+          "expandedY": 12,
+          "expandedWidth": 252,
+          "expandedHeight": 60,
+          "compactX": 12,
+          "compactY": 12,
+          "compactWidth": 160,
+          "compactHeight": 48
+        },
+        {
+          "id": "e186dff9c507485ab8a9478cbf14547f",
+          "name": "Field",
+          "type": "number",
+          "defaultValue": "",
+          "options": [],
+          "showOnExpanded": true,
+          "showOnCollapsed": true,
+          "x": 243,
+          "y": 16.48666666666668,
+          "width": 110,
+          "height": 74,
+          "expandedX": 12,
+          "expandedY": 84,
+          "expandedWidth": 252,
+          "expandedHeight": 60,
+          "compactX": 198,
+          "compactY": 14,
+          "compactWidth": 160,
+          "compactHeight": 48
+        },
+        {
+          "id": "cbf72d9d1b8f48eeb92fa9748d899ec8",
+          "name": "Choice",
+          "type": "dropdown",
+          "defaultValue": "",
+          "options": [
+            "Option 1",
+            "Option 2"
+          ],
+          "showOnExpanded": true,
+          "showOnCollapsed": true,
+          "x": 79,
+          "y": 100.48666666666668,
+          "width": 253,
+          "height": 58,
+          "expandedX": 12,
+          "expandedY": 156,
+          "expandedWidth": 252,
+          "expandedHeight": 60,
+          "compactX": 415,
+          "compactY": 190,
+          "compactWidth": 160,
+          "compactHeight": 144
+        }
+      ]
+    }
+  ],
+  "branches": [
+    {
+      "id": "main",
+      "name": "main",
+      "branch": "main",
+      "isArchive": false,
+      "isCollapsed": false,
+      "isSystem": true,
+      "isLocked": false,
+      "tasks": [
+        {
+          "id": "c77e683c9a3b4776b32abece7c73d940",
+          "index": 214,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Add multi-service music search to Downloads",
+          "task": "Add a search box to the Downloads page that searches Spotify, YouTube, and Deezer. Show each result with Download, YT, Spotify, and Deezer actions. Download should choose the best available source in priority order Deezer, Spotify, then YouTube. Adding a result queues its link while allowing continued searching or returning to Downloads to start the queue. Selecting a result shows artwork and metadata in a lower details editor; users may override all populated metadata except track titles before queueing.",
+          "tags": [
+            "downloads",
+            "music",
+            "ui",
+            "metadata",
+            "in progress"
+          ],
+          "files": [],
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "7c958678d9804128a5f7c1cc12fd8d43",
+              "index": 1,
+              "text": "The Downloads page can search Spotify, YouTube, and Deezer and display unified results.",
+              "isDone": true
+            },
+            {
+              "id": "9b2073ebfda24e44a7c83dd7e6fe143f",
+              "index": 2,
+              "text": "Each result exposes Download, YT, Spotify, and Deezer actions; Download prefers Deezer, then Spotify, then YouTube.",
+              "isDone": true
+            },
+            {
+              "id": "e28c9a3df1cd43a9b24b4a57fe3c5158",
+              "index": 3,
+              "text": "Adding a result queues its chosen link without forcing downloads to start and the user can continue searching or return to the Downloads queue.",
+              "isDone": true
+            },
+            {
+              "id": "88f9329d3fbb45d995142868097c94fa",
+              "index": 4,
+              "text": "Selecting a result shows artwork and metadata below; all populated metadata except track titles can be overridden before queueing.",
+              "isDone": true
+            },
+            {
+              "id": "8ed4d7d0e2624a369a4dd6e7bfb4e3d4",
+              "index": 5,
+              "text": "The completed change is verified, committed, built as a release, and published as a GitHub release.",
+              "isDone": false
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": true,
+            "merge": false
+          },
+          "isDone": false,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-17T05:23:17.2038988+00:00",
+          "updatedAt": "2026-09-17T05:23:17.2040613+00:00"
+        }
+      ]
+    },
+    {
+      "id": "acf642e3f21243b6a8f95aaf64720dfb",
+      "name": "release_3",
+      "branch": "release_3",
+      "isArchive": false,
+      "isCollapsed": false,
+      "isSystem": false,
+      "isLocked": true,
+      "tasks": []
+    },
+    {
+      "id": "15c1112097b04326b05fd21aa36ba270",
+      "name": "release_4",
+      "branch": "release_4",
+      "isArchive": false,
+      "isCollapsed": true,
+      "isSystem": false,
+      "isLocked": true,
+      "tasks": []
+    },
+    {
+      "id": "42692c2e82474102a02f654c88e7895f",
+      "name": "release_5",
+      "branch": "release_5",
+      "isArchive": false,
+      "isCollapsed": false,
+      "isSystem": false,
+      "isLocked": true,
+      "tasks": []
+    },
+    {
+      "id": "archive",
+      "name": "Archived",
+      "branch": null,
+      "isArchive": true,
+      "isCollapsed": false,
+      "isSystem": true,
+      "isLocked": false,
+      "tasks": []
+    }
+  ]
+}

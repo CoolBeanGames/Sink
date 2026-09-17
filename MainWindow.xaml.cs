@@ -88,6 +88,7 @@ public partial class MainWindow : Window
         // the record on the iPod canvas — one menu instance, so anything
         // added to it in XAML shows up in both places automatically (task 164).
         IpodHeaderButton.ContextMenu = IpodMenu;
+        _openNavSections.Add(MusicNav); // matches MusicNav's default-visible XAML state; PodcastNav/IpodNav start Collapsed
         var v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
         if (v is not null) VersionText.Text = $"v{v.Major}.{v.Minor}.{v.Build}";
         LoadLibrary();
@@ -542,10 +543,74 @@ public partial class MainWindow : Window
         ExitTagsView();
         ExitReflectView();
         var music = _source == LibrarySource.Music;
-        MusicNav.Visibility = music ? Visibility.Visible : Visibility.Collapsed;
-        IpodNav.Visibility = music ? Visibility.Collapsed : Visibility.Visible;
+        SetNavExpanded(MusicNav, MusicNavTransform, music);
+        SetNavExpanded(IpodNav, IpodNavTransform, !music);
         MusicHeaderButton.Tag = music ? "Active" : null;
         IpodHeaderButton.Tag = music ? null : "Active";
+    }
+
+    private readonly HashSet<FrameworkElement> _openNavSections = [];
+
+    /// <summary>
+    /// Expands/collapses a sidebar section's sub-nav (Library/Podcasts/iPod)
+    /// with a height+fade+slide animation instead of an instant Visibility
+    /// flip (task 204). Animating Height — not just Visibility/Opacity — is
+    /// what makes the enclosing StackPanel reflow every frame, which is what
+    /// slides the section below it up/down to make room; no separate
+    /// transform is needed on the sibling header buttons for that part.
+    /// </summary>
+    private void SetNavExpanded(FrameworkElement nav, TranslateTransform transform, bool expanded)
+    {
+        var isOpen = _openNavSections.Contains(nav);
+        if (expanded == isOpen) return;
+        if (expanded) _openNavSections.Add(nav); else _openNavSections.Remove(nav);
+
+        // Every caller of this method (ApplySourceChrome, ShowPodcasts_Click,
+        // etc.) still has a heavy synchronous re-render queued right after it
+        // returns (RenderLibrary/RenderPodcasts — re-filtering/re-grouping
+        // thousands of tracks). Starting the animation immediately meant its
+        // first chunk of wall-clock duration elapsed while that render was
+        // still blocking the UI thread, so the compositor never got a chance
+        // to paint any in-between frame — the "animation" just showed up as
+        // an instant jump straight to its end state. Deferring to Background
+        // priority lets that work finish first, so the animation actually
+        // gets to run once the thread is free to paint it.
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, () => RunNavAnimation(nav, transform, expanded));
+    }
+
+    private void RunNavAnimation(FrameworkElement nav, TranslateTransform transform, bool expanded)
+    {
+        // A finished DoubleAnimation keeps "holding" its end value (WPF's
+        // default FillBehavior) even after Completed fires, and even after
+        // this method later sets a fresh local Height — so it has to be
+        // explicitly released before anything below reads ActualHeight.
+        // Without this, the second run onward reads a stuck value (usually
+        // 0, from the previous collapse) instead of the panel's real size,
+        // so the animation becomes an invisible 0-to-0 and — since Visibility
+        // still flips to Visible — the panel gets stuck permanently
+        // zero-height, never visibly expanding again.
+        nav.BeginAnimation(FrameworkElement.HeightProperty, null);
+        nav.Height = double.NaN;
+        if (expanded) nav.Visibility = Visibility.Visible;
+        nav.UpdateLayout();
+        var natural = nav.ActualHeight;
+
+        var duration = TimeSpan.FromMilliseconds(260);
+        var ease = new QuadraticEase { EasingMode = expanded ? EasingMode.EaseOut : EasingMode.EaseIn };
+        double from = expanded ? 0 : natural;
+        double to = expanded ? natural : 0;
+        nav.Height = from;
+
+        var heightAnim = new DoubleAnimation(from, to, duration) { EasingFunction = ease };
+        heightAnim.Completed += (_, _) =>
+        {
+            nav.BeginAnimation(FrameworkElement.HeightProperty, null);
+            nav.Height = double.NaN;
+            if (!expanded) nav.Visibility = Visibility.Collapsed;
+        };
+        nav.BeginAnimation(FrameworkElement.HeightProperty, heightAnim);
+        nav.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(expanded ? 1 : 0, duration) { EasingFunction = ease });
+        transform.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(expanded ? 0 : -10, duration) { EasingFunction = ease });
     }
 
     private void SetActiveNavigation(Button? active)
@@ -1550,36 +1615,29 @@ public partial class MainWindow : Window
 
     private static readonly string[] CardImageExtensions = [".jpg", ".jpeg", ".png", ".bmp", ".gif"];
 
-    private static bool HasImageFileDrop(IDataObject data) =>
-        data.GetDataPresent(DataFormats.FileDrop) &&
-        data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } files &&
+    private static bool IsImageFileDrop(DragEventArgs e) =>
+        e.Data.GetDataPresent(DataFormats.FileDrop) &&
+        e.Data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } files &&
         CardImageExtensions.Contains(Path.GetExtension(files[0]), StringComparer.OrdinalIgnoreCase);
 
-    private void GroupCard_DragOver(object sender, DragEventArgs e)
+    /// <summary>
+    /// The card the given point (window-relative) is over, or null. Window-
+    /// level drag handlers hit-test for this themselves instead of relying
+    /// on the drop bubbling down to a per-ListBoxItem handler — ImportOverlay
+    /// covers the whole content area the instant any file enters the window
+    /// (IsHitTestVisible="False" on it wasn't enough to keep it from also
+    /// winning drag-drop's own hit-testing ahead of a card underneath it).
+    /// </summary>
+    private ListBoxItem? HitTestGroupCard(Point windowPoint)
     {
-        if (sender is not ListBoxItem item || !HasImageFileDrop(e.Data)) { e.Effects = DragDropEffects.None; return; }
-        item.Tag = "DragOver";
-        e.Effects = DragDropEffects.Copy;
-        e.Handled = true;
+        if (GroupsScroller.Visibility != Visibility.Visible) return null;
+        var result = VisualTreeHelper.HitTest(this, windowPoint);
+        return result is null ? null : FindAncestor<ListBoxItem>(result.VisualHit);
     }
 
-    private void GroupCard_DragLeave(object sender, DragEventArgs e)
+    /// <summary>Applies a dropped/uploaded image as an Album/Artist/Genre card's art (task 202) — same override-key mechanism as the right-click "Set genre/artist artwork…" tools and MetadataWindow's album-art upload.</summary>
+    private void ApplyCardArt(GroupCard card, byte[] fileBytes)
     {
-        if (sender is ListBoxItem item) item.Tag = null;
-    }
-
-    /// <summary>Drop an image from Explorer onto an Album/Artist/Genre card to replace its art (task 202) — same override-key mechanism as the right-click "Set genre/artist artwork…" / album art tools, just via drag instead of a file picker.</summary>
-    private void GroupCard_Drop(object sender, DragEventArgs e)
-    {
-        if (sender is ListBoxItem droppedItem) droppedItem.Tag = null;
-        if (sender is not ListBoxItem { DataContext: GroupCard card } || !HasImageFileDrop(e.Data)) return;
-        var path = ((string[])e.Data.GetData(DataFormats.FileDrop)!)[0];
-
-        byte[] fileBytes;
-        try { fileBytes = File.ReadAllBytes(path); }
-        catch (IOException) { return; }
-        catch (UnauthorizedAccessException) { return; }
-
         string? saved;
         if (_category == LibraryCategory.Albums)
         {
@@ -1598,7 +1656,6 @@ public partial class MainWindow : Window
         _artCache.Clear();
         RenderLibrary();
         PlaybackStatus.Text = $"Updated artwork for {card.Name}";
-        e.Handled = true;
     }
 
     private void PlaylistItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) => _trackDragStart = e.GetPosition(PlaylistList);
@@ -1694,25 +1751,61 @@ public partial class MainWindow : Window
 
     private static bool HasFileDrop(DragEventArgs e) => e.Data.GetDataPresent(DataFormats.FileDrop);
 
+    private ListBoxItem? _dragHighlightedCard;
+
+    private void ClearCardDragHighlight()
+    {
+        if (_dragHighlightedCard is null) return;
+        _dragHighlightedCard.Tag = null;
+        _dragHighlightedCard = null;
+    }
+
     private void Window_DragEnter(object sender, DragEventArgs e)
     {
-        ImportOverlay.Visibility = HasFileDrop(e) ? Visibility.Visible : Visibility.Collapsed;
-        e.Effects = HasFileDrop(e) ? DragDropEffects.Copy : DragDropEffects.None;
-        e.Handled = true;
+        Window_DragOver(sender, e);
     }
 
+    /// <summary>
+    /// Hit-tests every move so a drag that starts over empty space and drifts
+    /// onto a card (or vice versa) keeps ImportOverlay/card-highlight in sync —
+    /// this fires continuously while dragging, DragEnter only fires once.
+    /// </summary>
     private void Window_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = HasFileDrop(e) ? DragDropEffects.Copy : DragDropEffects.None;
+        if (!HasFileDrop(e)) { e.Effects = DragDropEffects.None; e.Handled = true; return; }
+
+        var card = IsImageFileDrop(e) ? HitTestGroupCard(e.GetPosition(this)) : null;
+        if (card != _dragHighlightedCard) { ClearCardDragHighlight(); if (card is not null) { card.Tag = "DragOver"; _dragHighlightedCard = card; } }
+
+        ImportOverlay.Visibility = card is null ? Visibility.Visible : Visibility.Collapsed;
+        e.Effects = DragDropEffects.Copy;
         e.Handled = true;
     }
 
-    private void Window_DragLeave(object sender, DragEventArgs e) => ImportOverlay.Visibility = Visibility.Collapsed;
+    private void Window_DragLeave(object sender, DragEventArgs e)
+    {
+        ImportOverlay.Visibility = Visibility.Collapsed;
+        ClearCardDragHighlight();
+    }
 
     private void Window_Drop(object sender, DragEventArgs e)
     {
         ImportOverlay.Visibility = Visibility.Collapsed;
+        var card = IsImageFileDrop(e) ? HitTestGroupCard(e.GetPosition(this)) : null;
+        ClearCardDragHighlight();
         if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths) return;
+
+        if (card is { DataContext: GroupCard groupCard })
+        {
+            byte[] fileBytes;
+            try { fileBytes = File.ReadAllBytes(paths[0]); }
+            catch (IOException) { return; }
+            catch (UnauthorizedAccessException) { return; }
+            ApplyCardArt(groupCard, fileBytes);
+            e.Handled = true;
+            return;
+        }
+
         var imported = MusicImporter.Import(paths);
         foreach (var track in imported) _tracks.Add(track);
         RenderLibrary();

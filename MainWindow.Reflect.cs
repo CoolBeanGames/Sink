@@ -165,8 +165,8 @@ public partial class MainWindow
         IpodCanvas.Visibility = Visibility.Collapsed;
         ReflectPage.Visibility = Visibility.Visible;
 
-        MusicNav.Visibility = Visibility.Collapsed;
-        IpodNav.Visibility = Visibility.Collapsed;
+        SetNavExpanded(MusicNav, MusicNavTransform, false);
+        SetNavExpanded(IpodNav, IpodNavTransform, false);
         MusicHeaderButton.Tag = null;
         IpodHeaderButton.Tag = null;
         DownloadHeaderButton.Tag = null;

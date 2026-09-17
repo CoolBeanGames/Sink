@@ -10,31 +10,60 @@ using System.Text.RegularExpressions;
 
 namespace Sink.Services.Download;
 
+public enum MusicSearchResultKind { Artist, Album, Track }
+
 public sealed class MusicSearchResult : INotifyPropertyChanged
 {
+    private string _title = "";
     private string _artist = "";
     private string _album = "";
     private string _genre = "Unknown";
     private string _artwork = "";
 
-    public required string Title { get; init; }
+    public required MusicSearchResultKind Kind { get; init; }
+    public required string Title { get => _title; set { if (Set(ref _title, value)) OnPropertyChanged(nameof(Subtitle)); } }
     public string Artist { get => _artist; set { if (Set(ref _artist, value)) OnPropertyChanged(nameof(Subtitle)); } }
     public string Album { get => _album; set { if (Set(ref _album, value)) OnPropertyChanged(nameof(Subtitle)); } }
     public string Genre { get => _genre; set => Set(ref _genre, value); }
     public string Artwork { get => _artwork; set => Set(ref _artwork, value); }
     public string YouTubeUrl { get; internal set; } = "";
     public string DeezerUrl { get; internal set; } = "";
+    public int TrackCount { get; internal set; }
+    internal long DeezerId { get; init; }
 
     /// <summary>
     /// Spotify's anonymous search endpoint is no longer available. Sink's
-    /// existing Spotify workflow resolves public Spotify metadata and matches
-    /// the audio by artist/title through YouTube, so text-search results expose
-    /// that same keyless matcher whenever they have both fields.
+    /// existing Spotify workflow matches an individual song by artist/title
+    /// through YouTube, so it is intentionally offered only for track rows.
     /// </summary>
-    public bool HasSpotify => !string.IsNullOrWhiteSpace(Title) && !string.IsNullOrWhiteSpace(Artist);
+    public bool HasSpotify => Kind == MusicSearchResultKind.Track
+                              && !string.IsNullOrWhiteSpace(Title)
+                              && !string.IsNullOrWhiteSpace(Artist);
     public bool HasYouTube => !string.IsNullOrWhiteSpace(YouTubeUrl);
     public bool HasDeezer => !string.IsNullOrWhiteSpace(DeezerUrl);
-    public string Subtitle => string.Join("  ·  ", new[] { Artist, Album }.Where(s => !string.IsNullOrWhiteSpace(s)));
+    public bool IsTitleReadOnly => Kind == MusicSearchResultKind.Track;
+    public bool ShowArtistField => Kind != MusicSearchResultKind.Artist;
+    public bool ShowAlbumField => Kind == MusicSearchResultKind.Track;
+    public string KindLabel => Kind.ToString().ToUpperInvariant();
+    public string TitleFieldLabel => Kind switch
+    {
+        MusicSearchResultKind.Artist => "Artist name",
+        MusicSearchResultKind.Album => "Album title",
+        _ => "Track title",
+    };
+    public string EditHint => IsTitleReadOnly
+        ? "Track titles stay locked; the other populated metadata can be changed before queueing."
+        : $"This {Kind.ToString().ToLowerInvariant()}'s populated metadata can be changed before queueing.";
+    public string Subtitle => Kind switch
+    {
+        MusicSearchResultKind.Artist => "Full discography",
+        MusicSearchResultKind.Album => string.Join("  ·  ", new[]
+        {
+            Artist,
+            TrackCount > 0 ? $"{TrackCount} track{(TrackCount == 1 ? "" : "s")}" : "Album",
+        }.Where(s => !string.IsNullOrWhiteSpace(s))),
+        _ => string.Join("  ·  ", new[] { Artist, Album }.Where(s => !string.IsNullOrWhiteSpace(s))),
+    };
     public string Providers => string.Join("  ", new[]
     {
         HasDeezer ? "DEEZER" : null,
@@ -48,10 +77,11 @@ public sealed class MusicSearchResult : INotifyPropertyChanged
     {
         if (string.IsNullOrWhiteSpace(Artist)) Artist = other.Artist;
         if (string.IsNullOrWhiteSpace(Album)) Album = other.Album;
-        if (Genre is "" or "Unknown" && other.Genre is not ("" or "Unknown")) Genre = other.Genre;
+        if ((Genre is "" or "Unknown") && other.Genre is not ("" or "Unknown")) Genre = other.Genre;
         if (string.IsNullOrWhiteSpace(Artwork)) Artwork = other.Artwork;
         if (string.IsNullOrWhiteSpace(YouTubeUrl)) YouTubeUrl = other.YouTubeUrl;
         if (string.IsNullOrWhiteSpace(DeezerUrl)) DeezerUrl = other.DeezerUrl;
+        if (TrackCount == 0) TrackCount = other.TrackCount;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -69,16 +99,30 @@ public sealed class MusicSearchResult : INotifyPropertyChanged
 }
 
 public sealed record MusicSearchResponse(
-    IReadOnlyList<MusicSearchResult> Results, IReadOnlyList<string> ProviderErrors);
+    IReadOnlyList<MusicSearchResult> Results,
+    IReadOnlyList<string> ProviderErrors,
+    string Summary);
 
-/// <summary>Keyless Deezer and YouTube search, merged into editable track rows.</summary>
+/// <summary>
+/// Keyless catalog search. Exact artists become an artist page followed by
+/// their complete Deezer discography; exact albums become an album page
+/// followed by its individual tracks; other searches return typed artist,
+/// album, and track results instead of flattening everything into songs.
+/// </summary>
 public static class MusicSearchService
 {
+    private const string DeezerApi = "https://api.deezer.com";
     private static readonly HttpClient Http = CreateClient();
     private static readonly Regex Noise = new(
         @"\s*[\[(](?:official\s+(?:music\s+)?video|audio|lyrics?|visuali[sz]er)[^\])]*[\])]\s*",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex KeyChars = new(@"[^a-z0-9]+", RegexOptions.Compiled);
+
+    private sealed record ProviderResult<T>(T Value, string? Error = null);
+    private sealed record YouTubeChannel(string Name, string Url);
+    private sealed record YouTubeSearchData(
+        IReadOnlyList<MusicSearchResult> Tracks,
+        IReadOnlyList<YouTubeChannel> Channels);
 
     private static HttpClient CreateClient()
     {
@@ -90,32 +134,81 @@ public static class MusicSearchService
     public static async Task<MusicSearchResponse> SearchAsync(
         string query, CancellationToken token = default)
     {
-        var deezerTask = SafeProviderAsync("Deezer", () => SearchDeezerAsync(query, token));
-        var youtubeTask = SafeProviderAsync("YouTube", () => SearchYouTubeAsync(query, token));
-        var providerResults = await Task.WhenAll(deezerTask, youtubeTask).ConfigureAwait(false);
+        var artistsTask = SafeProviderAsync(
+            "Deezer artists", () => SearchDeezerArtistsAsync(query, token),
+            (IReadOnlyList<MusicSearchResult>)[]);
+        var albumsTask = SafeProviderAsync(
+            "Deezer albums", () => SearchDeezerAlbumsAsync(query, token),
+            (IReadOnlyList<MusicSearchResult>)[]);
+        var tracksTask = SafeProviderAsync(
+            "Deezer tracks", () => SearchDeezerTracksAsync(query, token),
+            (IReadOnlyList<MusicSearchResult>)[]);
+        var youtubeTask = SafeProviderAsync(
+            "YouTube", () => SearchYouTubeAsync(query, token), new YouTubeSearchData([], []));
+
+        await Task.WhenAll(artistsTask, albumsTask, tracksTask, youtubeTask).ConfigureAwait(false);
         token.ThrowIfCancellationRequested();
 
-        var merged = new Dictionary<string, MusicSearchResult>(StringComparer.Ordinal);
-        foreach (var provider in providerResults)
+        var artistsResult = await artistsTask.ConfigureAwait(false);
+        var albumsResult = await albumsTask.ConfigureAwait(false);
+        var tracksResult = await tracksTask.ConfigureAwait(false);
+        var youtubeResult = await youtubeTask.ConfigureAwait(false);
+        var artists = artistsResult.Value.ToList();
+        var albums = albumsResult.Value.ToList();
+        var tracks = tracksResult.Value;
+        var youtube = youtubeResult.Value;
+        var errors = new List<string?>
         {
-            foreach (var result in provider.Results)
+            artistsResult.Error, albumsResult.Error, tracksResult.Error, youtubeResult.Error,
+        };
+
+        foreach (var artist in artists) AttachMatchingChannel(artist, youtube.Channels);
+
+        var exactArtist = artists.FirstOrDefault(a => Equivalent(query, a.Title));
+        if (exactArtist is not null)
+        {
+            var discographyResult = await SafeProviderAsync(
+                "Deezer discography",
+                () => GetArtistAlbumsAsync(exactArtist.DeezerId, exactArtist.Title, token),
+                (IReadOnlyList<MusicSearchResult>)[]).ConfigureAwait(false);
+            errors.Add(discographyResult.Error);
+            var discography = discographyResult.Value.Count > 0
+                ? discographyResult.Value
+                : albums.Where(a => Equivalent(a.Artist, exactArtist.Title)).ToList();
+            var results = new List<MusicSearchResult> { exactArtist };
+            results.AddRange(discography);
+            return Response(results, errors,
+                $"{exactArtist.Title}: artist page and {discography.Count} release{(discography.Count == 1 ? "" : "s")}. Queue the artist for the full discography, or choose an album.");
+        }
+
+        var albumMatch = albums
+            .Select(album => (album, score: AlbumMatchScore(query, album)))
+            .OrderByDescending(x => x.score)
+            .FirstOrDefault();
+        if (albumMatch.album is not null && albumMatch.score >= 80)
+        {
+            var albumTracksResult = await SafeProviderAsync(
+                "Deezer album tracks",
+                () => GetAlbumTracksAsync(albumMatch.album, token),
+                (IReadOnlyList<MusicSearchResult>)[]).ConfigureAwait(false);
+            errors.Add(albumTracksResult.Error);
+            var albumTracks = MergeTracks(albumTracksResult.Value, youtube.Tracks, includeUnmatchedYouTube: false);
+            if (albumTracks.Count > 0)
             {
-                var key = Key(result.Artist, result.Title);
-                if (!merged.TryGetValue(key, out var existing)) merged[key] = result;
-                else existing.MergeFrom(result);
+                albumMatch.album.TrackCount = albumTracks.Count;
+                var results = new List<MusicSearchResult> { albumMatch.album };
+                results.AddRange(albumTracks);
+                return Response(results, errors,
+                    $"{albumMatch.album.Title}: album page and {albumTracks.Count} individual track{(albumTracks.Count == 1 ? "" : "s")}.");
             }
         }
 
-        var ordered = merged.Values
-            .OrderByDescending(r => r.ProviderCount)
-            .ThenByDescending(r => r.HasDeezer)
-            .ThenBy(r => r.Artist, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(r => r.Title, StringComparer.OrdinalIgnoreCase)
-            .Take(24)
-            .ToList();
-        return new MusicSearchResponse(
-            ordered,
-            providerResults.Where(r => r.Error is not null).Select(r => r.Error!).ToList());
+        var generic = new List<MusicSearchResult>();
+        generic.AddRange(artists.Take(4));
+        generic.AddRange(albums.Take(8));
+        generic.AddRange(MergeTracks(tracks, youtube.Tracks, includeUnmatchedYouTube: true).Take(18));
+        return Response(generic, errors,
+            $"{generic.Count} catalog result{(generic.Count == 1 ? "" : "s")} across artists, albums, and tracks.");
     }
 
     public static string SpotifyMatchUrl(MusicSearchResult result) =>
@@ -145,53 +238,152 @@ public static class MusicSearchService
         }
     }
 
-    private sealed record ProviderResult(IReadOnlyList<MusicSearchResult> Results, string? Error = null);
+    private static MusicSearchResponse Response(
+        IReadOnlyList<MusicSearchResult> results, IEnumerable<string?> errors, string summary) =>
+        new(results, errors.Where(e => !string.IsNullOrWhiteSpace(e)).Cast<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList(), summary);
 
-    private static async Task<ProviderResult> SafeProviderAsync(
-        string name, Func<Task<IReadOnlyList<MusicSearchResult>>> search)
+    private static async Task<ProviderResult<T>> SafeProviderAsync<T>(
+        string name, Func<Task<T>> search, T fallback)
     {
-        try { return new ProviderResult(await search().ConfigureAwait(false)); }
+        try { return new ProviderResult<T>(await search().ConfigureAwait(false)); }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Log.Warn($"{name} music search failed: {ex.Message}");
-            return new ProviderResult([], $"{name}: {ex.Message}");
+            return new ProviderResult<T>(fallback, $"{name}: {ex.Message}");
         }
     }
 
-    private static async Task<IReadOnlyList<MusicSearchResult>> SearchDeezerAsync(
+    private static async Task<IReadOnlyList<MusicSearchResult>> SearchDeezerArtistsAsync(
         string query, CancellationToken token)
     {
-        var url = "https://api.deezer.com/search?limit=14&q=" + Uri.EscapeDataString(query);
-        using var response = await Http.GetAsync(url, token).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-        await using var stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
-        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: token).ConfigureAwait(false);
-        if (doc.RootElement.TryGetProperty("error", out var error))
-            throw new InvalidOperationException(Text(error, "message", "Deezer search failed"));
-        if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
-            return [];
-
-        var results = new List<MusicSearchResult>();
-        foreach (var item in data.EnumerateArray())
+        using var doc = await GetJsonAsync(
+            $"{DeezerApi}/search/artist?limit=8&q={Uri.EscapeDataString(query)}", token).ConfigureAwait(false);
+        return ReadData(doc.RootElement).Select(item =>
         {
             var id = Number(item, "id");
-            if (id <= 0) continue;
-            results.Add(new MusicSearchResult
+            var name = Text(item, "name", "Unknown Artist");
+            return new MusicSearchResult
             {
-                Title = Text(item, "title", "Untitled"),
-                Artist = NestedText(item, "artist", "name", "Unknown Artist"),
-                Album = NestedText(item, "album", "title", ""),
-                Genre = "Unknown",
-                Artwork = NestedText(item, "album", "cover_xl",
-                    NestedText(item, "album", "cover_medium", "")),
-                DeezerUrl = $"https://www.deezer.com/track/{id}",
-            });
-        }
-        return results;
+                Kind = MusicSearchResultKind.Artist,
+                DeezerId = id,
+                Title = name,
+                Artist = name,
+                Artwork = Text(item, "picture_xl", Text(item, "picture_medium", "")),
+                DeezerUrl = id > 0 ? $"https://www.deezer.com/artist/{id}" : "",
+            };
+        }).Where(r => r.DeezerId > 0).ToList();
     }
 
-    private static async Task<IReadOnlyList<MusicSearchResult>> SearchYouTubeAsync(
+    private static async Task<IReadOnlyList<MusicSearchResult>> SearchDeezerAlbumsAsync(
+        string query, CancellationToken token)
+    {
+        using var doc = await GetJsonAsync(
+            $"{DeezerApi}/search/album?limit=16&q={Uri.EscapeDataString(query)}", token).ConfigureAwait(false);
+        return ReadData(doc.RootElement).Select(item => AlbumResult(item)).Where(r => r.DeezerId > 0).ToList();
+    }
+
+    private static async Task<IReadOnlyList<MusicSearchResult>> SearchDeezerTracksAsync(
+        string query, CancellationToken token)
+    {
+        using var doc = await GetJsonAsync(
+            $"{DeezerApi}/search/track?limit=18&q={Uri.EscapeDataString(query)}", token).ConfigureAwait(false);
+        return ReadData(doc.RootElement).Select(item => TrackResult(item, "", "", ""))
+            .Where(r => r.DeezerId > 0).ToList();
+    }
+
+    private static async Task<IReadOnlyList<MusicSearchResult>> GetArtistAlbumsAsync(
+        long artistId, string artist, CancellationToken token)
+    {
+        var albums = new List<MusicSearchResult>();
+        string? next = $"{DeezerApi}/artist/{artistId}/albums?limit=100";
+        var pages = 0;
+        while (!string.IsNullOrWhiteSpace(next) && pages++ < 20)
+        {
+            using var doc = await GetJsonAsync(next, token).ConfigureAwait(false);
+            var root = doc.RootElement;
+            foreach (var item in ReadData(root))
+            {
+                var result = AlbumResult(item, artist);
+                if (result.DeezerId > 0) albums.Add(result);
+            }
+            next = TextOrNull(root, "next");
+        }
+        return albums.DistinctBy(a => a.DeezerId).ToList();
+    }
+
+    private static async Task<IReadOnlyList<MusicSearchResult>> GetAlbumTracksAsync(
+        MusicSearchResult album, CancellationToken token)
+    {
+        using var doc = await GetJsonAsync($"{DeezerApi}/album/{album.DeezerId}", token).ConfigureAwait(false);
+        var root = doc.RootElement;
+        var albumTitle = Text(root, "title", album.Title);
+        var albumArtist = NestedText(root, "artist", "name", album.Artist);
+        var artwork = Text(root, "cover_xl", Text(root, "cover_medium", album.Artwork));
+        var genre = FirstGenre(root);
+        if (!root.TryGetProperty("tracks", out var trackPage)) return [];
+
+        var tracks = new List<MusicSearchResult>();
+        AddTracks(trackPage, tracks, albumTitle, albumArtist, artwork, genre);
+        var next = TextOrNull(trackPage, "next");
+        var pages = 0;
+        while (!string.IsNullOrWhiteSpace(next) && pages++ < 20)
+        {
+            using var pageDoc = await GetJsonAsync(next, token).ConfigureAwait(false);
+            var page = pageDoc.RootElement;
+            AddTracks(page, tracks, albumTitle, albumArtist, artwork, genre);
+            next = TextOrNull(page, "next");
+        }
+        return tracks.DistinctBy(t => t.DeezerId).ToList();
+    }
+
+    private static void AddTracks(
+        JsonElement page, ICollection<MusicSearchResult> tracks,
+        string album, string artist, string artwork, string genre)
+    {
+        foreach (var item in ReadData(page))
+        {
+            var result = TrackResult(item, album, artwork, genre, artist);
+            if (result.DeezerId > 0) tracks.Add(result);
+        }
+    }
+
+    private static MusicSearchResult AlbumResult(JsonElement item, string fallbackArtist = "")
+    {
+        var id = Number(item, "id");
+        return new MusicSearchResult
+        {
+            Kind = MusicSearchResultKind.Album,
+            DeezerId = id,
+            Title = Text(item, "title", "Unknown Album"),
+            Artist = NestedText(item, "artist", "name", fallbackArtist),
+            Artwork = Text(item, "cover_xl", Text(item, "cover_medium", "")),
+            TrackCount = (int)Number(item, "nb_tracks"),
+            DeezerUrl = id > 0 ? $"https://www.deezer.com/album/{id}" : "",
+        };
+    }
+
+    private static MusicSearchResult TrackResult(
+        JsonElement item, string fallbackAlbum, string fallbackArtwork, string fallbackGenre,
+        string fallbackArtist = "")
+    {
+        var id = Number(item, "id");
+        return new MusicSearchResult
+        {
+            Kind = MusicSearchResultKind.Track,
+            DeezerId = id,
+            Title = Text(item, "title", "Untitled"),
+            Artist = NestedText(item, "artist", "name", fallbackArtist),
+            Album = NestedText(item, "album", "title", fallbackAlbum),
+            Genre = string.IsNullOrWhiteSpace(fallbackGenre) ? "Unknown" : fallbackGenre,
+            Artwork = NestedText(item, "album", "cover_xl",
+                NestedText(item, "album", "cover_medium", fallbackArtwork)),
+            DeezerUrl = id > 0 ? $"https://www.deezer.com/track/{id}" : "",
+        };
+    }
+
+    private static async Task<YouTubeSearchData> SearchYouTubeAsync(
         string query, CancellationToken token)
     {
         if (!File.Exists(ToolManager.YtDlpPath))
@@ -205,7 +397,7 @@ public static class MusicSearchService
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
-        foreach (var argument in new[] { "-J", "--flat-playlist", "--no-warnings", "ytsearch14:" + query })
+        foreach (var argument in new[] { "-J", "--flat-playlist", "--no-warnings", "ytsearch18:" + query })
             psi.ArgumentList.Add(argument);
         using var process = Process.Start(psi) ?? throw new InvalidOperationException("Could not start YouTube search");
         var stdout = process.StandardOutput.ReadToEndAsync(token);
@@ -226,40 +418,146 @@ public static class MusicSearchService
 
         using var doc = JsonDocument.Parse(output);
         if (!doc.RootElement.TryGetProperty("entries", out var entries) || entries.ValueKind != JsonValueKind.Array)
-            return [];
-        var results = new List<MusicSearchResult>();
+            return new YouTubeSearchData([], []);
+        var tracks = new List<MusicSearchResult>();
+        var channels = new List<YouTubeChannel>();
         foreach (var item in entries.EnumerateArray())
         {
             var id = Text(item, "id", "");
             if (id.Length == 0) continue;
-            var title = Noise.Replace(Text(item, "title", "Untitled"), "").Trim();
-            var artist = Text(item, "artist",
-                Text(item, "uploader", Text(item, "channel", "Unknown Artist")));
-            var artwork = Text(item, "thumbnail", "");
-            results.Add(new MusicSearchResult
+            var channel = CleanChannel(Text(item, "channel", Text(item, "uploader", "Unknown Artist")));
+            var channelUrl = Text(item, "channel_url", "");
+            if (channelUrl.Length == 0 && TextOrNull(item, "channel_id") is { } channelId)
+                channelUrl = $"https://www.youtube.com/channel/{channelId}";
+            if (channelUrl.Length > 0) channels.Add(new YouTubeChannel(channel, channelUrl));
+
+            var (artist, title) = ParseYouTubeTitle(Text(item, "title", "Untitled"), channel);
+            var url = Text(item, "url", "");
+            if (!Uri.TryCreate(url, UriKind.Absolute, out _)) url = $"https://www.youtube.com/watch?v={id}";
+            tracks.Add(new MusicSearchResult
             {
+                Kind = MusicSearchResultKind.Track,
                 Title = title,
-                Artist = artist.Replace(" - Topic", "", StringComparison.OrdinalIgnoreCase).Trim(),
-                Album = "",
+                Artist = artist,
                 Genre = "Unknown",
-                Artwork = artwork,
-                YouTubeUrl = $"https://www.youtube.com/watch?v={id}",
+                Artwork = Text(item, "thumbnail", ""),
+                YouTubeUrl = url,
             });
         }
-        return results;
+        return new YouTubeSearchData(
+            tracks,
+            channels.DistinctBy(c => c.Url, StringComparer.OrdinalIgnoreCase).ToList());
     }
 
-    private static string Key(string artist, string title)
+    private static IReadOnlyList<MusicSearchResult> MergeTracks(
+        IEnumerable<MusicSearchResult> deezer,
+        IEnumerable<MusicSearchResult> youtube,
+        bool includeUnmatchedYouTube)
     {
-        var cleanTitle = KeyChars.Replace(Noise.Replace(title, "").ToLowerInvariant(), "");
-        var cleanArtist = KeyChars.Replace(artist.Replace(" - Topic", "", StringComparison.OrdinalIgnoreCase).ToLowerInvariant(), "");
-        return cleanArtist + "|" + cleanTitle;
+        var merged = new Dictionary<string, MusicSearchResult>(StringComparer.Ordinal);
+        foreach (var result in deezer) merged.TryAdd(ResultKey(result), result);
+        foreach (var result in youtube)
+        {
+            var key = ResultKey(result);
+            if (merged.TryGetValue(key, out var existing)) existing.MergeFrom(result);
+            else if (includeUnmatchedYouTube) merged[key] = result;
+        }
+        return merged.Values
+            .OrderByDescending(r => r.ProviderCount)
+            .ThenByDescending(r => r.HasDeezer)
+            .ThenBy(r => r.Artist, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => r.Title, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static void AttachMatchingChannel(
+        MusicSearchResult artist, IReadOnlyList<YouTubeChannel> channels)
+    {
+        var key = Normalize(artist.Title);
+        var match = channels.FirstOrDefault(c => Normalize(c.Name) == key)
+                    ?? channels.FirstOrDefault(c =>
+                        Normalize(c.Name).Contains(key, StringComparison.Ordinal)
+                        || key.Contains(Normalize(c.Name), StringComparison.Ordinal));
+        if (match is not null) artist.YouTubeUrl = match.Url;
+    }
+
+    private static (string artist, string title) ParseYouTubeTitle(string raw, string channel)
+    {
+        var title = Noise.Replace(raw, "").Trim();
+        foreach (var separator in new[] { " - ", " – ", " — " })
+        {
+            var at = title.IndexOf(separator, StringComparison.Ordinal);
+            if (at <= 0 || at + separator.Length >= title.Length) continue;
+            var left = title[..at].Trim();
+            var right = title[(at + separator.Length)..].Trim();
+            var channelKey = Normalize(channel);
+            if (Normalize(left) == channelKey) return (left, right);
+            if (Normalize(right) == channelKey) return (right, left);
+        }
+        return (channel, title);
+    }
+
+    private static int AlbumMatchScore(string query, MusicSearchResult album)
+    {
+        var queryKey = Normalize(query);
+        var titleKey = Normalize(album.Title);
+        var combinedKey = Normalize(album.Artist + " " + album.Title);
+        if (queryKey == titleKey || queryKey == combinedKey) return 100;
+        if (titleKey.Contains(queryKey, StringComparison.Ordinal)
+            || combinedKey.Contains(queryKey, StringComparison.Ordinal)) return 90;
+        var words = KeyChars.Replace(query.ToLowerInvariant(), " ")
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var searchable = (album.Artist + " " + album.Title).ToLowerInvariant();
+        return words.Length > 0 && words.All(searchable.Contains) ? 80 : 0;
+    }
+
+    private static bool Equivalent(string left, string right) => Normalize(left) == Normalize(right);
+
+    private static string ResultKey(MusicSearchResult result) =>
+        result.Kind + "|" + Normalize(result.Artist) + "|" + Normalize(result.Title);
+
+    private static string Normalize(string value) =>
+        KeyChars.Replace(CleanChannel(value).ToLowerInvariant(), "");
+
+    private static string CleanChannel(string value) =>
+        value.Replace(" - Topic", "", StringComparison.OrdinalIgnoreCase).Trim();
+
+    private static async Task<JsonDocument> GetJsonAsync(string url, CancellationToken token)
+    {
+        using var response = await Http.GetAsync(url, token).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
+        var doc = await JsonDocument.ParseAsync(stream, cancellationToken: token).ConfigureAwait(false);
+        ThrowIfApiError(doc.RootElement);
+        return doc;
+    }
+
+    private static IEnumerable<JsonElement> ReadData(JsonElement root) =>
+        root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array
+            ? data.EnumerateArray()
+            : [];
+
+    private static void ThrowIfApiError(JsonElement root)
+    {
+        if (root.TryGetProperty("error", out var error))
+            throw new InvalidOperationException(Text(error, "message", "Deezer search failed"));
+    }
+
+    private static string FirstGenre(JsonElement root)
+    {
+        if (root.TryGetProperty("genres", out var genres))
+            foreach (var item in ReadData(genres))
+                if (TextOrNull(item, "name") is { } name) return name;
+        return "Unknown";
     }
 
     private static string Text(JsonElement root, string property, string fallback) =>
+        TextOrNull(root, property) ?? fallback;
+
+    private static string? TextOrNull(JsonElement root, string property) =>
         root.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString() is { Length: > 0 } text ? text : fallback
-            : fallback;
+            ? value.GetString() is { Length: > 0 } text ? text : null
+            : null;
 
     private static string NestedText(
         JsonElement root, string objectName, string propertyName, string fallback) =>

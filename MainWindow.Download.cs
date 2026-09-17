@@ -114,8 +114,8 @@ public partial class MainWindow
         DownloadPage.Visibility = Visibility.Visible;
         IpodCanvas.Visibility = Visibility.Collapsed;
 
-        MusicNav.Visibility = Visibility.Collapsed;
-        IpodNav.Visibility = Visibility.Collapsed;
+        SetNavExpanded(MusicNav, MusicNavTransform, false);
+        SetNavExpanded(IpodNav, IpodNavTransform, false);
         MusicHeaderButton.Tag = null;
         IpodHeaderButton.Tag = null;
         DownloadHeaderButton.Tag = "Active";
@@ -199,12 +199,12 @@ public partial class MainWindow
             var providerWarning = response.ProviderErrors.Count == 0
                 ? ""
                 : "  ·  " + string.Join("  ·  ", response.ProviderErrors);
-            MusicSearchStatus.Text = _musicSearchResults.Count == 0
-                ? "No tracks found. Try a song and artist together." + providerWarning
-                : $"{_musicSearchResults.Count} unified result{(_musicSearchResults.Count == 1 ? "" : "s")}. Pick a source to add it to the queue." + providerWarning;
+            MusicSearchStatus.Text = response.Summary
+                + (_musicSearchResults.Count == 0 ? "" : " Pick a source to add it to the queue.")
+                + providerWarning;
             SetDownloadStatus(_musicSearchResults.Count == 0
                 ? $"No search results for “{query}”"
-                : $"Found {_musicSearchResults.Count} track{(_musicSearchResults.Count == 1 ? "" : "s")} — select one to edit its details");
+                : $"Found {_musicSearchResults.Count} result{(_musicSearchResults.Count == 1 ? "" : "s")} — select one to edit its details");
         }
         catch (OperationCanceledException)
         {
@@ -264,21 +264,38 @@ public partial class MainWindow
                 "YouTube" => result.YouTubeUrl,
                 _ => MusicSearchService.SpotifyMatchUrl(result),
             };
-            var node = new DownloadNode(DownloadKind.Single)
+            DownloadNode node;
+            if (result.Kind == MusicSearchResultKind.Track)
             {
-                Url = url,
-                Title = result.Title,
-                Artist = string.IsNullOrWhiteSpace(result.Artist) ? "Unknown Artist" : result.Artist.Trim(),
-                Album = result.Album.Trim(),
-                Genre = string.IsNullOrWhiteSpace(result.Genre) ? "Unknown" : result.Genre.Trim(),
-                ArtworkOverride = artwork,
-                State = DownloadState.Ready,
-                StatusText = source == "Spotify" ? "Ready — Spotify match" : $"Ready — {source}",
-            };
+                node = new DownloadNode(DownloadKind.Single)
+                {
+                    Url = url,
+                    Title = result.Title,
+                    Artist = string.IsNullOrWhiteSpace(result.Artist) ? "Unknown Artist" : result.Artist.Trim(),
+                    Album = result.Album.Trim(),
+                    Genre = string.IsNullOrWhiteSpace(result.Genre) ? "Unknown" : result.Genre.Trim(),
+                    ArtworkOverride = artwork,
+                    State = DownloadState.Ready,
+                    StatusText = source == "Spotify" ? "Ready — Spotify match" : $"Ready — {source}",
+                };
+            }
+            else
+            {
+                SetDownloadStatus($"Loading {result.Title} so its full {result.Kind.ToString().ToLowerInvariant()} can be queued…");
+                var info = await Task.Run(() => DownloadService.ScanAsync(url));
+                node = BuildNode(url, info);
+                ApplySearchMetadata(node, result, artwork);
+            }
             _rootNodes.Add(node);
             SaveFailedDownloadQueue();
             RefreshDownloadChrome();
-            SetDownloadStatus($"Queued “{result.Title}” via {source} — keep searching or press Download when ready");
+            var contents = result.Kind switch
+            {
+                MusicSearchResultKind.Artist => $"{node.Children.Count} albums",
+                MusicSearchResultKind.Album => $"{node.Children.Count} tracks",
+                _ => "track",
+            };
+            SetDownloadStatus($"Queued “{result.Title}” ({contents}) via {source} — keep searching or press Download when ready");
         }
         catch (Exception ex)
         {
@@ -300,6 +317,22 @@ public partial class MainWindow
             Filter = "Images|*.jpg;*.jpeg;*.png;*.webp;*.bmp|All files|*.*",
         };
         if (dialog.ShowDialog(this) == true) result.Artwork = dialog.FileName;
+    }
+
+    private static void ApplySearchMetadata(
+        DownloadNode node, MusicSearchResult result, string? artwork)
+    {
+        node.ArtworkOverride = artwork;
+        node.Genre = string.IsNullOrWhiteSpace(result.Genre) ? "Unknown" : result.Genre.Trim();
+        if (result.Kind == MusicSearchResultKind.Artist)
+        {
+            node.Artist = string.IsNullOrWhiteSpace(result.Title) ? node.Artist : result.Title.Trim();
+        }
+        else if (result.Kind == MusicSearchResultKind.Album)
+        {
+            node.Album = string.IsNullOrWhiteSpace(result.Title) ? node.Album : result.Title.Trim();
+            node.Artist = string.IsNullOrWhiteSpace(result.Artist) ? node.Artist : result.Artist.Trim();
+        }
     }
 
     // ---- Adding + scanning links ---------------------------------------
