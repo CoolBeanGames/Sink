@@ -67,6 +67,36 @@ public static class FirefoxCookieExporter
             .FirstOrDefault();
     }
 
+    public static string? GetDeezerArl()
+    {
+        try
+        {
+            var profile = FindMostRecentProfile();
+            if (profile is null) return null;
+
+            var tempCopy = Path.Combine(Path.GetTempPath(), $"sink-ff-cookies-arl-{Guid.NewGuid():N}.sqlite");
+            File.Copy(profile, tempCopy, overwrite: true);
+            try
+            {
+                using var connection = new SqliteConnection($"Data Source={tempCopy};Mode=ReadOnly;Pooling=False");
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "SELECT value FROM moz_cookies WHERE host LIKE '%deezer.com' AND name = 'arl'";
+                var result = command.ExecuteScalar();
+                return result as string;
+            }
+            finally
+            {
+                try { File.Delete(tempCopy); } catch (IOException) { }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SqliteException)
+        {
+            Log.Warn($"Failed to extract Deezer ARL from Firefox: {ex.Message}");
+            return null;
+        }
+    }
+
     private sealed record CookieRow(string Host, string Path, bool Secure, long ExpirySeconds, string Name, string Value);
 
     private static List<CookieRow> ReadYouTubeCookies(string sqlitePath)

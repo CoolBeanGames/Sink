@@ -21,6 +21,7 @@ public sealed class SettingsWindow : SinkDialog
     private readonly ComboBox _youTubeCookies = new() { Width = 260, HorizontalAlignment = HorizontalAlignment.Left };
     private readonly TextBox _cookieFile = Field();
     private readonly UIElement _cookieFileRow;
+    private readonly TextBox _deezerArl = Field();
 
     private readonly Func<int> _refresh;
     private readonly Action _export;
@@ -60,6 +61,7 @@ public sealed class SettingsWindow : SinkDialog
         _youTubeCookies.SelectedIndex = Math.Max(0, cookieIndex);
 
         _cookieFile.Text = settings.CookieFilePath;
+        _deezerArl.Text = StreamripToolManager.GetDeezerArl();
         var browseCookieFile = SecondaryButton("Browse…", (_, _) =>
         {
             var dialog = new OpenFileDialog { Title = "Choose a cookies.txt file", Filter = "Cookie files|*.txt|All files|*.*" };
@@ -111,6 +113,42 @@ public sealed class SettingsWindow : SinkDialog
             Text = "Lets yt-dlp borrow a signed-in browser's cookies so YouTube doesn't ask Sink to \"confirm you're not a bot\". " +
                    "\"Cookie file\" uses a cookies.txt you point at directly instead of reading live from a browser — more reliable than Chrome/Edge (their cookie store can't always be read at all) and immune to a browser being open. " +
                    "\"Export Firefox cookies…\" builds one for you straight from Firefox, since its cookie store is the one browser Sink can read directly and safely.",
+            Foreground = Hex("#6E7584"), FontSize = 11, Margin = new Thickness(0, 5, 0, 0), TextWrapping = TextWrapping.Wrap,
+        });
+
+        body.Children.Add(Label("Deezer ARL token"));
+        
+        var deezerArlRow = new DockPanel();
+        var extractArlBtn = SecondaryButton("Extract from Firefox…", (_, _) =>
+        {
+            var arl = FirefoxCookieExporter.GetDeezerArl();
+            if (string.IsNullOrWhiteSpace(arl))
+            {
+                MessageBox.Show(this, "Could not find a Deezer ARL cookie in Firefox. Make sure you are logged into deezer.com in Firefox.", "Extract ARL", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            else
+            {
+                _deezerArl.Text = arl;
+                try
+                {
+                    StreamripToolManager.SetDeezerArl(arl);
+                    MessageBox.Show(this, "Successfully extracted your Deezer ARL from Firefox and saved it to Streamrip's config!", "Extract ARL", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, $"Extracted successfully, but couldn't save to config: {ex.Message}", "Extract ARL", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+        });
+        extractArlBtn.Margin = new Thickness(8, 0, 0, 0);
+        DockPanel.SetDock(extractArlBtn, Dock.Right);
+        deezerArlRow.Children.Add(extractArlBtn);
+        deezerArlRow.Children.Add(_deezerArl);
+        
+        body.Children.Add(deezerArlRow);
+        body.Children.Add(new TextBlock
+        {
+            Text = "Used by Streamrip to download tracks from Deezer. You can extract this straight from Firefox if you're signed in, or grab it manually from your browser's cookies.",
             Foreground = Hex("#6E7584"), FontSize = 11, Margin = new Thickness(0, 5, 0, 0), TextWrapping = TextWrapping.Wrap,
         });
 
@@ -174,6 +212,7 @@ public sealed class SettingsWindow : SinkDialog
         // otherwise switching to a browser that actually works, like Firefox,
         // would silently never get retried and keep failing the same way.
         Sink.Services.Download.DownloadService.ResetCookieLatch();
+        try { StreamripToolManager.SetDeezerArl(_deezerArl.Text.Trim()); } catch (Exception ex) { Log.Warn($"Could not save ARL: {ex.Message}"); }
         DialogResult = true;
     }
 

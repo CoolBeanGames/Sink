@@ -245,6 +245,7 @@ public static partial class StreamripService
             throw new InvalidOperationException("Streamrip is not installed yet");
         var psi = new ProcessStartInfo(StreamripToolManager.RipPath)
         {
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -256,6 +257,7 @@ public static partial class StreamripService
         foreach (var argument in arguments) psi.ArgumentList.Add(argument);
 
         using var process = Process.Start(psi) ?? throw new InvalidOperationException("Could not start Streamrip");
+        process.StandardInput.Close();
         var stdout = process.StandardOutput.ReadToEndAsync(token);
         var stderr = process.StandardError.ReadToEndAsync(token);
         try

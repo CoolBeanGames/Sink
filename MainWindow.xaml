@@ -447,94 +447,9 @@
                                  KeyDown="MusicSearchBox_KeyDown" ToolTip="Search for a song, artist, or album"/>
                         <Button x:Name="MusicSearchButton" Grid.Column="1" Content="Search" Click="MusicSearchButton_Click"
                                 Style="{StaticResource PrimaryButtonStyle}" Padding="17,9" Margin="8,0,0,0"/>
-                        <Button Grid.Column="2" Content="Close" Click="CloseMusicSearch_Click" Background="#242A34" Foreground="#C7CCD6"
-                                BorderThickness="0" Padding="13,9" Margin="7,0,0,0" Cursor="Hand"/>
-                    </Grid>
-
-                    <Grid x:Name="MusicSearchResultsPanel" Grid.Row="1" Margin="0,14,0,0" Visibility="Collapsed">
-                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                        <TextBlock x:Name="MusicSearchStatus" Foreground="#858C9B" FontSize="11" Margin="2,0,0,8" TextWrapping="Wrap"/>
-
-                        <ListBox x:Name="MusicSearchResults" Grid.Row="1" Background="#0F1218" BorderBrush="#262C38" BorderThickness="1"
-                                 MaxHeight="250" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                 SelectionChanged="MusicSearchResults_SelectionChanged">
-                            <ListBox.ItemContainerStyle>
-                                <Style TargetType="ListBoxItem">
-                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                    <Setter Property="Padding" Value="0"/>
-                                    <Setter Property="Margin" Value="0"/>
-                                    <Setter Property="Background" Value="Transparent"/>
-                                    <Setter Property="BorderThickness" Value="0"/>
-                                    <Style.Triggers>
-                                        <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#211E36"/></Trigger>
-                                        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#181C25"/></Trigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </ListBox.ItemContainerStyle>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate DataType="{x:Type dl:MusicSearchResult}">
-                                    <Grid Margin="8" MinHeight="58">
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="54"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                        <Border Width="46" Height="46" CornerRadius="6" Background="#1D222C" ClipToBounds="True" VerticalAlignment="Top">
-                                            <Grid>
-                                                <TextBlock Text="♫" Foreground="#656D7C" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                <Image Source="{Binding Artwork}" Stretch="UniformToFill"/>
-                                            </Grid>
-                                        </Border>
-                                        <StackPanel Grid.Column="1" Margin="7,1,10,0">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                                <Border Background="#272243" CornerRadius="4" Padding="5,2" Margin="0,0,7,0" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding KindLabel}" Foreground="#BEB7FF" FontSize="8" FontWeight="Bold"/>
-                                                </Border>
-                                                <TextBlock Grid.Column="1" Text="{Binding Title}" Foreground="#F4F6FA" FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                            </Grid>
-                                            <TextBlock Text="{Binding Subtitle}" Foreground="#969DAB" FontSize="11" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock Text="{Binding Providers}" Foreground="#8B7CFF" FontSize="8.5" FontWeight="SemiBold" Margin="0,5,0,0"/>
-                                        </StackPanel>
-                                        <WrapPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
-                                            <Button Content="Download" Tag="Download" Click="SearchResultAction_Click" Style="{StaticResource PrimaryButtonStyle}" Padding="9,5" Margin="3"/>
-                                            <Button Content="YT" Tag="YouTube" Click="SearchResultAction_Click" IsEnabled="{Binding HasYouTube}" Background="#252B36" Foreground="#D9DCE4" BorderThickness="0" Padding="8,5" Margin="3" Cursor="Hand"/>
-                                            <Button Content="Spotify" Tag="Spotify" Click="SearchResultAction_Click" IsEnabled="{Binding HasSpotify}" Background="#1D3026" Foreground="#8FE3AC" BorderThickness="0" Padding="8,5" Margin="3" Cursor="Hand"/>
-                                            <Button Content="Deezer" Tag="Deezer" Click="SearchResultAction_Click" IsEnabled="{Binding HasDeezer}" Background="#2B2440" Foreground="#C2B9FF" BorderThickness="0" Padding="8,5" Margin="3" Cursor="Hand"/>
-                                        </WrapPanel>
-                                    </Grid>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-
-                        <Border x:Name="MusicSearchDetails" Grid.Row="2" Margin="0,10,0,0" Background="#161A22"
-                                BorderBrush="#2A303C" BorderThickness="1" CornerRadius="9" Padding="13" Visibility="Collapsed">
-                            <Grid>
-                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="76"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <Grid Grid.ColumnSpan="3" Margin="0,0,0,9">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource EyebrowStyle}"><Run Text="SELECTED "/><Run Text="{Binding KindLabel}"/></TextBlock>
-                                        <TextBlock Text="{Binding EditHint}" Foreground="#6E7584" FontSize="10" Margin="0,4,12,0" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                    <Border Grid.Column="1" Width="54" Height="54" CornerRadius="6" Background="#0F1218" ClipToBounds="True">
-                                        <Image Source="{Binding Artwork}" Stretch="UniformToFill"/>
-                                    </Border>
-                                </Grid>
-                                <TextBlock Grid.Row="1" Text="{Binding TitleFieldLabel}" Foreground="#858C9B" FontSize="11" VerticalAlignment="Center"/>
-                                <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding IsTitleReadOnly}" Background="#0F1218" Foreground="#F4F6FA" CaretBrush="#F4F6FA" BorderBrush="#353C49" Padding="8,5"/>
-                                <TextBlock Grid.Row="2" Text="Artist" Foreground="#858C9B" FontSize="11" VerticalAlignment="Center" Visibility="{Binding ShowArtistField, Converter={StaticResource B2V}}"/>
-                                <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,6,0,0" Text="{Binding Artist, UpdateSourceTrigger=PropertyChanged}" Background="#0F1218" Foreground="#F4F6FA" CaretBrush="#F4F6FA" BorderBrush="#353C49" Padding="8,5" Visibility="{Binding ShowArtistField, Converter={StaticResource B2V}}"/>
-                                <TextBlock Grid.Row="3" Text="Album" Foreground="#858C9B" FontSize="11" VerticalAlignment="Center" Visibility="{Binding ShowAlbumField, Converter={StaticResource B2V}}"/>
-                                <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,6,0,0" Text="{Binding Album, UpdateSourceTrigger=PropertyChanged}" Background="#0F1218" Foreground="#F4F6FA" CaretBrush="#F4F6FA" BorderBrush="#353C49" Padding="8,5" Visibility="{Binding ShowAlbumField, Converter={StaticResource B2V}}"/>
-                                <TextBlock Grid.Row="4" Text="Genre" Foreground="#858C9B" FontSize="11" VerticalAlignment="Center"/>
-                                <TextBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,6,0,0" Text="{Binding Genre, UpdateSourceTrigger=PropertyChanged}" Background="#0F1218" Foreground="#F4F6FA" CaretBrush="#F4F6FA" BorderBrush="#353C49" Padding="8,5"/>
-                                <TextBlock Grid.Row="5" Text="Artwork" Foreground="#858C9B" FontSize="11" VerticalAlignment="Center"/>
-                                <TextBox Grid.Row="5" Grid.Column="1" Margin="0,6,6,0" Text="{Binding Artwork, UpdateSourceTrigger=PropertyChanged}" Background="#0F1218" Foreground="#F4F6FA" CaretBrush="#F4F6FA" BorderBrush="#353C49" Padding="8,5"/>
-                                <Button Grid.Row="5" Grid.Column="2" Content="Browse…" Click="BrowseSearchArtwork_Click" Background="#242A34" Foreground="#D1D5DD" BorderThickness="0" Padding="9,6" Margin="0,6,0,0" Cursor="Hand"/>
-                            </Grid>
-                        </Border>
                     </Grid>
                 </Grid>
             </Border>
-
             <Border Grid.Row="2" Margin="0,14,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#12151C">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -1143,6 +1058,104 @@
                 </Button>
             </StackPanel>
         </Canvas>
+        <Border x:Name="MusicSearchOverlay" Grid.Column="1" HorizontalAlignment="Right" Width="440"
+                Background="#161A22" BorderBrush="#262C38" BorderThickness="1,0,0,0" Panel.ZIndex="40" Visibility="Collapsed"
+                CornerRadius="12,0,0,0">
+            <Border.Effect>
+                <DropShadowEffect Color="#000000" Opacity="0.5" BlurRadius="24" ShadowDepth="0" />
+            </Border.Effect>
+            <Grid Margin="18">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <Grid Margin="0,0,0,14">
+                    <TextBlock Text="Search Results" FontSize="18" FontWeight="SemiBold" Foreground="#F4F6FA" VerticalAlignment="Center"/>
+                    <Button Content="Close" Click="CloseMusicSearch_Click" HorizontalAlignment="Right" Background="#242A34" Foreground="#C7CCD6" BorderThickness="0" Padding="13,9" Cursor="Hand"/>
+                </Grid>
+
+                <Grid x:Name="MusicSearchResultsPanel" Grid.Row="1">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <TextBlock x:Name="MusicSearchStatus" Foreground="#858C9B" FontSize="11" Margin="2,0,0,8" TextWrapping="Wrap"/>
+
+                    <ListBox x:Name="MusicSearchResults" Grid.Row="1" Background="#0F1218" BorderBrush="#262C38" BorderThickness="1"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             SelectionChanged="MusicSearchResults_SelectionChanged">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#211E36"/></Trigger>
+                                    <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#181C25"/></Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type dl:MusicSearchResult}">
+                                <Grid Margin="8" MinHeight="58">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="54"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <Border Width="46" Height="46" CornerRadius="6" Background="#1D222C" ClipToBounds="True" VerticalAlignment="Top">
+                                        <Grid>
+                                            <TextBlock Text="♫" Foreground="#656D7C" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            <Image Source="{Binding Artwork}" Stretch="UniformToFill"/>
+                                        </Grid>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Margin="7,1,10,0">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                            <Border Background="#272243" CornerRadius="4" Padding="5,2" Margin="0,0,7,0" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding KindLabel, Mode=OneWay}" Foreground="#BEB7FF" FontSize="8" FontWeight="Bold"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="{Binding Title}" Foreground="#F4F6FA" FontSize="12.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                        <TextBlock Text="{Binding Subtitle}" Foreground="#969DAB" FontSize="11" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding Providers}" Foreground="#8B7CFF" FontSize="8.5" FontWeight="SemiBold" Margin="0,5,0,0"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                        <Button Content="Download" Tag="Download" Click="SearchResultAction_Click" Style="{StaticResource PrimaryButtonStyle}" Padding="9,5" Margin="0,0,0,6"/>
+                                        <WrapPanel HorizontalAlignment="Right">
+                                            <Button Content="YT" Tag="YouTube" Click="SearchResultAction_Click" IsEnabled="{Binding HasYouTube}" Background="#252B36" Foreground="#D9DCE4" BorderThickness="0" Padding="8,4" Margin="0,0,4,0" Cursor="Hand" FontSize="10"/>
+                                            <Button Content="Spotify" Tag="Spotify" Click="SearchResultAction_Click" IsEnabled="{Binding HasSpotify}" Background="#1D3026" Foreground="#8FE3AC" BorderThickness="0" Padding="8,4" Margin="0,0,4,0" Cursor="Hand" FontSize="10"/>
+                                            <Button Content="Deezer" Tag="Deezer" Click="SearchResultAction_Click" IsEnabled="{Binding HasDeezer}" Background="#2B2440" Foreground="#C2B9FF" BorderThickness="0" Padding="8,4" Cursor="Hand" FontSize="10"/>
+                                        </WrapPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <Border x:Name="MusicSearchDetails" Grid.Row="2" Margin="0,10,0,0" Background="#161A22"
+                            BorderBrush="#2A303C" BorderThickness="1" CornerRadius="9" Padding="13" Visibility="Collapsed">
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="76"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <Grid Grid.ColumnSpan="3" Margin="0,0,0,9">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource EyebrowStyle}"><Run Text="SELECTED "/><Run Text="{Binding KindLabel, Mode=OneWay}"/></TextBlock>
+                                    <TextBlock Text="{Binding EditHint}" Foreground="#6E7584" FontSize="10" Margin="0,4,12,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <Border Grid.Column="1" Width="54" Height="54" CornerRadius="6" Background="#0F1218" ClipToBounds="True">
+                                    <Image Source="{Binding Artwork}" Stretch="UniformToFill"/>
+                                </Border>
+                            </Grid>
+                            <TextBlock Grid.Row="1" Text="{Binding TitleFieldLabel}" Foreground="#858C9B" FontSize="11" VerticalAlignment="Center"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="{Binding IsTitleReadOnly}" Background="#0F1218" Foreground="#F4F6FA" CaretBrush="#F4F6FA" BorderBrush="#353C49" Padding="8,5"/>
+                            <TextBlock Grid.Row="2" Text="Artist" Foreground="#858C9B" FontSize="11" VerticalAlignment="Center" Visibility="{Binding ShowArtistField, Converter={StaticResource B2V}}"/>
+                            <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,6,0,0" Text="{Binding Artist, UpdateSourceTrigger=PropertyChanged}" Background="#0F1218" Foreground="#F4F6FA" CaretBrush="#F4F6FA" BorderBrush="#353C49" Padding="8,5" Visibility="{Binding ShowArtistField, Converter={StaticResource B2V}}"/>
+                            <TextBlock Grid.Row="3" Text="Album" Foreground="#858C9B" FontSize="11" VerticalAlignment="Center" Visibility="{Binding ShowAlbumField, Converter={StaticResource B2V}}"/>
+                            <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,6,0,0" Text="{Binding Album, UpdateSourceTrigger=PropertyChanged}" Background="#0F1218" Foreground="#F4F6FA" CaretBrush="#F4F6FA" BorderBrush="#353C49" Padding="8,5" Visibility="{Binding ShowAlbumField, Converter={StaticResource B2V}}"/>
+                            <TextBlock Grid.Row="4" Text="Genre" Foreground="#858C9B" FontSize="11" VerticalAlignment="Center"/>
+                            <TextBox Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,6,0,0" Text="{Binding Genre, UpdateSourceTrigger=PropertyChanged}" Background="#0F1218" Foreground="#F4F6FA" CaretBrush="#F4F6FA" BorderBrush="#353C49" Padding="8,5"/>
+                            <TextBlock Grid.Row="5" Text="Artwork" Foreground="#858C9B" FontSize="11" VerticalAlignment="Center"/>
+                            <TextBox Grid.Row="5" Grid.Column="1" Margin="0,6,6,0" Text="{Binding Artwork, UpdateSourceTrigger=PropertyChanged}" Background="#0F1218" Foreground="#F4F6FA" CaretBrush="#F4F6FA" BorderBrush="#353C49" Padding="8,5"/>
+                            <Button Grid.Row="5" Grid.Column="2" Content="Browse…" Click="BrowseSearchArtwork_Click" Background="#242A34" Foreground="#D1D5DD" BorderThickness="0" Padding="9,6" Margin="0,6,0,0" Cursor="Hand"/>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Border>
         <Border x:Name="ImportOverlay" Grid.RowSpan="2" Grid.ColumnSpan="2" Panel.ZIndex="50" Visibility="Collapsed" Margin="14" BorderBrush="#8B7CFF" BorderThickness="2" CornerRadius="18" Background="#EE11141B" IsHitTestVisible="False">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><Border Width="66" Height="66" CornerRadius="33" Background="#6559CE"><TextBlock Text="↓" FontSize="34" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock Text="Drop music to import" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,18,0,0"/><TextBlock Text="Audio files and nested folders are welcome" Foreground="#8C93A2" FontSize="12" HorizontalAlignment="Center" Margin="0,5,0,0"/></StackPanel>
         </Border>

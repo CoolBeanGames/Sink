@@ -182,6 +182,7 @@ public partial class MainWindow
         _musicSearchCts?.Dispose();
         var cts = _musicSearchCts = new CancellationTokenSource();
         _musicSearchResults.Clear();
+        MusicSearchOverlay.Visibility = Visibility.Visible;
         MusicSearchResultsPanel.Visibility = Visibility.Visible;
         MusicSearchDetails.Visibility = Visibility.Collapsed;
         MusicSearchButton.IsEnabled = false;
@@ -228,6 +229,7 @@ public partial class MainWindow
     private void CloseMusicSearch_Click(object sender, RoutedEventArgs e)
     {
         _musicSearchCts?.Cancel();
+        MusicSearchOverlay.Visibility = Visibility.Collapsed;
         MusicSearchResultsPanel.Visibility = Visibility.Collapsed;
         MusicSearchDetails.Visibility = Visibility.Collapsed;
         MusicSearchBox.SelectAll();

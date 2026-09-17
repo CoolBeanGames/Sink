@@ -92,10 +92,10 @@ public sealed class TrimTitlesWindow : SinkDialog
     private static (string title, int track) Transform(string original, Spec s)
     {
         var t = original;
-        if (s.ReplaceFind is { Length: > 0 } find) t = t.Replace(find, s.ReplaceWith ?? "");
-        if (s.CutAll is { Length: > 0 } cut) t = t.Replace(cut, "");
-        if (s.Up is { Length: > 0 } u) { var i = t.IndexOf(u, StringComparison.Ordinal); if (i >= 0) t = t[(i + u.Length)..]; }
-        if (s.After is { Length: > 0 } a) { var i = t.IndexOf(a, StringComparison.Ordinal); if (i >= 0) t = t[..i]; }
+        if (s.ReplaceFind is { Length: > 0 } find) t = t.Replace(find, s.ReplaceWith ?? "", StringComparison.OrdinalIgnoreCase);
+        if (s.CutAll is { Length: > 0 } cut) t = t.Replace(cut, "", StringComparison.OrdinalIgnoreCase);
+        if (s.Up is { Length: > 0 } u) { var i = t.IndexOf(u, StringComparison.OrdinalIgnoreCase); if (i >= 0) t = t[(i + u.Length)..]; }
+        if (s.After is { Length: > 0 } a) { var i = t.IndexOf(a, StringComparison.OrdinalIgnoreCase); if (i >= 0) t = t[..i]; }
         if (s.First > 0) t = s.First < t.Length ? t[s.First..] : "";
         if (s.Last > 0) t = s.Last < t.Length ? t[..^s.Last] : "";
         t = t.Trim().Trim('-', '–', '—', '.', ':', '·').Trim();

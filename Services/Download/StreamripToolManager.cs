@@ -185,7 +185,69 @@ public static class StreamripToolManager
         }
         return (process.ExitCode, await stdout.ConfigureAwait(false), await stderr.ConfigureAwait(false));
     }
+    public static string GetDeezerArl()
+    {
+        if (!File.Exists(ConfigPath)) return "";
+        foreach (var line in File.ReadLines(ConfigPath))
+        {
+            if (line.TrimStart().StartsWith("arl", StringComparison.OrdinalIgnoreCase))
+            {
+                var parts = line.Split('=', 2);
+                if (parts.Length == 2)
+                {
+                    return parts[1].Trim().Trim('"', '\'');
+                }
+            }
+        }
+        return "";
+    }
 
+    public static void SetDeezerArl(string arl)
+    {
+        if (!File.Exists(ConfigPath))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
+            File.WriteAllText(ConfigPath, "[deezer]\narl = \"" + arl + "\"\n");
+            return;
+        }
+
+        var lines = File.ReadAllLines(ConfigPath).ToList();
+        var deezerSectionIdx = -1;
+        var arlLineIdx = -1;
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var trimmed = lines[i].Trim();
+            if (trimmed.Equals("[deezer]", StringComparison.OrdinalIgnoreCase))
+                deezerSectionIdx = i;
+            else if (deezerSectionIdx != -1 && trimmed.StartsWith("[") && trimmed.EndsWith("]"))
+            {
+                if (arlLineIdx == -1) deezerSectionIdx = -1;
+            }
+            else if (deezerSectionIdx != -1 && trimmed.StartsWith("arl", StringComparison.OrdinalIgnoreCase))
+            {
+                var beforeEq = lines[i].Split('=')[0];
+                if (beforeEq.Trim().Equals("arl", StringComparison.OrdinalIgnoreCase))
+                    arlLineIdx = i;
+            }
+        }
+
+        if (arlLineIdx != -1)
+        {
+            lines[arlLineIdx] = "arl = \"" + arl + "\"";
+        }
+        else if (deezerSectionIdx != -1)
+        {
+            lines.Insert(deezerSectionIdx + 1, "arl = \"" + arl + "\"");
+        }
+        else
+        {
+            lines.Add("");
+            lines.Add("[deezer]");
+            lines.Add("arl = \"" + arl + "\"");
+        }
+
+        File.WriteAllLines(ConfigPath, lines);
+    }
     private static string? FirstLine(string text) =>
         text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
 }

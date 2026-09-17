@@ -1888,6 +1888,7 @@ public partial class MainWindow : Window
         menu.Items.Add(Item("Play", () => PlayTracks(tracks)));
         menu.Items.Add(Item(tracks.Any(t => !t.IsFavorite) ? "♥ Favorite" : "♡ Remove favorite", () => { ToggleFavorite(tracks); TracksGrid.Items.Refresh(); }));
         menu.Items.Add(Item("Edit metadata…", () => EditMetadata(tracks)));
+        menu.Items.Add(Item("Trim titles…", () => TrimLibraryTitles(tracks)));
         menu.Items.Add(AddToPlaylistMenu(tracks));
         if (_activePlaylist is { } activePlaylist)
             menu.Items.Add(Item("Remove from playlist", () => RemoveTracksFromPlaylist(activePlaylist, tracks)));
@@ -1924,7 +1925,10 @@ public partial class MainWindow : Window
             if (single) menu.Items.Add(Item("Rename…", () => RenameGenre(cards[0].Name)));
         }
         else
+        {
             menu.Items.Add(Item("Edit metadata…", () => EditMetadata(tracks)));
+            menu.Items.Add(Item("Trim titles…", () => TrimLibraryTitles(tracks)));
+        }
         if (kind == LibraryCategory.Albums && single)
         {
             menu.Items.Add(Item("Crop album art", () => CropAlbumArt(cards[0].Name, tracks)));
@@ -1944,6 +1948,20 @@ public partial class MainWindow : Window
         }
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Delete from library", () => DeleteTracks(tracks)));
+    }
+
+    private void TrimLibraryTitles(IReadOnlyList<Track> tracks)
+    {
+        var dialog = new Dialogs.TrimTitlesWindow(tracks) { Owner = this };
+        BlurBehind(true);
+        var ok = dialog.ShowDialog() == true;
+        BlurBehind(false);
+        if (ok)
+        {
+            SaveLibrary();
+            TracksGrid.Items.Refresh();
+            PlaybackStatus.Text = $"Trimmed {tracks.Count} track{(tracks.Count == 1 ? "" : "s")}";
+        }
     }
 
     private static MenuItem Header(string text) => new() { Header = text, IsEnabled = false, FontWeight = FontWeights.SemiBold };
