@@ -259,7 +259,7 @@ public partial class MainWindow
                 Artist = info.Artist,
                 Genre = info.Genre,
                 State = DownloadState.Ready,
-                IsMixedPlaylist = true,
+                IsMixedPlaylist = info.IsMixedPlaylist,
             };
             FillTracks(node, info);
             return node;
@@ -290,9 +290,12 @@ public partial class MainWindow
             album.Children.Add(new DownloadNode(DownloadKind.Track)
             {
                 Index = i + 1,
+                Url = info.TrackUrls is { } urls && i < urls.Count ? urls[i] : "",
                 Title = title,
                 ScannedTitle = title,
                 Artist = trackArtist,
+                Album = album.IsMixedPlaylist && info.TrackAlbums is { } albums && i < albums.Count
+                    ? albums[i] : "",
                 State = DownloadState.Ready,
                 StatusText = "",
             });

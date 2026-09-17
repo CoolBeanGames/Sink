@@ -9,7 +9,8 @@ namespace Sink.Services.Download;
 public sealed record ScannedInfo(
     string Title, string Artist, string Album, string Genre, bool IsPlaylist, int TrackCount,
     IReadOnlyList<ScannedAlbum>? Albums = null, IReadOnlyList<string>? TrackTitles = null,
-    IReadOnlyList<string>? TrackArtists = null);
+    IReadOnlyList<string>? TrackArtists = null, IReadOnlyList<string>? TrackUrls = null,
+    IReadOnlyList<string>? TrackAlbums = null, bool IsMixedPlaylist = true);
 
 /// <summary>One album found on a YouTube Music artist page.</summary>
 public sealed record ScannedAlbum(string Url, string Title);
@@ -35,6 +36,9 @@ public static partial class DownloadService
     /// </summary>
     public static async Task<ScannedInfo> ScanAsync(string url, CancellationToken token = default)
     {
+        if (DeezerService.IsDeezerLink(url))
+            return await DeezerService.ScanAsync(url, token).ConfigureAwait(false);
+
         var info = await ScanRawAsync(url, token).ConfigureAwait(false);
         if (info.Albums is { Count: > 0 }) return info;
 
@@ -161,6 +165,10 @@ public static partial class DownloadService
         IProgress<string>? status = null, IProgress<string>? onTrackFile = null,
         IProgress<DownloadNode>? onTrackDone = null, CancellationToken token = default)
     {
+        if (DeezerService.IsDeezerLink(node.Url))
+            return await StreamripService.DownloadAsync(
+                node, options, progress, status, onTrackFile, onTrackDone, token).ConfigureAwait(false);
+
         System.IO.Directory.CreateDirectory(DownloadsDirectory);
         var workDir = Path.Combine(DownloadsDirectory, "_" + Guid.NewGuid().ToString("N")[..8]);
         System.IO.Directory.CreateDirectory(workDir);
@@ -467,12 +475,13 @@ public static partial class DownloadService
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 
-    private static string? FirstReal(params string?[] values) =>
+    internal static string? FirstReal(params string?[] values) =>
         values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v) && v != "Unknown Artist" && v != "Unknown");
 
     /// <summary>Writes the user's (possibly edited) metadata over whatever yt-dlp embedded.</summary>
-    private static void ApplyTags(
-        string path, string artist, string album, string genre, string? title, int trackNo, byte[]? artwork)
+    internal static void ApplyTags(
+        string path, string artist, string album, string genre, string? title, int trackNo, byte[]? artwork,
+        bool clearArtwork = false)
     {
         try
         {
@@ -487,7 +496,9 @@ public static partial class DownloadService
             if (!string.IsNullOrWhiteSpace(genre) && genre != "Unknown")
                 file.Tag.Genres = [genre];
             if (trackNo > 0) file.Tag.Track = (uint)trackNo;
-            if (artwork is { Length: > 0 })
+            if (clearArtwork)
+                file.Tag.Pictures = [];
+            else if (artwork is { Length: > 0 })
                 file.Tag.Pictures = [new TagLib.Picture(new TagLib.ByteVector(artwork))
                 {
                     Type = TagLib.PictureType.FrontCover,
@@ -499,7 +510,7 @@ public static partial class DownloadService
         catch (Exception e) when (e is not OutOfMemoryException) { }
     }
 
-    private static readonly HashSet<string> AudioExtensions = new(StringComparer.OrdinalIgnoreCase)
+    internal static readonly HashSet<string> AudioExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".mp3", ".m4a", ".aac", ".opus", ".ogg", ".flac", ".wav"
     };
@@ -602,13 +613,13 @@ public static partial class DownloadService
         return raw;
     }
 
-    private static string Sanitize(string name)
+    internal static string Sanitize(string name)
     {
         foreach (var c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
         return name.Length > 120 ? name[..120] : name;
     }
 
-    private static string UniquePath(string path)
+    internal static string UniquePath(string path)
     {
         if (!File.Exists(path)) return path;
         var dir = Path.GetDirectoryName(path)!;
