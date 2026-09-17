@@ -63,8 +63,8 @@ public sealed class AddLinkWindow : SinkDialog
         });
         body.Children.Add(new TextBlock
         {
-            Text = "YouTube or YouTube Music — one link per line. A track, album, artist, or playlist. "
-                 + "Spotify track/album/playlist links work too — matched to YouTube automatically.",
+            Text = "YouTube, YouTube Music, Spotify, or Deezer — one link per line. "
+                 + "Tracks, albums, artists, and playlists are expanded into the editable queue automatically.",
             Foreground = Hex("#858C9B"), FontSize = 12, Margin = new Thickness(0, 5, 0, 0), TextWrapping = TextWrapping.Wrap,
         });
         _link.Margin = new Thickness(0, 18, 0, 0);
@@ -102,7 +102,9 @@ public sealed class AddLinkWindow : SinkDialog
                 // copied sentence doesn't land in the box uninvited.
                 var lines = text.Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
                 if (lines.Count > 0 && lines.All(l =>
-                        (l.Contains("youtu", StringComparison.OrdinalIgnoreCase) || l.Contains("spotify", StringComparison.OrdinalIgnoreCase))
+                        (l.Contains("youtu", StringComparison.OrdinalIgnoreCase)
+                         || l.Contains("spotify", StringComparison.OrdinalIgnoreCase)
+                         || l.Contains("deezer", StringComparison.OrdinalIgnoreCase))
                         && Uri.TryCreate(l, UriKind.Absolute, out _)))
                     _link.Text = string.Join('\n', lines);
             }

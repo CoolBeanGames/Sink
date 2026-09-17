@@ -24,14 +24,17 @@ namespace Sink;
 public partial class MainWindow
 {
     private readonly ObservableCollection<DownloadNode> _rootNodes = [];
+    private readonly ObservableCollection<MusicSearchResult> _musicSearchResults = [];
     private bool _downloadViewActive;
     private bool _toolsChecked;
     private bool _downloading;
     private CancellationTokenSource? _downloadCts;
+    private CancellationTokenSource? _musicSearchCts;
 
     private void InitDownloadPage()
     {
         LinksTree.ItemsSource = _rootNodes;
+        MusicSearchResults.ItemsSource = _musicSearchResults;
         _rootNodes.CollectionChanged += (_, _) => RefreshDownloadChrome();
         _previewPlayer.MediaEnded += (_, _) => StopPreview("finished");
         foreach (var node in DownloadQueueStore.Load()) _rootNodes.Add(node);
@@ -125,6 +128,7 @@ public partial class MainWindow
     {
         if (!_downloadViewActive) return;
         _downloadViewActive = false;
+        _musicSearchCts?.Cancel();
         StopPreview("left the page");
         DownloadPage.Visibility = Visibility.Collapsed;
         MusicPage.Visibility = Visibility.Visible;
@@ -150,6 +154,152 @@ public partial class MainWindow
             _toolsChecked = false;
         }
         UpdateDownloadButtonState();
+    }
+
+    // ---- Unified music search ------------------------------------------
+
+    private void MusicSearchBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        e.Handled = true;
+        _ = RunMusicSearchAsync();
+    }
+
+    private void MusicSearchButton_Click(object sender, RoutedEventArgs e) =>
+        _ = RunMusicSearchAsync();
+
+    private async Task RunMusicSearchAsync()
+    {
+        var query = MusicSearchBox.Text.Trim();
+        if (query.Length < 2)
+        {
+            MusicSearchBox.Focus();
+            SetDownloadStatus("Type at least two characters to search");
+            return;
+        }
+
+        _musicSearchCts?.Cancel();
+        _musicSearchCts?.Dispose();
+        var cts = _musicSearchCts = new CancellationTokenSource();
+        _musicSearchResults.Clear();
+        MusicSearchResultsPanel.Visibility = Visibility.Visible;
+        MusicSearchDetails.Visibility = Visibility.Collapsed;
+        MusicSearchButton.IsEnabled = false;
+        MusicSearchButton.Content = "Searching…";
+        MusicSearchStatus.Text = "Searching Deezer, Spotify matches, and YouTube…";
+        SetDownloadStatus($"Searching for “{query}”…");
+
+        try
+        {
+            var response = await MusicSearchService.SearchAsync(query, cts.Token);
+            if (cts.IsCancellationRequested) return;
+            foreach (var result in response.Results) _musicSearchResults.Add(result);
+            if (_musicSearchResults.Count > 0) MusicSearchResults.SelectedIndex = 0;
+
+            var providerWarning = response.ProviderErrors.Count == 0
+                ? ""
+                : "  ·  " + string.Join("  ·  ", response.ProviderErrors);
+            MusicSearchStatus.Text = _musicSearchResults.Count == 0
+                ? "No tracks found. Try a song and artist together." + providerWarning
+                : $"{_musicSearchResults.Count} unified result{(_musicSearchResults.Count == 1 ? "" : "s")}. Pick a source to add it to the queue." + providerWarning;
+            SetDownloadStatus(_musicSearchResults.Count == 0
+                ? $"No search results for “{query}”"
+                : $"Found {_musicSearchResults.Count} track{(_musicSearchResults.Count == 1 ? "" : "s")} — select one to edit its details");
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            MusicSearchStatus.Text = $"Search failed — {Shorten(ex.Message)}";
+            SetDownloadStatus($"Search failed: {ex.Message}");
+            Log.Error($"Music search failed for {query}", ex);
+        }
+        finally
+        {
+            if (ReferenceEquals(_musicSearchCts, cts))
+            {
+                MusicSearchButton.IsEnabled = true;
+                MusicSearchButton.Content = "Search";
+            }
+        }
+    }
+
+    private void CloseMusicSearch_Click(object sender, RoutedEventArgs e)
+    {
+        _musicSearchCts?.Cancel();
+        MusicSearchResultsPanel.Visibility = Visibility.Collapsed;
+        MusicSearchDetails.Visibility = Visibility.Collapsed;
+        MusicSearchBox.SelectAll();
+        MusicSearchBox.Focus();
+        SetDownloadStatus("Search closed — queued tracks are ready below");
+    }
+
+    private void MusicSearchResults_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        MusicSearchDetails.DataContext = MusicSearchResults.SelectedItem;
+        MusicSearchDetails.Visibility = MusicSearchResults.SelectedItem is null
+            ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private async void SearchResultAction_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: MusicSearchResult result, Tag: string requested }) return;
+        var source = requested == "Download"
+            ? result.HasDeezer ? "Deezer" : result.HasSpotify ? "Spotify" : "YouTube"
+            : requested;
+        if ((source == "Deezer" && !result.HasDeezer)
+            || (source == "YouTube" && !result.HasYouTube)
+            || (source == "Spotify" && !result.HasSpotify)) return;
+
+        var button = sender as Button;
+        if (button is not null) button.IsEnabled = false;
+        try
+        {
+            SetDownloadStatus($"Adding “{result.Title}” from {source}…");
+            var artwork = await MusicSearchService.CacheArtworkAsync(result.Artwork);
+            var url = source switch
+            {
+                "Deezer" => result.DeezerUrl,
+                "YouTube" => result.YouTubeUrl,
+                _ => MusicSearchService.SpotifyMatchUrl(result),
+            };
+            var node = new DownloadNode(DownloadKind.Single)
+            {
+                Url = url,
+                Title = result.Title,
+                Artist = string.IsNullOrWhiteSpace(result.Artist) ? "Unknown Artist" : result.Artist.Trim(),
+                Album = result.Album.Trim(),
+                Genre = string.IsNullOrWhiteSpace(result.Genre) ? "Unknown" : result.Genre.Trim(),
+                ArtworkOverride = artwork,
+                State = DownloadState.Ready,
+                StatusText = source == "Spotify" ? "Ready — Spotify match" : $"Ready — {source}",
+            };
+            _rootNodes.Add(node);
+            SaveFailedDownloadQueue();
+            RefreshDownloadChrome();
+            SetDownloadStatus($"Queued “{result.Title}” via {source} — keep searching or press Download when ready");
+        }
+        catch (Exception ex)
+        {
+            SetDownloadStatus($"Couldn't queue {result.Title}: {ex.Message}");
+            Log.Error($"Search result queue failed for {result.Title}", ex);
+        }
+        finally
+        {
+            if (button is not null) button.IsEnabled = true;
+        }
+    }
+
+    private void BrowseSearchArtwork_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: MusicSearchResult result }) return;
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Choose cover art for this queued result",
+            Filter = "Images|*.jpg;*.jpeg;*.png;*.webp;*.bmp|All files|*.*",
+        };
+        if (dialog.ShowDialog(this) == true) result.Artwork = dialog.FileName;
     }
 
     // ---- Adding + scanning links ---------------------------------------
