@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "projectId": "2fe841d9532447b7b9eaf5db78bbadde",
   "name": "Sink",
-  "nextCardIndex": 228,
-  "latestExePath": "bin/Release/net10.0-windows/Sink.exe",
-  "latestReleasePath": "bin/Release/net10.0-windows/Sink.exe",
+  "nextCardIndex": 229,
+  "latestExePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
+  "latestReleasePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
   "tagCatalog": [
     {
       "name": "bug",
@@ -1036,6 +1036,34 @@
           "isCollapsed": false,
           "createdAt": "2026-09-18T04:00:28.205483+00:00",
           "updatedAt": "2026-09-18T04:00:35.3343243+00:00"
+        },
+        {
+          "id": "88811f40597048278f12b5118f6a6d67",
+          "index": 228,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Fix streamrip 403 Forbidden by changing default quality to MP3",
+          "task": "Changed Sink\u0027s default streamrip quality from 2 (FLAC) to 1 (320kbps MP3) to bypass Deezer\u0027s strict DRM which blocks FLAC downloads on free ARLs with a 403 Forbidden error.",
+          "tags": [],
+          "files": [],
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [],
+          "notes": [],
+          "flags": {
+            "commit": false,
+            "build": false,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-18T05:19:17.1063813+00:00",
+          "updatedAt": "2026-09-18T05:19:23.3829295+00:00"
         }
       ]
     }
