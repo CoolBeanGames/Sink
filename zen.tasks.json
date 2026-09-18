@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "projectId": "2fe841d9532447b7b9eaf5db78bbadde",
   "name": "Sink",
-  "nextCardIndex": 236,
+  "nextCardIndex": 237,
   "latestExePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
   "latestReleasePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
   "tagCatalog": [
@@ -1260,6 +1260,34 @@
           "isCollapsed": false,
           "createdAt": "2026-09-18T09:53:49.3347217+00:00",
           "updatedAt": "2026-09-18T09:53:49.7427584+00:00"
+        },
+        {
+          "id": "ac09b1857acd4f82be015d11b254f15f",
+          "index": 236,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Fix global search vs isolated field query matching",
+          "task": "Updated CalculateMatchScore to accept distinct strings for track, album, and artist boxes instead of combining them into one blob and counting matched words. If a search result matches exactly the field you requested, it scores 1000 base points. Then the fuzzy word count is added on top. This ensures \u0027Graduation\u0027 by \u0027Kanye West\u0027 correctly scores 1002, matching exactly Album and 2 fuzzy words, popping it right up to the top. Also added a GridSplitter to make the sidebar resizable, and bound the Sidebar width and download settings to AppSettings to save state between sessions.",
+          "tags": [],
+          "files": [],
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [],
+          "notes": [],
+          "flags": {
+            "commit": false,
+            "build": false,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-18T10:03:48.991478+00:00",
+          "updatedAt": "2026-09-18T10:03:52.7481725+00:00"
         }
       ]
     }
