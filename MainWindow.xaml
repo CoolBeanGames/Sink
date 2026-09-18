@@ -64,7 +64,7 @@
     </Window.Resources>
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="94"/></Grid.RowDefinitions>
-        <Grid.ColumnDefinitions><ColumnDefinition Width="238"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <Grid.ColumnDefinitions><ColumnDefinition x:Name="SidebarColumn" Width="238" MinWidth="150" MaxWidth="500"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
         <Border Grid.RowSpan="2" Background="#12151C" BorderBrush="#262C38" BorderThickness="0,0,1,0" Padding="16,24">
             <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <Grid Margin="8,0,0,28">
@@ -214,6 +214,9 @@
                 </DockPanel>
             </Grid>
         </Border>
+        
+        <GridSplitter Grid.Column="0" Width="4" Background="Transparent" VerticalAlignment="Stretch" HorizontalAlignment="Right" Cursor="SizeWE"/>
+
         <Grid x:Name="MusicPage" Grid.Column="1" Margin="38,32,38,30">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <Grid>

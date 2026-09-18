@@ -98,6 +98,7 @@ public partial class MainWindow : Window
         _mediaPlayer.MediaEnded += (_, _) => NextTrack();
         _mediaPlayer.Volume = 0.7;
         RenderLibrary();
+        LoadUiState();
         InitDownloadPage();
         InitPodcasts();
         InitNotifications();
@@ -111,6 +112,19 @@ public partial class MainWindow : Window
         PreviewMouseMove += MiddleDragPan_Move;
         PreviewMouseUp += MiddleDragPan_Up;
         LostMouseCapture += (_, _) => { _panScrollViewer = null; _edgeScrollTimer?.Stop(); };
+    }
+
+    private void LoadUiState()
+    {
+        var settings = Sink.Services.AppSettings.Current;
+        SidebarColumn.Width = new GridLength(settings.SidebarWidth);
+        OptFormat.SelectedIndex = settings.OptFormatIndex;
+        OptQuality.SelectedIndex = settings.OptQualityIndex;
+        OptMetadata.IsChecked = settings.OptMetadata;
+        OptAlbumArt.IsChecked = settings.OptAlbumArt;
+        OptMusicMeta.IsChecked = settings.OptMusicMeta;
+        OptNumberTracks.IsChecked = settings.OptNumberTracks;
+        OptCreatePlaylist.IsChecked = settings.OptCreatePlaylist;
     }
 
     // ---- Middle-mouse drag to scroll (task 98) -------------------------

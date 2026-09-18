@@ -57,6 +57,15 @@ public sealed class AppSettings
     /// </summary>
     public string CookieFilePath { get; set; } = "";
 
+    public double SidebarWidth { get; set; } = 238;
+    public int OptFormatIndex { get; set; } = 0;
+    public int OptQualityIndex { get; set; } = 0;
+    public bool OptMetadata { get; set; } = true;
+    public bool OptAlbumArt { get; set; } = true;
+    public bool OptMusicMeta { get; set; } = true;
+    public bool OptNumberTracks { get; set; } = false;
+    public bool OptCreatePlaylist { get; set; } = false;
+
     [JsonIgnore]
     public static AppSettings Current { get; private set; } = new();
 
@@ -92,5 +101,13 @@ public sealed class AppSettings
         ImportMode = ImportMode,
         YouTubeCookies = YouTubeCookies,
         CookieFilePath = CookieFilePath,
+        SidebarWidth = SidebarWidth,
+        OptFormatIndex = OptFormatIndex,
+        OptQualityIndex = OptQualityIndex,
+        OptMetadata = OptMetadata,
+        OptAlbumArt = OptAlbumArt,
+        OptMusicMeta = OptMusicMeta,
+        OptNumberTracks = OptNumberTracks,
+        OptCreatePlaylist = OptCreatePlaylist,
     };
 }

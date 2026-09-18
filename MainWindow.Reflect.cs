@@ -43,6 +43,16 @@ public partial class MainWindow
     {
         RecordSongListenIfDue();
         if (_playingEpisode is not null) StopPodcast(markPlayed: false);
+        
+        Sink.Services.AppSettings.Current.SidebarWidth = SidebarColumn.Width.Value;
+        Sink.Services.AppSettings.Current.OptFormatIndex = OptFormat.SelectedIndex;
+        Sink.Services.AppSettings.Current.OptQualityIndex = OptQuality.SelectedIndex;
+        Sink.Services.AppSettings.Current.OptMetadata = OptMetadata.IsChecked ?? true;
+        Sink.Services.AppSettings.Current.OptAlbumArt = OptAlbumArt.IsChecked ?? true;
+        Sink.Services.AppSettings.Current.OptMusicMeta = OptMusicMeta.IsChecked ?? true;
+        Sink.Services.AppSettings.Current.OptNumberTracks = OptNumberTracks.IsChecked ?? false;
+        Sink.Services.AppSettings.Current.OptCreatePlaylist = OptCreatePlaylist.IsChecked ?? false;
+        Sink.Services.AppSettings.Current.Save();
     }
 
     // ---- Recording ---------------------------------------------------

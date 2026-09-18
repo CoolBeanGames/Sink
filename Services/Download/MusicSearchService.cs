@@ -156,10 +156,10 @@ public static class MusicSearchService
             "Deezer artists", () => SearchDeezerArtistsAsync(deezerQuery, token),
             (IReadOnlyList<MusicSearchResult>)[]);
         var albumsTask = SafeProviderAsync(
-            "Deezer albums", () => SearchDeezerAlbumsAsync(deezerQuery, token),
+            "Deezer albums", () => SearchDeezerAlbumsAsync(deezerQuery, albumName, token),
             (Albums: new List<MusicSearchResult>(), Artists: new List<MusicSearchResult>()));
         var tracksTask = SafeProviderAsync(
-            "Deezer tracks", () => SearchDeezerTracksAsync(deezerQuery, token),
+            "Deezer tracks", () => SearchDeezerTracksAsync(deezerQuery, trackName, token),
             (Tracks: new List<MusicSearchResult>(), Artists: new List<MusicSearchResult>(), Albums: new List<MusicSearchResult>()));
         var youtubeTask = SafeProviderAsync(
             "YouTube", () => SearchYouTubeAsync(ytQuery, token), new YouTubeSearchData([], []));
@@ -213,10 +213,10 @@ public static class MusicSearchService
         }
 
         var albumMatch = albums
-            .Select(album => (album, score: CalculateMatchScore(combinedQuery, album)))
+            .Select(album => (album, score: CalculateMatchScore(trackName, albumName, artistName, combinedQuery, album)))
             .OrderByDescending(x => x.score)
             .FirstOrDefault();
-        if (albumMatch.album is not null && albumMatch.score == 1000 && string.IsNullOrWhiteSpace(trackName))
+        if (albumMatch.album is not null && albumMatch.score >= 1000 && string.IsNullOrWhiteSpace(trackName))
         {
             var albumTracksResult = await SafeProviderAsync(
                 "Deezer album tracks",
@@ -240,7 +240,7 @@ public static class MusicSearchService
         generic.AddRange(MergeTracks(tracks, youtube.Tracks, includeUnmatchedYouTube: true));
 
         generic = generic
-            .OrderByDescending(x => CalculateMatchScore(combinedQuery, x))
+            .OrderByDescending(x => CalculateMatchScore(trackName, albumName, artistName, combinedQuery, x))
             .ThenBy(x => (int)x.Kind)
             .Take(150)
             .ToList();
@@ -315,7 +315,7 @@ public static class MusicSearchService
     }
 
     private static async Task<(List<MusicSearchResult> Albums, List<MusicSearchResult> Artists)> SearchDeezerAlbumsAsync(
-        string query, CancellationToken token)
+        string query, string targetQuery, CancellationToken token)
     {
         var albums = new List<MusicSearchResult>();
         var artists = new List<MusicSearchResult>();
@@ -323,12 +323,14 @@ public static class MusicSearchService
         using var doc = await GetJsonAsync(
             $"{DeezerApi}/search/album?limit=100&q={Uri.EscapeDataString(query)}", token).ConfigureAwait(false);
         
+        var matchTarget = string.IsNullOrWhiteSpace(targetQuery) ? query : targetQuery;
+
         foreach (var item in ReadData(doc.RootElement))
         {
             var alb = AlbumResult(item);
             if (alb.DeezerId > 0) albums.Add(alb);
 
-            bool isExact = alb.Title.Equals(query, StringComparison.OrdinalIgnoreCase);
+            bool isExact = alb.Title.Equals(matchTarget, StringComparison.OrdinalIgnoreCase);
 
             if (item.TryGetProperty("artist", out var artToken))
             {
@@ -353,7 +355,7 @@ public static class MusicSearchService
     }
 
     private static async Task<(List<MusicSearchResult> Tracks, List<MusicSearchResult> Artists, List<MusicSearchResult> Albums)> SearchDeezerTracksAsync(
-        string query, CancellationToken token)
+        string query, string targetQuery, CancellationToken token)
     {
         var tracks = new List<MusicSearchResult>();
         var artists = new List<MusicSearchResult>();
@@ -362,12 +364,14 @@ public static class MusicSearchService
         using var doc = await GetJsonAsync(
             $"{DeezerApi}/search/track?limit=100&q={Uri.EscapeDataString(query)}", token).ConfigureAwait(false);
         
+        var matchTarget = string.IsNullOrWhiteSpace(targetQuery) ? query : targetQuery;
+
         foreach (var item in ReadData(doc.RootElement))
         {
             var trk = TrackResult(item, "", "", "");
             if (trk.DeezerId > 0) tracks.Add(trk);
 
-            bool isExact = trk.Title.Equals(query, StringComparison.OrdinalIgnoreCase);
+            bool isExact = trk.Title.Equals(matchTarget, StringComparison.OrdinalIgnoreCase);
 
             if (item.TryGetProperty("artist", out var artToken))
             {
@@ -612,36 +616,50 @@ public static class MusicSearchService
         return (channel, title);
     }
 
-    private static int CalculateMatchScore(string query, MusicSearchResult result)
+    private static int CalculateMatchScore(string trackQuery, string albumQuery, string artistQuery, string combinedQuery, MusicSearchResult result)
     {
         var title = result.Title.Trim();
+        var artist = result.Artist.Trim();
         var combined = $"{result.Artist} {result.Title}".Trim();
-        var q = query.Trim();
-
-        bool Matches(Func<string, string, bool> condition) =>
-            condition(title, q) || condition(combined, q);
+        var q = combinedQuery.Trim();
 
         int baseScore = 0;
-        if (Matches((t, s) => t.Equals(s, StringComparison.OrdinalIgnoreCase))) baseScore = 1000;
-        else if (Matches((t, s) => t.StartsWith(s, StringComparison.OrdinalIgnoreCase))) baseScore = 900;
-        else if (Matches((t, s) => t.EndsWith(s, StringComparison.OrdinalIgnoreCase))) baseScore = 800;
-        else if (Matches((t, s) => t.Contains(s, StringComparison.OrdinalIgnoreCase))) baseScore = 700;
+
+        bool MatchesTarget(string targetQuery)
+        {
+            if (string.IsNullOrWhiteSpace(targetQuery)) return false;
+            return title.Equals(targetQuery.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (result.Kind == MusicSearchResultKind.Track && MatchesTarget(trackQuery)) baseScore = 1000;
+        else if (result.Kind == MusicSearchResultKind.Album && MatchesTarget(albumQuery)) baseScore = 1000;
+        else if (result.Kind == MusicSearchResultKind.Artist && MatchesTarget(artistQuery)) baseScore = 1000;
         else
         {
-            var words = KeyChars.Replace(q.ToLowerInvariant(), " ")
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (words.Length > 0)
+            bool Matches(Func<string, string, bool> condition) =>
+                condition(title, q) || condition(combined, q);
+
+            if (Matches((t, s) => t.Equals(s, StringComparison.OrdinalIgnoreCase))) baseScore = 1000;
+            else if (Matches((t, s) => t.StartsWith(s, StringComparison.OrdinalIgnoreCase))) baseScore = 900;
+            else if (Matches((t, s) => t.EndsWith(s, StringComparison.OrdinalIgnoreCase))) baseScore = 800;
+            else if (Matches((t, s) => t.Contains(s, StringComparison.OrdinalIgnoreCase))) baseScore = 700;
+        }
+
+        var words = KeyChars.Replace(q.ToLowerInvariant(), " ")
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        
+        int wordBonus = 0;
+        if (words.Length > 0)
+        {
+            var searchableTitle = title.ToLowerInvariant();
+            var searchableArtist = artist.ToLowerInvariant();
+            foreach (var word in words)
             {
-                var searchableTitle = title.ToLowerInvariant();
-                var searchableCombined = combined.ToLowerInvariant();
-                foreach (var word in words)
-                {
-                    if (searchableTitle.Contains(word) || searchableCombined.Contains(word)) baseScore++;
-                }
+                if (searchableTitle.Contains(word) || searchableArtist.Contains(word)) wordBonus++;
             }
         }
 
-        return Math.Max(baseScore, result.MatchBonus);
+        return Math.Max(baseScore, result.MatchBonus) + wordBonus;
     }
 
     private static bool Equivalent(string left, string right) => Normalize(left) == Normalize(right);

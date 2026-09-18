@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "projectId": "2fe841d9532447b7b9eaf5db78bbadde",
   "name": "Sink",
-  "nextCardIndex": 235,
+  "nextCardIndex": 236,
   "latestExePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
   "latestReleasePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
   "tagCatalog": [
@@ -1232,6 +1232,34 @@
           "isCollapsed": false,
           "createdAt": "2026-09-18T06:58:52.6035236+00:00",
           "updatedAt": "2026-09-18T06:58:52.935706+00:00"
+        },
+        {
+          "id": "380286f4ce394f8cbf4374932a934159",
+          "index": 235,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Score injection for parent entities of exact matches",
+          "task": "Added an internal MatchBonus field to MusicSearchResult to artificially boost synthesized artists and albums. Searching a track exactly will give its Artist 1100 pts and Album 1050 pts. Searching an album exactly gives its synthesized Artist 1100 pts. This perfectly ensures Artists/Albums correctly float above exact tracks when doing track-level searches.",
+          "tags": [],
+          "files": [],
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [],
+          "notes": [],
+          "flags": {
+            "commit": false,
+            "build": false,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-18T09:53:49.3347217+00:00",
+          "updatedAt": "2026-09-18T09:53:49.7427584+00:00"
         }
       ]
     }
