@@ -88,6 +88,15 @@ public static class StreamripToolManager
                 text = text.Replace("cdns-proxy-{track_hash[0]}", "cdnt-stream");
                 File.WriteAllText(deezerPy, text);
             }
+
+            var parseUrlPy = Path.Combine(Root, "tools", "streamrip", "Lib", "site-packages", "streamrip", "rip", "parse_url.py");
+            if (!File.Exists(parseUrlPy)) return;
+            var parseUrlText = File.ReadAllText(parseUrlPy);
+            if (parseUrlText.Contains(@"deezer\.page\.link"))
+            {
+                parseUrlText = parseUrlText.Replace(@"deezer\.page\.link", @"(?:deezer\.page\.link|link\.deezer\.com/s)");
+                File.WriteAllText(parseUrlPy, parseUrlText);
+            }
         }
         catch (Exception ex)
         {
