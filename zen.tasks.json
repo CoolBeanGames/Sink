@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "projectId": "2fe841d9532447b7b9eaf5db78bbadde",
   "name": "Sink",
-  "nextCardIndex": 232,
+  "nextCardIndex": 234,
   "latestExePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
   "latestReleasePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
   "tagCatalog": [
@@ -1148,6 +1148,62 @@
           "isCollapsed": false,
           "createdAt": "2026-09-18T05:59:11.673741+00:00",
           "updatedAt": "2026-09-18T05:59:15.2902445+00:00"
+        },
+        {
+          "id": "3cf9d6edaf1f427abe553a2dc8f04b5c",
+          "index": 232,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Add kind filters and extract artist/album from track results",
+          "task": "Added toggles for Artist, Album, and Track to filter the UI. Modified SearchDeezerTracksAsync to synthesize Artist and Album results from the track payload so they show up in generic searches.",
+          "tags": [],
+          "files": [],
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [],
+          "notes": [],
+          "flags": {
+            "commit": false,
+            "build": false,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-18T06:13:32.77889+00:00",
+          "updatedAt": "2026-09-18T06:13:39.7330323+00:00"
+        },
+        {
+          "id": "a30bfedd15c7428d87592bcc3c2dc4fc",
+          "index": 233,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Fix missing albums in Punk Goes search",
+          "task": "Increased Deezer API limits from 50 to 100, and sorted the generic lists locally by AlbumMatchScore to ensure precise matches float to the top of the paginated results.",
+          "tags": [],
+          "files": [],
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [],
+          "notes": [],
+          "flags": {
+            "commit": false,
+            "build": false,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-18T06:13:36.5344822+00:00",
+          "updatedAt": "2026-09-18T06:13:40.0563978+00:00"
         }
       ]
     }

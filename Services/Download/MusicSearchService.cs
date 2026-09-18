@@ -208,10 +208,10 @@ public static class MusicSearchService
         }
 
         var albumMatch = albums
-            .Select(album => (album, score: AlbumMatchScore(combinedQuery, album)))
+            .Select(album => (album, score: CalculateMatchScore(combinedQuery, album)))
             .OrderByDescending(x => x.score)
             .FirstOrDefault();
-        if (albumMatch.album is not null && albumMatch.score == 100 && string.IsNullOrWhiteSpace(trackName))
+        if (albumMatch.album is not null && albumMatch.score == 1000 && string.IsNullOrWhiteSpace(trackName))
         {
             var albumTracksResult = await SafeProviderAsync(
                 "Deezer album tracks",
@@ -230,10 +230,16 @@ public static class MusicSearchService
         }
 
         var generic = new List<MusicSearchResult>();
-        generic.AddRange(artists.OrderByDescending(x => AlbumMatchScore(combinedQuery, x)).Take(20));
-        generic.AddRange(albums.OrderByDescending(x => AlbumMatchScore(combinedQuery, x)).Take(100));
-        generic.AddRange(MergeTracks(tracks, youtube.Tracks, includeUnmatchedYouTube: true)
-            .OrderByDescending(x => AlbumMatchScore(combinedQuery, x)).Take(100));
+        generic.AddRange(artists);
+        generic.AddRange(albums);
+        generic.AddRange(MergeTracks(tracks, youtube.Tracks, includeUnmatchedYouTube: true));
+
+        generic = generic
+            .OrderByDescending(x => CalculateMatchScore(combinedQuery, x))
+            .ThenBy(x => (int)x.Kind)
+            .Take(150)
+            .ToList();
+
         return Response(generic, errors,
             $"{generic.Count} catalog result{(generic.Count == 1 ? "" : "s")} across artists, albums, and tracks.");
     }
@@ -567,18 +573,34 @@ public static class MusicSearchService
         return (channel, title);
     }
 
-    private static int AlbumMatchScore(string query, MusicSearchResult album)
+    private static int CalculateMatchScore(string query, MusicSearchResult result)
     {
-        var queryKey = Normalize(query);
-        var titleKey = Normalize(album.Title);
-        var combinedKey = Normalize(album.Artist + " " + album.Title);
-        if (queryKey == titleKey || queryKey == combinedKey) return 100;
-        if (titleKey.Contains(queryKey, StringComparison.Ordinal)
-            || combinedKey.Contains(queryKey, StringComparison.Ordinal)) return 90;
-        var words = KeyChars.Replace(query.ToLowerInvariant(), " ")
+        var title = result.Title.Trim();
+        var combined = $"{result.Artist} {result.Title}".Trim();
+        var q = query.Trim();
+
+        bool Matches(Func<string, string, bool> condition) =>
+            condition(title, q) || condition(combined, q);
+
+        if (Matches((t, s) => t.Equals(s, StringComparison.OrdinalIgnoreCase))) return 1000;
+        if (Matches((t, s) => t.StartsWith(s, StringComparison.OrdinalIgnoreCase))) return 900;
+        if (Matches((t, s) => t.EndsWith(s, StringComparison.OrdinalIgnoreCase))) return 800;
+        if (Matches((t, s) => t.Contains(s, StringComparison.OrdinalIgnoreCase))) return 700;
+
+        var words = KeyChars.Replace(q.ToLowerInvariant(), " ")
             .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var searchable = (album.Artist + " " + album.Title).ToLowerInvariant();
-        return words.Length > 0 && words.All(searchable.Contains) ? 80 : 0;
+        
+        if (words.Length == 0) return 0;
+
+        var searchableTitle = title.ToLowerInvariant();
+        var searchableCombined = combined.ToLowerInvariant();
+        
+        int matchCount = 0;
+        foreach (var word in words)
+        {
+            if (searchableTitle.Contains(word) || searchableCombined.Contains(word)) matchCount++;
+        }
+        return matchCount;
     }
 
     private static bool Equivalent(string left, string right) => Normalize(left) == Normalize(right);
