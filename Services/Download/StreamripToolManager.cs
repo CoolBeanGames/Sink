@@ -35,12 +35,12 @@ public static class StreamripToolManager
 
     public static async Task EnsureAsync(IProgress<string> status, CancellationToken token = default)
     {
-        if (Present) { status.Report("Streamrip is ready"); return; }
+        if (Present) { PatchDeezerCdn(); status.Report("Streamrip is ready"); return; }
 
         await Gate.WaitAsync(token).ConfigureAwait(false);
         try
         {
-            if (Present) { status.Report("Streamrip is ready"); return; }
+            if (Present) { PatchDeezerCdn(); status.Report("Streamrip is ready"); return; }
             Directory.CreateDirectory(Root);
 
             if (!File.Exists(UvPath))
@@ -60,11 +60,38 @@ public static class StreamripToolManager
                                   or InvalidDataException or JsonException or InvalidOperationException)
         {
             status.Report($"Could not set up Streamrip: {e.Message}");
+            try { TryDeleteDirectory(Root); } catch { }
             throw;
         }
         finally
         {
             Gate.Release();
+        }
+
+        PatchDeezerCdn();
+    }
+
+    private static void PatchDeezerCdn()
+    {
+        try
+        {
+            var deezerPy = Path.Combine(Root, "tools", "streamrip", "Lib", "site-packages", "streamrip", "client", "deezer.py");
+            if (!File.Exists(deezerPy)) return;
+            var text = File.ReadAllText(deezerPy);
+            if (text.Contains("e-cdns-proxy-{track_hash[0]}"))
+            {
+                text = text.Replace("e-cdns-proxy-{track_hash[0]}", "cdnt-stream");
+                File.WriteAllText(deezerPy, text);
+            }
+            else if (text.Contains("cdns-proxy-{track_hash[0]}"))
+            {
+                text = text.Replace("cdns-proxy-{track_hash[0]}", "cdnt-stream");
+                File.WriteAllText(deezerPy, text);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"Could not patch Deezer CDN domain in streamrip: {ex.Message}");
         }
     }
 
