@@ -60,7 +60,7 @@ public static class StreamripToolManager
                                   or InvalidDataException or JsonException or InvalidOperationException)
         {
             status.Report($"Could not set up Streamrip: {e.Message}");
-            try { TryDeleteDirectory(Root); } catch { }
+            try { Directory.Delete(Root, true); } catch { }
             throw;
         }
         finally

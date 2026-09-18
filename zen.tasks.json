@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "projectId": "2fe841d9532447b7b9eaf5db78bbadde",
   "name": "Sink",
-  "nextCardIndex": 226,
+  "nextCardIndex": 227,
   "latestExePath": "bin/Release/net10.0-windows/Sink.exe",
   "latestReleasePath": "bin/Release/net10.0-windows/Sink.exe",
   "tagCatalog": [
@@ -980,6 +980,34 @@
           "isCollapsed": false,
           "createdAt": "2026-09-18T02:26:39.8651282+00:00",
           "updatedAt": "2026-09-18T02:26:49.4658918+00:00"
+        },
+        {
+          "id": "e14fb66d9b19439b88b853257c4e3ed6",
+          "index": 226,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Diagnosed Streamrip Deezer CDN 403",
+          "task": "Patched StreamripToolManager to update dead e-cdns-proxy to new cdnt-stream.dzcdn.net endpoints. Confirmed the 403 Forbidden error is a widespread streamrip issue with Deezer\u0027s new DRM. Fixed a compilation error regarding TryDeleteDirectory.",
+          "tags": [],
+          "files": [],
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [],
+          "notes": [],
+          "flags": {
+            "commit": false,
+            "build": false,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-18T03:56:45.5950163+00:00",
+          "updatedAt": "2026-09-18T03:57:06.6528751+00:00"
         }
       ]
     }
