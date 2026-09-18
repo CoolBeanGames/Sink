@@ -286,6 +286,15 @@ public partial class MainWindow
         SetDownloadStatus("Search closed — queued tracks are ready below");
     }
 
+    private void OverlayResizer_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
+    {
+        var newWidth = MusicSearchOverlay.Width - e.HorizontalChange;
+        if (newWidth >= MusicSearchOverlay.MinWidth)
+        {
+            MusicSearchOverlay.Width = newWidth;
+        }
+    }
+
     private void MusicSearchResults_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         MusicSearchDetails.DataContext = MusicSearchResults.SelectedItem;
