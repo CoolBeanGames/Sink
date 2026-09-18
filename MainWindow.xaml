@@ -1150,6 +1150,10 @@
                             <ToggleButton x:Name="FilterYouTubeToggle" Content="YouTube" IsChecked="True" Click="FilterToggle_Click" Style="{StaticResource FilterToggleStyle}" Background="#3D1B1B" Foreground="#FF6B6B" Margin="0,0,4,0"/>
                             <ToggleButton x:Name="FilterSpotifyToggle" Content="Spotify" IsChecked="True" Click="FilterToggle_Click" Style="{StaticResource FilterToggleStyle}" Background="#1D3026" Foreground="#8FE3AC" Margin="0,0,4,0"/>
                             <ToggleButton x:Name="FilterDeezerToggle" Content="Deezer" IsChecked="True" Click="FilterToggle_Click" Style="{StaticResource FilterToggleStyle}" Background="#1C2442" Foreground="#8FA3FF"/>
+
+                            <ToggleButton x:Name="FilterArtistToggle" Content="Artist" IsChecked="True" Click="FilterToggle_Click" Style="{StaticResource FilterToggleStyle}" Background="#252A33" Foreground="#C7CCD6" Margin="16,0,4,0"/>
+                            <ToggleButton x:Name="FilterAlbumToggle" Content="Album" IsChecked="True" Click="FilterToggle_Click" Style="{StaticResource FilterToggleStyle}" Background="#252A33" Foreground="#C7CCD6" Margin="0,0,4,0"/>
+                            <ToggleButton x:Name="FilterTrackToggle" Content="Track" IsChecked="True" Click="FilterToggle_Click" Style="{StaticResource FilterToggleStyle}" Background="#252A33" Foreground="#C7CCD6"/>
                         </WrapPanel>
                     </StackPanel>
                     

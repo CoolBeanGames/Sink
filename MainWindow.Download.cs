@@ -199,7 +199,16 @@ public partial class MainWindow
         var showYt = FilterYouTubeToggle?.IsChecked == true;
         var showSp = FilterSpotifyToggle?.IsChecked == true;
         var showDz = FilterDeezerToggle?.IsChecked == true;
-        return (showYt && r.HasYouTube) || (showSp && r.HasSpotify) || (showDz && r.HasDeezer);
+        var provMatch = (showYt && r.HasYouTube) || (showSp && r.HasSpotify) || (showDz && r.HasDeezer);
+
+        var showAr = FilterArtistToggle?.IsChecked == true;
+        var showAl = FilterAlbumToggle?.IsChecked == true;
+        var showTr = FilterTrackToggle?.IsChecked == true;
+        var kindMatch = (showAr && r.Kind == MusicSearchResultKind.Artist) ||
+                        (showAl && r.Kind == MusicSearchResultKind.Album) ||
+                        (showTr && r.Kind == MusicSearchResultKind.Track);
+        
+        return provMatch && kindMatch;
     }
 
     private void FilterToggle_Click(object sender, RoutedEventArgs e)

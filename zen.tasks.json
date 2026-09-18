@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "projectId": "2fe841d9532447b7b9eaf5db78bbadde",
   "name": "Sink",
-  "nextCardIndex": 230,
+  "nextCardIndex": 232,
   "latestExePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
   "latestReleasePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
   "tagCatalog": [
@@ -1092,6 +1092,62 @@
           "isCollapsed": false,
           "createdAt": "2026-09-18T05:51:45.6458223+00:00",
           "updatedAt": "2026-09-18T05:51:52.6511061+00:00"
+        },
+        {
+          "id": "c44977f590fe492c8eb8b7e74ddcf259",
+          "index": 230,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Fix over-aggressive album search page opening",
+          "task": "Changed the score threshold to require an exact match (score 100) and ensured track field is empty before showing the album page view, otherwise providing a generic catalog of matching albums.",
+          "tags": [],
+          "files": [],
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [],
+          "notes": [],
+          "flags": {
+            "commit": false,
+            "build": false,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-18T05:55:32.170984+00:00",
+          "updatedAt": "2026-09-18T05:55:35.4101423+00:00"
+        },
+        {
+          "id": "9981b959ab47444990d1af442037544f",
+          "index": 231,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Fix API limits truncating relevant search results",
+          "task": "Increased Deezer API limit from 16 to 50 to ensure heavily covered compilations (like Punk Goes Pop) don\u0027t get paginated out of the initial results, and increased Sink\u0027s UI limit from 20 to 50 albums.",
+          "tags": [],
+          "files": [],
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [],
+          "notes": [],
+          "flags": {
+            "commit": false,
+            "build": false,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-18T05:59:11.673741+00:00",
+          "updatedAt": "2026-09-18T05:59:15.2902445+00:00"
         }
       ]
     }
