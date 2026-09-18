@@ -173,7 +173,7 @@ public static partial class StreamripService
 
     private static int StreamripQuality(DownloadOptions options)
     {
-        if (options.Quality <= 0) return 2;
+        if (options.Quality <= 0) return 1;
         return options.Quality >= 320 ? 1 : 0;
     }
 

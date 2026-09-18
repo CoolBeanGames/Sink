@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "projectId": "2fe841d9532447b7b9eaf5db78bbadde",
   "name": "Sink",
-  "nextCardIndex": 227,
+  "nextCardIndex": 228,
   "latestExePath": "bin/Release/net10.0-windows/Sink.exe",
   "latestReleasePath": "bin/Release/net10.0-windows/Sink.exe",
   "tagCatalog": [
@@ -1008,6 +1008,34 @@
           "isCollapsed": false,
           "createdAt": "2026-09-18T03:56:45.5950163+00:00",
           "updatedAt": "2026-09-18T03:57:06.6528751+00:00"
+        },
+        {
+          "id": "821ba7ebf0124a309ae142b03212d870",
+          "index": 227,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Fix streamrip link.deezer.com/s short URLs",
+          "task": "Patched Streamrip\u0027s URL parser to support the new link.deezer.com/s/ dynamic short URLs that Deezer is now generating.",
+          "tags": [],
+          "files": [],
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [],
+          "notes": [],
+          "flags": {
+            "commit": false,
+            "build": false,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-18T04:00:28.205483+00:00",
+          "updatedAt": "2026-09-18T04:00:35.3343243+00:00"
         }
       ]
     }
