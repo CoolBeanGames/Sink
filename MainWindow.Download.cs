@@ -35,6 +35,7 @@ public partial class MainWindow
     {
         LinksTree.ItemsSource = _rootNodes;
         MusicSearchResults.ItemsSource = _musicSearchResults;
+        System.Windows.Data.CollectionViewSource.GetDefaultView(_musicSearchResults).Filter = FilterMusicSearchResult;
         _rootNodes.CollectionChanged += (_, _) => RefreshDownloadChrome();
         _previewPlayer.MediaEnded += (_, _) => StopPreview("finished");
         foreach (var node in DownloadQueueStore.Load()) _rootNodes.Add(node);
@@ -168,28 +169,61 @@ public partial class MainWindow
     private void MusicSearchButton_Click(object sender, RoutedEventArgs e) =>
         _ = RunMusicSearchAsync();
 
+    private void SyncSearchBoxes(bool toOverlay)
+    {
+        if (toOverlay)
+        {
+            OverlaySearchTrackBox.Text = SearchTrackBox.Text;
+            OverlaySearchAlbumBox.Text = SearchAlbumBox.Text;
+            OverlaySearchArtistBox.Text = SearchArtistBox.Text;
+        }
+        else
+        {
+            SearchTrackBox.Text = OverlaySearchTrackBox.Text;
+            SearchAlbumBox.Text = OverlaySearchAlbumBox.Text;
+            SearchArtistBox.Text = OverlaySearchArtistBox.Text;
+        }
+    }
+
     private void OverlayMusicSearchBox_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key != Key.Enter) return;
         e.Handled = true;
-        MusicSearchBox.Text = OverlayMusicSearchBox.Text;
+        SyncSearchBoxes(toOverlay: false);
         _ = RunMusicSearchAsync();
+    }
+
+    private bool FilterMusicSearchResult(object obj)
+    {
+        if (obj is not MusicSearchResult r) return false;
+        var showYt = FilterYouTubeToggle?.IsChecked == true;
+        var showSp = FilterSpotifyToggle?.IsChecked == true;
+        var showDz = FilterDeezerToggle?.IsChecked == true;
+        return (showYt && r.HasYouTube) || (showSp && r.HasSpotify) || (showDz && r.HasDeezer);
+    }
+
+    private void FilterToggle_Click(object sender, RoutedEventArgs e)
+    {
+        System.Windows.Data.CollectionViewSource.GetDefaultView(_musicSearchResults).Refresh();
     }
 
     private void OverlayMusicSearchButton_Click(object sender, RoutedEventArgs e)
     {
-        MusicSearchBox.Text = OverlayMusicSearchBox.Text;
+        SyncSearchBoxes(toOverlay: false);
         _ = RunMusicSearchAsync();
     }
 
     private async Task RunMusicSearchAsync()
     {
-        var query = MusicSearchBox.Text.Trim();
-        OverlayMusicSearchBox.Text = query;
-        if (query.Length < 2)
+        SyncSearchBoxes(toOverlay: true);
+        var track = SearchTrackBox.Text.Trim();
+        var album = SearchAlbumBox.Text.Trim();
+        var artist = SearchArtistBox.Text.Trim();
+        var query = string.Join(" ", new[] { track, album, artist }.Where(s => !string.IsNullOrEmpty(s)));
+        if (track.Length < 2 && album.Length < 2 && artist.Length < 2)
         {
-            MusicSearchBox.Focus();
-            SetDownloadStatus("Type at least two characters to search");
+            SearchTrackBox.Focus();
+            SetDownloadStatus("Type at least two characters in one field to search");
             return;
         }
 
@@ -207,7 +241,7 @@ public partial class MainWindow
 
         try
         {
-            var response = await MusicSearchService.SearchAsync(query, cts.Token);
+            var response = await MusicSearchService.SearchAsync(track, album, artist, cts.Token);
             if (cts.IsCancellationRequested) return;
             foreach (var result in response.Results) _musicSearchResults.Add(result);
             if (_musicSearchResults.Count > 0) MusicSearchResults.SelectedIndex = 0;
@@ -247,8 +281,8 @@ public partial class MainWindow
         MusicSearchOverlay.Visibility = Visibility.Collapsed;
         MusicSearchResultsPanel.Visibility = Visibility.Collapsed;
         MusicSearchDetails.Visibility = Visibility.Collapsed;
-        MusicSearchBox.SelectAll();
-        MusicSearchBox.Focus();
+        SearchTrackBox.SelectAll();
+        SearchTrackBox.Focus();
         SetDownloadStatus("Search closed — queued tracks are ready below");
     }
 

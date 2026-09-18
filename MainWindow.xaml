@@ -441,12 +441,26 @@
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <TextBox x:Name="MusicSearchBox" Height="38" Padding="12,8" FontSize="13" Foreground="#F4F6FA" CaretBrush="#F4F6FA"
-                                 Background="#0F1218" BorderBrush="#353C49" BorderThickness="1" VerticalContentAlignment="Center"
-                                 KeyDown="MusicSearchBox_KeyDown" ToolTip="Search for a song, artist, or album"/>
-                        <Button x:Name="MusicSearchButton" Grid.Column="1" Content="Search" Click="MusicSearchButton_Click"
-                                Style="{StaticResource PrimaryButtonStyle}" Padding="17,9" Margin="8,0,0,0"/>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock Text="Track" Foreground="#7D8493" FontSize="11" Margin="2,0,0,4"/>
+                            <TextBox x:Name="SearchTrackBox" Height="38" Padding="12,8" FontSize="13" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="#0F1218" BorderBrush="#353C49" BorderThickness="1" VerticalContentAlignment="Center" KeyDown="MusicSearchBox_KeyDown"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                            <TextBlock Text="Album" Foreground="#7D8493" FontSize="11" Margin="2,0,0,4"/>
+                            <TextBox x:Name="SearchAlbumBox" Height="38" Padding="12,8" FontSize="13" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="#0F1218" BorderBrush="#353C49" BorderThickness="1" VerticalContentAlignment="Center" KeyDown="MusicSearchBox_KeyDown"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Margin="0,0,8,0">
+                            <TextBlock Text="Artist" Foreground="#7D8493" FontSize="11" Margin="2,0,0,4"/>
+                            <TextBox x:Name="SearchArtistBox" Height="38" Padding="12,8" FontSize="13" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="#0F1218" BorderBrush="#353C49" BorderThickness="1" VerticalContentAlignment="Center" KeyDown="MusicSearchBox_KeyDown"/>
+                        </StackPanel>
+                        <Button x:Name="MusicSearchButton" Grid.Column="3" Content="Search" VerticalAlignment="Bottom" Click="MusicSearchButton_Click"
+                                Style="{StaticResource PrimaryButtonStyle}" Height="38" Padding="17,0" Margin="0,0,0,0"/>
                     </Grid>
                 </Grid>
             </Border>
@@ -1073,19 +1087,63 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     
-                    <Border BorderBrush="#353C49" BorderThickness="1" CornerRadius="4" Background="#0F1218" Margin="0,0,12,0">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="OverlayMusicSearchBox" Height="34" Padding="12,0" FontSize="13" Foreground="#F4F6FA" CaretBrush="#F4F6FA"
-                                     Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center"
-                                     KeyDown="OverlayMusicSearchBox_KeyDown" ToolTip="Search for a song, artist, or album" />
-                            <Button x:Name="OverlayMusicSearchButton" Grid.Column="1" Content="Search" Click="OverlayMusicSearchButton_Click"
-                                    Style="{StaticResource PrimaryButtonStyle}" Padding="12,0" Margin="4"/>
-                        </Grid>
-                    </Border>
+                    <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                        <Border BorderBrush="#353C49" BorderThickness="1" CornerRadius="4" Background="#0F1218" Margin="0,0,0,8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                                    <TextBlock Text="Track" Foreground="#7D8493" FontSize="10" Margin="2,2,0,2"/>
+                                    <TextBox x:Name="OverlaySearchTrackBox" Height="30" Padding="8,0" FontSize="12" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center" KeyDown="OverlayMusicSearchBox_KeyDown" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="0,0,4,0">
+                                    <TextBlock Text="Album" Foreground="#7D8493" FontSize="10" Margin="2,2,0,2"/>
+                                    <TextBox x:Name="OverlaySearchAlbumBox" Height="30" Padding="8,0" FontSize="12" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center" KeyDown="OverlayMusicSearchBox_KeyDown" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Margin="0,0,4,0">
+                                    <TextBlock Text="Artist" Foreground="#7D8493" FontSize="10" Margin="2,2,0,2"/>
+                                    <TextBox x:Name="OverlaySearchArtistBox" Height="30" Padding="8,0" FontSize="12" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center" KeyDown="OverlayMusicSearchBox_KeyDown" />
+                                </StackPanel>
+                                <Button x:Name="OverlayMusicSearchButton" Grid.Column="3" VerticalAlignment="Bottom" Content="Search" Click="OverlayMusicSearchButton_Click" Style="{StaticResource PrimaryButtonStyle}" Height="30" Padding="12,0" Margin="4"/>
+                            </Grid>
+                        </Border>
+                        
+                        <WrapPanel>
+                            <WrapPanel.Resources>
+                                <Style TargetType="ToggleButton" x:Key="FilterToggleStyle">
+                                    <Setter Property="BorderThickness" Value="0"/>
+                                    <Setter Property="Padding" Value="8,4"/>
+                                    <Setter Property="Cursor" Value="Hand"/>
+                                    <Setter Property="FontSize" Value="10"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ToggleButton">
+                                                <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                                                    <TextBlock x:Name="Txt" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Bd" Property="Opacity" Value="0.8"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsChecked" Value="False">
+                                                        <Setter TargetName="Bd" Property="Background" Value="#252A33"/>
+                                                        <Setter TargetName="Txt" Property="Foreground" Value="#6B7280"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </WrapPanel.Resources>
+                            <ToggleButton x:Name="FilterYouTubeToggle" Content="YouTube" IsChecked="True" Click="FilterToggle_Click" Style="{StaticResource FilterToggleStyle}" Background="#3D1B1B" Foreground="#FF6B6B" Margin="0,0,4,0"/>
+                            <ToggleButton x:Name="FilterSpotifyToggle" Content="Spotify" IsChecked="True" Click="FilterToggle_Click" Style="{StaticResource FilterToggleStyle}" Background="#1D3026" Foreground="#8FE3AC" Margin="0,0,4,0"/>
+                            <ToggleButton x:Name="FilterDeezerToggle" Content="Deezer" IsChecked="True" Click="FilterToggle_Click" Style="{StaticResource FilterToggleStyle}" Background="#1C2442" Foreground="#8FA3FF"/>
+                        </WrapPanel>
+                    </StackPanel>
                     
                     <Button Grid.Column="1" Content="Close" Click="CloseMusicSearch_Click" HorizontalAlignment="Right" Background="#242A34" Foreground="#C7CCD6" BorderThickness="0" Padding="13,9" Cursor="Hand" VerticalAlignment="Center"/>
                 </Grid>
@@ -1134,9 +1192,35 @@
                                     <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
                                         <Button Content="Download" Tag="Download" Click="SearchResultAction_Click" Style="{StaticResource PrimaryButtonStyle}" Padding="9,5" Margin="0,0,0,6"/>
                                         <WrapPanel HorizontalAlignment="Right">
-                                            <Button Content="YT" Tag="YouTube" Click="SearchResultAction_Click" IsEnabled="{Binding HasYouTube}" Background="#252B36" Foreground="#D9DCE4" BorderThickness="0" Padding="8,4" Margin="0,0,4,0" Cursor="Hand" FontSize="10"/>
-                                            <Button Content="Spotify" Tag="Spotify" Click="SearchResultAction_Click" IsEnabled="{Binding HasSpotify}" Background="#1D3026" Foreground="#8FE3AC" BorderThickness="0" Padding="8,4" Margin="0,0,4,0" Cursor="Hand" FontSize="10"/>
-                                            <Button Content="Deezer" Tag="Deezer" Click="SearchResultAction_Click" IsEnabled="{Binding HasDeezer}" Background="#2B2440" Foreground="#C2B9FF" BorderThickness="0" Padding="8,4" Cursor="Hand" FontSize="10"/>
+                                            <WrapPanel.Resources>
+                                                <Style TargetType="Button" x:Key="ProviderButtonStyle">
+                                                    <Setter Property="BorderThickness" Value="0"/>
+                                                    <Setter Property="Padding" Value="8,4"/>
+                                                    <Setter Property="Cursor" Value="Hand"/>
+                                                    <Setter Property="FontSize" Value="10"/>
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                                                                    <TextBlock x:Name="Txt" Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter TargetName="Bd" Property="Opacity" Value="0.8"/>
+                                                                    </Trigger>
+                                                                    <Trigger Property="IsEnabled" Value="False">
+                                                                        <Setter TargetName="Bd" Property="Background" Value="#252A33"/>
+                                                                        <Setter TargetName="Txt" Property="Foreground" Value="#6B7280"/>
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Style>
+                                            </WrapPanel.Resources>
+                                            <Button Content="YouTube" Tag="YouTube" Click="SearchResultAction_Click" IsEnabled="{Binding HasYouTube}" Style="{StaticResource ProviderButtonStyle}" Background="#3D1B1B" Foreground="#FF6B6B" Margin="0,0,4,0"/>
+                                            <Button Content="Spotify" Tag="Spotify" Click="SearchResultAction_Click" IsEnabled="{Binding HasSpotify}" Style="{StaticResource ProviderButtonStyle}" Background="#1D3026" Foreground="#8FE3AC" Margin="0,0,4,0"/>
+                                            <Button Content="Deezer" Tag="Deezer" Click="SearchResultAction_Click" IsEnabled="{Binding HasDeezer}" Style="{StaticResource ProviderButtonStyle}" Background="#1C2442" Foreground="#8FA3FF"/>
                                         </WrapPanel>
                                     </StackPanel>
                                 </Grid>

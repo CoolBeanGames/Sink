@@ -132,19 +132,36 @@ public static class MusicSearchService
     }
 
     public static async Task<MusicSearchResponse> SearchAsync(
-        string query, CancellationToken token = default)
+        string trackName, string albumName, string artistName, CancellationToken token = default)
     {
+        var combinedQuery = string.Join(" ", new[] { trackName, albumName, artistName }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        
+        var deezerParts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(trackName)) deezerParts.Add($"track:\"{trackName.Trim()}\"");
+        if (!string.IsNullOrWhiteSpace(albumName)) deezerParts.Add($"album:\"{albumName.Trim()}\"");
+        if (!string.IsNullOrWhiteSpace(artistName)) deezerParts.Add($"artist:\"{artistName.Trim()}\"");
+        var deezerQuery = string.Join(" ", deezerParts);
+
+        var ytParts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(trackName)) ytParts.Add(trackName.Trim());
+        if (!string.IsNullOrWhiteSpace(albumName)) ytParts.Add(albumName.Trim());
+        if (!string.IsNullOrWhiteSpace(artistName)) ytParts.Add(artistName.Trim());
+        var ytQuery = string.Join(" ", ytParts);
+
+        if (string.IsNullOrWhiteSpace(deezerQuery)) deezerQuery = " ";
+        if (string.IsNullOrWhiteSpace(ytQuery)) ytQuery = " ";
+
         var artistsTask = SafeProviderAsync(
-            "Deezer artists", () => SearchDeezerArtistsAsync(query, token),
+            "Deezer artists", () => SearchDeezerArtistsAsync(deezerQuery, token),
             (IReadOnlyList<MusicSearchResult>)[]);
         var albumsTask = SafeProviderAsync(
-            "Deezer albums", () => SearchDeezerAlbumsAsync(query, token),
+            "Deezer albums", () => SearchDeezerAlbumsAsync(deezerQuery, token),
             (IReadOnlyList<MusicSearchResult>)[]);
         var tracksTask = SafeProviderAsync(
-            "Deezer tracks", () => SearchDeezerTracksAsync(query, token),
+            "Deezer tracks", () => SearchDeezerTracksAsync(deezerQuery, token),
             (IReadOnlyList<MusicSearchResult>)[]);
         var youtubeTask = SafeProviderAsync(
-            "YouTube", () => SearchYouTubeAsync(query, token), new YouTubeSearchData([], []));
+            "YouTube", () => SearchYouTubeAsync(ytQuery, token), new YouTubeSearchData([], []));
 
         await Task.WhenAll(artistsTask, albumsTask, tracksTask, youtubeTask).ConfigureAwait(false);
         token.ThrowIfCancellationRequested();
@@ -164,7 +181,7 @@ public static class MusicSearchService
 
         foreach (var artist in artists) AttachMatchingChannel(artist, youtube.Channels);
 
-        var exactArtist = artists.FirstOrDefault(a => Equivalent(query, a.Title));
+        var exactArtist = artists.FirstOrDefault(a => Equivalent(combinedQuery, a.Title));
         if (exactArtist is not null)
         {
             var discographyResult = await SafeProviderAsync(
@@ -182,7 +199,7 @@ public static class MusicSearchService
         }
 
         var albumMatch = albums
-            .Select(album => (album, score: AlbumMatchScore(query, album)))
+            .Select(album => (album, score: AlbumMatchScore(combinedQuery, album)))
             .OrderByDescending(x => x.score)
             .FirstOrDefault();
         if (albumMatch.album is not null && albumMatch.score >= 80)
