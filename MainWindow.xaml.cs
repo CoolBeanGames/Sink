@@ -615,6 +615,7 @@ public partial class MainWindow : Window
 
     private void SetActiveNavigation(Button? active)
     {
+        CloseMusicSearch_Click(null!, null!);
         foreach (var button in new[] { ArtistsButton, AlbumsButton, GenresButton, SongsButton, IpodArtistsButton, IpodAlbumsButton, IpodGenresButton, IpodSongsButton, IpodPodcastsButton, IpodPlaylistsButton })
         {
             var name = button.Name.Replace("Ipod", "").Replace("Button", "");
@@ -1354,7 +1355,9 @@ public partial class MainWindow : Window
         void Update((int done, int total, string message) p)
         {
             if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(() => Update(p)); return; }
-            PlaybackStatus.Text = $"{p.message} ({p.done + 1}/{p.total})";
+            var digits = p.total.ToString().Length;
+            var paddedDone = (p.done + 1).ToString($"D{digits}");
+            PlaybackStatus.Text = $"({paddedDone}/{p.total}) - {p.message}";
         }
         return new Progress<(int done, int total, string message)>(Update);
     }

@@ -168,9 +168,24 @@ public partial class MainWindow
     private void MusicSearchButton_Click(object sender, RoutedEventArgs e) =>
         _ = RunMusicSearchAsync();
 
+    private void OverlayMusicSearchBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter) return;
+        e.Handled = true;
+        MusicSearchBox.Text = OverlayMusicSearchBox.Text;
+        _ = RunMusicSearchAsync();
+    }
+
+    private void OverlayMusicSearchButton_Click(object sender, RoutedEventArgs e)
+    {
+        MusicSearchBox.Text = OverlayMusicSearchBox.Text;
+        _ = RunMusicSearchAsync();
+    }
+
     private async Task RunMusicSearchAsync()
     {
         var query = MusicSearchBox.Text.Trim();
+        OverlayMusicSearchBox.Text = query;
         if (query.Length < 2)
         {
             MusicSearchBox.Focus();
