@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "projectId": "2fe841d9532447b7b9eaf5db78bbadde",
   "name": "Sink",
-  "nextCardIndex": 237,
+  "nextCardIndex": 238,
   "latestExePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
   "latestReleasePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
   "tagCatalog": [
@@ -1288,6 +1288,34 @@
           "isCollapsed": false,
           "createdAt": "2026-09-18T10:03:48.991478+00:00",
           "updatedAt": "2026-09-18T10:03:52.7481725+00:00"
+        },
+        {
+          "id": "b8ffbc5e37bf4ca4b9c62dd7c517bb25",
+          "index": 237,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Add scoring breakdown logging",
+          "task": "Added extremely detailed score accumulation logging to CalculateMatchScore. When a search is run, every scored match logs a detailed breakdown of how it accumulated points (e.g., [Score] Album | Kanye West | Graduation =\u003E 1902 [AlbumTitle Exact (\u002B1000), ArtistName StartsWith (\u002B900), Words x2 (\u002B2)]) to the application log file so the user can see exactly why items are ordered the way they are.",
+          "tags": [],
+          "files": [],
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [],
+          "notes": [],
+          "flags": {
+            "commit": false,
+            "build": false,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-18T10:10:21.9406384+00:00",
+          "updatedAt": "2026-09-18T10:10:25.4793395+00:00"
         }
       ]
     }

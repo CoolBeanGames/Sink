@@ -195,45 +195,6 @@ public static class MusicSearchService
 
         foreach (var artist in artists) AttachMatchingChannel(artist, youtube.Channels);
 
-        var exactArtist = artists.FirstOrDefault(a => Equivalent(combinedQuery, a.Title));
-        if (exactArtist is not null && string.IsNullOrWhiteSpace(albumName) && string.IsNullOrWhiteSpace(trackName))
-        {
-            var discographyResult = await SafeProviderAsync(
-                "Deezer discography",
-                () => GetArtistAlbumsAsync(exactArtist.DeezerId, exactArtist.Title, token),
-                (IReadOnlyList<MusicSearchResult>)[]).ConfigureAwait(false);
-            errors.Add(discographyResult.Error);
-            var discography = discographyResult.Value.Count > 0
-                ? discographyResult.Value
-                : albums.Where(a => Equivalent(a.Artist, exactArtist.Title)).ToList();
-            var results = new List<MusicSearchResult> { exactArtist };
-            results.AddRange(discography);
-            return Response(results, errors,
-                $"{exactArtist.Title}: artist page and {discography.Count} release{(discography.Count == 1 ? "" : "s")}. Queue the artist for the full discography, or choose an album.");
-        }
-
-        var albumMatch = albums
-            .Select(album => (album, score: CalculateMatchScore(trackName, albumName, artistName, combinedQuery, album)))
-            .OrderByDescending(x => x.score)
-            .FirstOrDefault();
-        if (albumMatch.album is not null && albumMatch.score >= 1000 && string.IsNullOrWhiteSpace(trackName))
-        {
-            var albumTracksResult = await SafeProviderAsync(
-                "Deezer album tracks",
-                () => GetAlbumTracksAsync(albumMatch.album, token),
-                (IReadOnlyList<MusicSearchResult>)[]).ConfigureAwait(false);
-            errors.Add(albumTracksResult.Error);
-            var albumTracks = MergeTracks(albumTracksResult.Value, youtube.Tracks, includeUnmatchedYouTube: false);
-            if (albumTracks.Count > 0)
-            {
-                albumMatch.album.TrackCount = albumTracks.Count;
-                var results = new List<MusicSearchResult> { albumMatch.album };
-                results.AddRange(albumTracks);
-                return Response(results, errors,
-                    $"{albumMatch.album.Title}: album page and {albumTracks.Count} individual track{(albumTracks.Count == 1 ? "" : "s")}.");
-            }
-        }
-
         var generic = new List<MusicSearchResult>();
         generic.AddRange(artists);
         generic.AddRange(albums);
@@ -324,6 +285,7 @@ public static class MusicSearchService
             $"{DeezerApi}/search/album?limit=100&q={Uri.EscapeDataString(query)}", token).ConfigureAwait(false);
         
         var matchTarget = string.IsNullOrWhiteSpace(targetQuery) ? query : targetQuery;
+        var hasExplicitTarget = !string.IsNullOrWhiteSpace(targetQuery);
 
         foreach (var item in ReadData(doc.RootElement))
         {
@@ -346,7 +308,7 @@ public static class MusicSearchService
                         Artist = name,
                         Artwork = Text(artToken, "picture_xl", Text(artToken, "picture_medium", "")),
                         DeezerUrl = $"https://www.deezer.com/artist/{aId}",
-                        MatchBonus = isExact ? 1100 : 0
+                        MatchBonus = (isExact && hasExplicitTarget) ? 1100 : 0
                     });
                 }
             }
@@ -365,6 +327,7 @@ public static class MusicSearchService
             $"{DeezerApi}/search/track?limit=100&q={Uri.EscapeDataString(query)}", token).ConfigureAwait(false);
         
         var matchTarget = string.IsNullOrWhiteSpace(targetQuery) ? query : targetQuery;
+        var hasExplicitTarget = !string.IsNullOrWhiteSpace(targetQuery);
 
         foreach (var item in ReadData(doc.RootElement))
         {
@@ -387,7 +350,7 @@ public static class MusicSearchService
                         Artist = name,
                         Artwork = Text(artToken, "picture_xl", Text(artToken, "picture_medium", "")),
                         DeezerUrl = $"https://www.deezer.com/artist/{aId}",
-                        MatchBonus = isExact ? 1100 : 0
+                        MatchBonus = (isExact && hasExplicitTarget) ? 1100 : 0
                     });
                 }
             }
@@ -404,7 +367,7 @@ public static class MusicSearchService
                         Artist = trk.Artist,
                         Artwork = Text(albToken, "cover_xl", Text(albToken, "cover_medium", "")),
                         DeezerUrl = $"https://www.deezer.com/album/{aId}",
-                        MatchBonus = isExact ? 1050 : 0
+                        MatchBonus = (isExact && hasExplicitTarget) ? 1050 : 0
                     });
                 }
             }
