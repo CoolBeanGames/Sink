@@ -140,11 +140,7 @@ public static class MusicSearchService
     {
         var combinedQuery = string.Join(" ", new[] { trackName, albumName, artistName }.Where(s => !string.IsNullOrWhiteSpace(s)));
         
-        var deezerParts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(trackName)) deezerParts.Add($"track:\"{trackName.Trim()}\"");
-        if (!string.IsNullOrWhiteSpace(albumName)) deezerParts.Add($"album:\"{albumName.Trim()}\"");
-        if (!string.IsNullOrWhiteSpace(artistName)) deezerParts.Add($"artist:\"{artistName.Trim()}\"");
-        var deezerQuery = string.Join(" ", deezerParts);
+        var deezerQuery = combinedQuery;
 
         var ytParts = new List<string>();
         if (!string.IsNullOrWhiteSpace(trackName)) ytParts.Add(trackName.Trim());

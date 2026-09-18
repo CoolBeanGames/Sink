@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "projectId": "2fe841d9532447b7b9eaf5db78bbadde",
   "name": "Sink",
-  "nextCardIndex": 229,
+  "nextCardIndex": 230,
   "latestExePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
   "latestReleasePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
   "tagCatalog": [
@@ -1064,6 +1064,34 @@
           "isCollapsed": false,
           "createdAt": "2026-09-18T05:19:17.1063813+00:00",
           "updatedAt": "2026-09-18T05:19:23.3829295+00:00"
+        },
+        {
+          "id": "051938f92b7c4415807c05dffe17c2a9",
+          "index": 229,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Fix partial search on Deezer",
+          "task": "Removed strict advanced search field filters from Deezer API query so partial terms and album compilations can be properly resolved by Deezer\u0027s global search engine.",
+          "tags": [],
+          "files": [],
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [],
+          "notes": [],
+          "flags": {
+            "commit": false,
+            "build": false,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-18T05:51:45.6458223+00:00",
+          "updatedAt": "2026-09-18T05:51:52.6511061+00:00"
         }
       ]
     }
