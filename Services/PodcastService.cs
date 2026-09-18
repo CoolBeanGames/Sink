@@ -135,6 +135,11 @@ public static class PodcastService
         Directory.CreateDirectory(directory);
         var ext = SafeExtension(episode.AudioUrl);
         var path = System.IO.Path.Combine(directory, Sanitize($"{episode.EpisodeNumber:D4} - {episode.Title}") + ext);
+        if (File.Exists(path))
+        {
+            progress?.Report(1);
+            return path;
+        }
 
         using var response = await Http.GetAsync(episode.AudioUrl, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();

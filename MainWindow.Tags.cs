@@ -159,6 +159,8 @@ public partial class MainWindow
         BlurBehind(false);
         if (!ok) return;
         SaveLibrary();
+        TagsGrid.CommitEdit(DataGridEditingUnit.Row, true);
+        TagsGrid.CommitEdit(DataGridEditingUnit.Cell, true);
         _tagsView?.Refresh();
         PlaybackStatus.Text = $"Trimmed {tracks.Count} track title{(tracks.Count == 1 ? "" : "s")}";
     }

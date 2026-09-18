@@ -44,7 +44,11 @@ public sealed class MusicSearchResult : INotifyPropertyChanged
     public bool IsTitleReadOnly => Kind == MusicSearchResultKind.Track;
     public bool ShowArtistField => Kind != MusicSearchResultKind.Artist;
     public bool ShowAlbumField => Kind == MusicSearchResultKind.Track;
-    public string KindLabel => Kind.ToString().ToUpperInvariant();
+    public string KindLabel
+    {
+        get => Kind.ToString().ToUpperInvariant();
+        set { }
+    }
     public string TitleFieldLabel => Kind switch
     {
         MusicSearchResultKind.Artist => "Artist name",
