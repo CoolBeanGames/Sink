@@ -30,6 +30,7 @@ public sealed class MusicSearchResult : INotifyPropertyChanged
     public string DeezerUrl { get; internal set; } = "";
     public int TrackCount { get; internal set; }
     internal long DeezerId { get; init; }
+    internal int MatchBonus { get; set; }
 
     /// <summary>
     /// Spotify's anonymous search endpoint is no longer available. Sink's
@@ -156,7 +157,7 @@ public static class MusicSearchService
             (IReadOnlyList<MusicSearchResult>)[]);
         var albumsTask = SafeProviderAsync(
             "Deezer albums", () => SearchDeezerAlbumsAsync(deezerQuery, token),
-            (IReadOnlyList<MusicSearchResult>)[]);
+            (Albums: new List<MusicSearchResult>(), Artists: new List<MusicSearchResult>()));
         var tracksTask = SafeProviderAsync(
             "Deezer tracks", () => SearchDeezerTracksAsync(deezerQuery, token),
             (Tracks: new List<MusicSearchResult>(), Artists: new List<MusicSearchResult>(), Albums: new List<MusicSearchResult>()));
@@ -171,7 +172,7 @@ public static class MusicSearchService
         var tracksResult = await tracksTask.ConfigureAwait(false);
         var youtubeResult = await youtubeTask.ConfigureAwait(false);
         var artists = artistsResult.Value.ToList();
-        var albums = albumsResult.Value.ToList();
+        var albums = albumsResult.Value.Albums;
         var tracks = tracksResult.Value.Tracks;
         var youtube = youtubeResult.Value;
         var errors = new List<string?>
@@ -179,6 +180,10 @@ public static class MusicSearchService
             artistsResult.Error, albumsResult.Error, tracksResult.Error, youtubeResult.Error,
         };
 
+        foreach (var a in albumsResult.Value.Artists)
+        {
+            if (!artists.Any(x => x.DeezerId == a.DeezerId)) artists.Add(a);
+        }
         foreach (var a in tracksResult.Value.Artists)
         {
             if (!artists.Any(x => x.DeezerId == a.DeezerId)) artists.Add(a);
@@ -309,12 +314,42 @@ public static class MusicSearchService
         }).Where(r => r.DeezerId > 0).ToList();
     }
 
-    private static async Task<IReadOnlyList<MusicSearchResult>> SearchDeezerAlbumsAsync(
+    private static async Task<(List<MusicSearchResult> Albums, List<MusicSearchResult> Artists)> SearchDeezerAlbumsAsync(
         string query, CancellationToken token)
     {
+        var albums = new List<MusicSearchResult>();
+        var artists = new List<MusicSearchResult>();
+
         using var doc = await GetJsonAsync(
             $"{DeezerApi}/search/album?limit=100&q={Uri.EscapeDataString(query)}", token).ConfigureAwait(false);
-        return ReadData(doc.RootElement).Select(item => AlbumResult(item)).Where(r => r.DeezerId > 0).ToList();
+        
+        foreach (var item in ReadData(doc.RootElement))
+        {
+            var alb = AlbumResult(item);
+            if (alb.DeezerId > 0) albums.Add(alb);
+
+            bool isExact = alb.Title.Equals(query, StringComparison.OrdinalIgnoreCase);
+
+            if (item.TryGetProperty("artist", out var artToken))
+            {
+                var aId = Number(artToken, "id");
+                if (aId > 0 && !artists.Any(a => a.DeezerId == aId))
+                {
+                    var name = Text(artToken, "name", "Unknown Artist");
+                    artists.Add(new MusicSearchResult
+                    {
+                        Kind = MusicSearchResultKind.Artist,
+                        DeezerId = aId,
+                        Title = name,
+                        Artist = name,
+                        Artwork = Text(artToken, "picture_xl", Text(artToken, "picture_medium", "")),
+                        DeezerUrl = $"https://www.deezer.com/artist/{aId}",
+                        MatchBonus = isExact ? 1100 : 0
+                    });
+                }
+            }
+        }
+        return (albums, artists);
     }
 
     private static async Task<(List<MusicSearchResult> Tracks, List<MusicSearchResult> Artists, List<MusicSearchResult> Albums)> SearchDeezerTracksAsync(
@@ -332,6 +367,8 @@ public static class MusicSearchService
             var trk = TrackResult(item, "", "", "");
             if (trk.DeezerId > 0) tracks.Add(trk);
 
+            bool isExact = trk.Title.Equals(query, StringComparison.OrdinalIgnoreCase);
+
             if (item.TryGetProperty("artist", out var artToken))
             {
                 var aId = Number(artToken, "id");
@@ -346,6 +383,7 @@ public static class MusicSearchService
                         Artist = name,
                         Artwork = Text(artToken, "picture_xl", Text(artToken, "picture_medium", "")),
                         DeezerUrl = $"https://www.deezer.com/artist/{aId}",
+                        MatchBonus = isExact ? 1100 : 0
                     });
                 }
             }
@@ -362,6 +400,7 @@ public static class MusicSearchService
                         Artist = trk.Artist,
                         Artwork = Text(albToken, "cover_xl", Text(albToken, "cover_medium", "")),
                         DeezerUrl = $"https://www.deezer.com/album/{aId}",
+                        MatchBonus = isExact ? 1050 : 0
                     });
                 }
             }
@@ -582,25 +621,27 @@ public static class MusicSearchService
         bool Matches(Func<string, string, bool> condition) =>
             condition(title, q) || condition(combined, q);
 
-        if (Matches((t, s) => t.Equals(s, StringComparison.OrdinalIgnoreCase))) return 1000;
-        if (Matches((t, s) => t.StartsWith(s, StringComparison.OrdinalIgnoreCase))) return 900;
-        if (Matches((t, s) => t.EndsWith(s, StringComparison.OrdinalIgnoreCase))) return 800;
-        if (Matches((t, s) => t.Contains(s, StringComparison.OrdinalIgnoreCase))) return 700;
-
-        var words = KeyChars.Replace(q.ToLowerInvariant(), " ")
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        
-        if (words.Length == 0) return 0;
-
-        var searchableTitle = title.ToLowerInvariant();
-        var searchableCombined = combined.ToLowerInvariant();
-        
-        int matchCount = 0;
-        foreach (var word in words)
+        int baseScore = 0;
+        if (Matches((t, s) => t.Equals(s, StringComparison.OrdinalIgnoreCase))) baseScore = 1000;
+        else if (Matches((t, s) => t.StartsWith(s, StringComparison.OrdinalIgnoreCase))) baseScore = 900;
+        else if (Matches((t, s) => t.EndsWith(s, StringComparison.OrdinalIgnoreCase))) baseScore = 800;
+        else if (Matches((t, s) => t.Contains(s, StringComparison.OrdinalIgnoreCase))) baseScore = 700;
+        else
         {
-            if (searchableTitle.Contains(word) || searchableCombined.Contains(word)) matchCount++;
+            var words = KeyChars.Replace(q.ToLowerInvariant(), " ")
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (words.Length > 0)
+            {
+                var searchableTitle = title.ToLowerInvariant();
+                var searchableCombined = combined.ToLowerInvariant();
+                foreach (var word in words)
+                {
+                    if (searchableTitle.Contains(word) || searchableCombined.Contains(word)) baseScore++;
+                }
+            }
         }
-        return matchCount;
+
+        return Math.Max(baseScore, result.MatchBonus);
     }
 
     private static bool Equivalent(string left, string right) => Normalize(left) == Normalize(right);

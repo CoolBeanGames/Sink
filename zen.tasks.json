@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "projectId": "2fe841d9532447b7b9eaf5db78bbadde",
   "name": "Sink",
-  "nextCardIndex": 234,
+  "nextCardIndex": 235,
   "latestExePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
   "latestReleasePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
   "tagCatalog": [
@@ -1204,6 +1204,34 @@
           "isCollapsed": false,
           "createdAt": "2026-09-18T06:13:36.5344822+00:00",
           "updatedAt": "2026-09-18T06:13:40.0563978+00:00"
+        },
+        {
+          "id": "22f8adc3f2f74cab8ba42eba22b7b68a",
+          "index": 234,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Advanced catalog sorting algorithm",
+          "task": "Renamed AlbumMatchScore to CalculateMatchScore. Created unified list of all catalog items and sorted them globally using points: 1000 for exact, 900 for StartsWith, 800 for EndsWith, 700 for Contains, and words-matched for the rest. Secondary sort applied to Enum.Kind for Artist -\u003E Album -\u003E Track preference.",
+          "tags": [],
+          "files": [],
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [],
+          "notes": [],
+          "flags": {
+            "commit": false,
+            "build": false,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-18T06:58:52.6035236+00:00",
+          "updatedAt": "2026-09-18T06:58:52.935706+00:00"
         }
       ]
     }
