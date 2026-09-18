@@ -230,9 +230,10 @@ public static class MusicSearchService
         }
 
         var generic = new List<MusicSearchResult>();
-        generic.AddRange(artists.Take(12));
-        generic.AddRange(albums.Take(50));
-        generic.AddRange(MergeTracks(tracks, youtube.Tracks, includeUnmatchedYouTube: true).Take(50));
+        generic.AddRange(artists.OrderByDescending(x => AlbumMatchScore(combinedQuery, x)).Take(20));
+        generic.AddRange(albums.OrderByDescending(x => AlbumMatchScore(combinedQuery, x)).Take(100));
+        generic.AddRange(MergeTracks(tracks, youtube.Tracks, includeUnmatchedYouTube: true)
+            .OrderByDescending(x => AlbumMatchScore(combinedQuery, x)).Take(100));
         return Response(generic, errors,
             $"{generic.Count} catalog result{(generic.Count == 1 ? "" : "s")} across artists, albums, and tracks.");
     }
@@ -285,7 +286,7 @@ public static class MusicSearchService
         string query, CancellationToken token)
     {
         using var doc = await GetJsonAsync(
-            $"{DeezerApi}/search/artist?limit=25&q={Uri.EscapeDataString(query)}", token).ConfigureAwait(false);
+            $"{DeezerApi}/search/artist?limit=100&q={Uri.EscapeDataString(query)}", token).ConfigureAwait(false);
         return ReadData(doc.RootElement).Select(item =>
         {
             var id = Number(item, "id");
@@ -306,7 +307,7 @@ public static class MusicSearchService
         string query, CancellationToken token)
     {
         using var doc = await GetJsonAsync(
-            $"{DeezerApi}/search/album?limit=50&q={Uri.EscapeDataString(query)}", token).ConfigureAwait(false);
+            $"{DeezerApi}/search/album?limit=100&q={Uri.EscapeDataString(query)}", token).ConfigureAwait(false);
         return ReadData(doc.RootElement).Select(item => AlbumResult(item)).Where(r => r.DeezerId > 0).ToList();
     }
 
@@ -318,7 +319,7 @@ public static class MusicSearchService
         var albums = new List<MusicSearchResult>();
 
         using var doc = await GetJsonAsync(
-            $"{DeezerApi}/search/track?limit=50&q={Uri.EscapeDataString(query)}", token).ConfigureAwait(false);
+            $"{DeezerApi}/search/track?limit=100&q={Uri.EscapeDataString(query)}", token).ConfigureAwait(false);
         
         foreach (var item in ReadData(doc.RootElement))
         {
