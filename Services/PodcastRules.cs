@@ -11,6 +11,15 @@ namespace Sink.Services;
 /// </summary>
 public static class PodcastRules
 {
+    /// <summary>
+    /// An episode belongs on the iPod only while it is still unplayed and its
+    /// local audio file is available. This uses <see
+    /// cref="PodcastEpisode.IsDownloaded"/> rather than merely checking
+    /// <c>LocalPath</c>, so files removed outside Sink are reconciled too.
+    /// </summary>
+    public static bool ShouldSyncToIpod(PodcastEpisode episode) =>
+        !episode.IsPlayed && episode.IsDownloaded;
+
     public static bool ShouldMarkPlayed(PodcastEpisode e)
     {
         if (e.IsPlayed) return true;

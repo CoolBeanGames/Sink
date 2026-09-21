@@ -347,7 +347,8 @@ public partial class MainWindow : Window
             // costing that write's in-memory changes since the condition
             // just re-fires on the next tick once _ipodWriting clears, and
             // the write's own finally block already refreshes on completion.
-            if (device.LibraryRoot != _ipodLibraryRoot && !_ipodWriting) LoadIpodLibrary(device.LibraryRoot);
+            if (device.LibraryRoot != _ipodLibraryRoot && !_ipodWriting)
+                await LoadIpodLibraryAsync(device.LibraryRoot);
             if (isNew)
             {
                 Services.Log.Info($"iPod connected: {device.Name} ({device.LibraryRoot ?? "no library root"})");
@@ -370,7 +371,9 @@ public partial class MainWindow : Window
         if (wasManual) PlaybackStatus.Text = "No iPod found — check the cable, or click the record to simulate one";
     }
 
-    private async void LoadIpodLibrary(string? root)
+    private async void LoadIpodLibrary(string? root) => await LoadIpodLibraryAsync(root);
+
+    private async Task LoadIpodLibraryAsync(string? root)
     {
         _ipodLibraryRoot = root;
         _ipodLibrary = null;
@@ -403,14 +406,28 @@ public partial class MainWindow : Window
             var library = await Task.Run(() => Sink.Services.Ipod.IpodReader.Read(root));
             if (_ipodLibraryRoot != root) return (false, 0, 0); // device changed while loading
             _ipodLibrary = library;
+            var podcastsUpdated = await SyncPodcastStatusFromIpodAsync();
+            var podcastsRemoved = await ReconcilePodcastsOnIpodAsync(root);
+            if (podcastsRemoved > 0)
+            {
+                library = await Task.Run(() => Sink.Services.Ipod.IpodReader.Read(root));
+                if (_ipodLibraryRoot != root) return (false, 0, 0);
+                _ipodLibrary = library;
+                podcastsUpdated += podcastsRemoved;
+            }
+
             _ipodTracks.Clear();
             foreach (var t in library.Tracks) _ipodTracks.Add(AdaptIpodTrack(t));
             var readableName = library.DeviceName ?? _ipodDevice?.Name ?? "iPod";
             PlaybackStatus.Text = $"Read {library.Tracks.Count} track{(library.Tracks.Count == 1 ? "" : "s")} from {readableName}";
             ApplyIpodLibraryChrome(library, readableName);
-            var podcastsUpdated = SyncPodcastStatusFromIpod();
             var songsUpdated = SyncMusicPlayCountsFromIpod(library); // task 128
             EnrichIpodArtwork(_ipodTracks); // task 132
+            // A played episode may have freed an auto-download slot. Wait until
+            // stale device entries are gone before downloading/pushing its
+            // replacement so Clickwheel never sees concurrent DB writers.
+            if (podcastsUpdated > 0)
+                foreach (var podcast in _podcasts.ToList()) _ = AutoDownloadAndPushAsync(podcast);
             return (true, songsUpdated, podcastsUpdated);
         }
         catch (Exception ex)

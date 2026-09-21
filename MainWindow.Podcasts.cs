@@ -218,8 +218,10 @@ public partial class MainWindow
         if ((sender as FrameworkElement)?.DataContext is not PodcastEpisode episode || _currentShow is null) return;
         if (episode.IsDownloaded)
         {
+            var key = PodcastEpisodeKey(_currentShow, episode);
             PodcastRules.DropDownload(episode);
             PodcastStore.Save(_podcasts);
+            await UnsyncPodcastKeysFromConnectedIpodAsync([key]);
             PodcastStatus.Text = "Deleted download";
             RenderPodcasts();
             return;
@@ -255,9 +257,10 @@ public partial class MainWindow
         }
     }
 
-    private void EpisodeMarkPlayed_Click(object sender, RoutedEventArgs e)
+    private async void EpisodeMarkPlayed_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not PodcastEpisode episode) return;
+        var show = _podcasts.FirstOrDefault(p => p.Episodes.Contains(episode)) ?? _currentShow;
         episode.IsPlayed = !episode.IsPlayed;
         if (episode.IsPlayed)
         {
@@ -269,13 +272,15 @@ public partial class MainWindow
             episode.PositionSeconds = 0;
         }
         PodcastStore.Save(_podcasts);
+        if (episode.IsPlayed && show is not null)
+            await UnsyncPodcastKeysFromConnectedIpodAsync([PodcastEpisodeKey(show, episode)]);
         RenderPodcasts();
-        if (_currentShow is not null) _ = RunAutoDownloadsAsync(_currentShow);
+        if (show is not null) _ = RunAutoDownloadsAsync(show);
     }
 
     // ---- Show-level bulk actions (task 76) ------------------------------
 
-    private void MarkAllPlayed_Click(object sender, RoutedEventArgs e)
+    private async void MarkAllPlayed_Click(object sender, RoutedEventArgs e)
     {
         if (_currentShow is null) return;
         var changed = 0;
@@ -289,6 +294,11 @@ public partial class MainWindow
         }
         if (_playingEpisode is not null && _currentShow.Episodes.Contains(_playingEpisode)) StopPodcast(markPlayed: true);
         PodcastStore.Save(_podcasts);
+        var keys = _currentShow.Episodes
+            .Where(episode => episode.IsPlayed)
+            .Select(episode => PodcastEpisodeKey(_currentShow, episode))
+            .ToHashSet();
+        await UnsyncPodcastKeysFromConnectedIpodAsync(keys);
         RenderPodcasts();
         UpdatePodcastSidebarDot();
         _ = RunAutoDownloadsAsync(_currentShow);
@@ -311,17 +321,20 @@ public partial class MainWindow
         PodcastStatus.Text = $"Downloaded {done} of {pending.Count} episode{(pending.Count == 1 ? "" : "s")}";
     }
 
-    private void DeleteAllDownloads_Click(object sender, RoutedEventArgs e)
+    private async void DeleteAllDownloads_Click(object sender, RoutedEventArgs e)
     {
         if (_currentShow is null) return;
         var removed = 0;
+        var keys = new HashSet<string>();
         foreach (var episode in _currentShow.Episodes.Where(ep => ep.IsDownloaded).ToList())
         {
             if (_playingEpisode == episode) StopPodcast(markPlayed: false);
+            keys.Add(PodcastEpisodeKey(_currentShow, episode));
             PodcastRules.DropDownload(episode);
             removed++;
         }
         PodcastStore.Save(_podcasts);
+        await UnsyncPodcastKeysFromConnectedIpodAsync(keys);
         RenderPodcasts();
         PodcastStatus.Text = removed > 0 ? $"Deleted {removed} download{(removed == 1 ? "" : "s")}" : "No downloads to delete";
     }
@@ -510,12 +523,76 @@ public partial class MainWindow
         Duration = episode.Duration,
     };
 
+    private static string PodcastEpisodeKey(Podcast show, PodcastEpisode episode) =>
+        Services.Ipod.IpodDbTrack.MakeKey(episode.Title, show.Title, show.Title, 0);
+
+    private HashSet<string> PodcastKeysNeedingUnsync()
+    {
+        var deviceKeys = _ipodLibrary?.Tracks
+            .Where(track => track.IsPodcast)
+            .Select(track => track.Key)
+            .ToHashSet() ?? [];
+
+        if (deviceKeys.Count == 0) return [];
+
+        return _podcasts
+            .SelectMany(show => show.Episodes
+                .Where(episode => !PodcastRules.ShouldSyncToIpod(episode))
+                .Select(episode => PodcastEpisodeKey(show, episode)))
+            .Where(deviceKeys.Contains)
+            .ToHashSet();
+    }
+
+    private Task<int> ReconcilePodcastsOnIpodAsync(string root) =>
+        RemovePodcastKeysFromIpodAsync(root, PodcastKeysNeedingUnsync());
+
+    private async Task<int> UnsyncPodcastKeysFromConnectedIpodAsync(IReadOnlyCollection<string> keys)
+    {
+        var root = _ipodDevice?.LibraryRoot;
+        if (root is null || keys.Count == 0) return 0;
+        var removed = await RemovePodcastKeysFromIpodAsync(root, keys);
+        if (removed > 0) LoadIpodLibrary(root);
+        return removed;
+    }
+
+    private async Task<int> RemovePodcastKeysFromIpodAsync(string root, IReadOnlyCollection<string> keys)
+    {
+        if (keys.Count == 0) return 0;
+        if (_ipodWriting)
+        {
+            Log.Info($"Deferred removal of {keys.Count} podcast episode(s) because the iPod is busy; the next refresh will reconcile them");
+            return 0;
+        }
+
+        _ipodWriting = true;
+        StartIpodSync(indefinite: true);
+        try
+        {
+            var result = await Task.Run(() => Services.Ipod.IpodWriteService.RemoveByKey(root, keys));
+            if (result.Error is not null)
+            {
+                PlaybackStatus.Text = result.Summary;
+                return 0;
+            }
+            if (result.Removed > 0)
+                PlaybackStatus.Text = $"Removed {result.Removed} played or unavailable podcast episode{(result.Removed == 1 ? "" : "s")} from the iPod";
+            return result.Removed;
+        }
+        finally
+        {
+            _ipodWriting = false;
+            StopIpodSync();
+        }
+    }
+
     /// <summary>Pushes every downloaded episode across all subscribed shows onto the device (task 137 — "Sync podcasts" did nothing but spin the indicator). Returns how many episodes were actually added.</summary>
     private async Task<int> SyncAllPodcastsToDevice()
     {
         if (!_ipodConnected) { PodcastStatus.Text = "Connect an iPod before syncing"; return 0; }
+        if (_ipodDevice?.LibraryRoot is string root)
+            await ReconcilePodcastsOnIpodAsync(root);
         var tracks = _podcasts
-            .SelectMany(show => show.Episodes.Where(e => e.IsDownloaded).Select(e => EpisodeTrack(show, e)))
+            .SelectMany(show => show.Episodes.Where(PodcastRules.ShouldSyncToIpod).Select(e => EpisodeTrack(show, e)))
             .ToList();
         if (tracks.Count == 0) { PodcastStatus.Text = "No downloaded episodes to sync"; return 0; }
         PodcastStatus.Text = $"Syncing {tracks.Count} episode{(tracks.Count == 1 ? "" : "s")} to iPod";
@@ -579,7 +656,7 @@ public partial class MainWindow
     /// DB library can't surface the bookmark field.
     /// </summary>
     /// <summary>Returns how many episodes actually changed (position pulled and/or newly marked played), for the "Sync changes" completion message.</summary>
-    private int SyncPodcastStatusFromIpod()
+    private async Task<int> SyncPodcastStatusFromIpodAsync()
     {
         var root = _ipodDevice?.LibraryRoot;
         if (_ipodLibrary is null || root is null || _podcasts.Count == 0) return 0;
@@ -607,7 +684,7 @@ public partial class MainWindow
         {
             if (string.IsNullOrEmpty(episode.LocalPath)) continue;
             candidates++;
-            var key = Services.Ipod.IpodDbTrack.MakeKey(episode.Title, podcast.Title, podcast.Title, 0);
+            var key = PodcastEpisodeKey(podcast, episode);
             var deviceTrack = byKey[key].FirstOrDefault();
             if (deviceTrack is null)
             {
@@ -672,22 +749,16 @@ public partial class MainWindow
 
         if (toPush.Count > 0 && !_ipodWriting)
         {
-            _ = Task.Run(() => Sink.Services.Ipod.IpodWriteService.WritePodcastPositions(root, toPush))
-                .ContinueWith(t =>
-                {
-                    if (t.Status == TaskStatus.RanToCompletion && t.Result > 0)
-                        Dispatcher.Invoke(() => PlaybackStatus.Text = $"Synced {t.Result} podcast position{(t.Result == 1 ? "" : "s")} to iPod");
-                });
+            var positionsUpdated = await Task.Run(() => Services.Ipod.IpodWriteService.WritePodcastPositions(root, toPush));
+            if (positionsUpdated > 0)
+                PlaybackStatus.Text = $"Synced {positionsUpdated} podcast position{(positionsUpdated == 1 ? "" : "s")} to iPod";
         }
 
         if (!changed) return updated;
         PodcastStore.Save(_podcasts);
         if (_podcastViewActive) { RenderPodcasts(); UpdatePodcastSidebarDot(); }
-        // A played episode just freed a rule slot — download its replacement
-        // and, since the device is right here, push it straight on without
-        // requiring a second manual sync to actually get it onto the iPod
-        // (task: "sink then begins downloading episodes as syncing finishes").
-        foreach (var podcast in _podcasts.ToList()) _ = AutoDownloadAndPushAsync(podcast);
+        // The caller starts replacement downloads after stale device entries
+        // have been removed, keeping Clickwheel writes serialized.
         return updated;
     }
 
