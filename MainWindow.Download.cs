@@ -213,7 +213,12 @@ public partial class MainWindow
 
     private void FilterToggle_Click(object sender, RoutedEventArgs e)
     {
-        System.Windows.Data.CollectionViewSource.GetDefaultView(_musicSearchResults).Refresh();
+        var view = System.Windows.Data.CollectionViewSource.GetDefaultView(_musicSearchResults);
+        view.Refresh();
+        if (_musicSearchResults.Count > 0 && view.IsEmpty)
+            SetMusicSearchEmptyState(true, "Nothing matches these filters", "Turn on another provider or result type to see more matches.");
+        else if (_musicSearchResults.Count > 0)
+            SetMusicSearchEmptyState(false, "", "");
     }
 
     private void OverlayMusicSearchButton_Click(object sender, RoutedEventArgs e)
@@ -245,6 +250,9 @@ public partial class MainWindow
         MusicSearchDetails.Visibility = Visibility.Collapsed;
         MusicSearchButton.IsEnabled = false;
         MusicSearchButton.Content = "Searching…";
+        OverlayMusicSearchButton.IsEnabled = false;
+        OverlayMusicSearchButton.Content = "Searching…";
+        SetMusicSearchEmptyState(true, "Searching the catalog…", "Checking Deezer, Spotify matches, and YouTube.");
         MusicSearchStatus.Text = "Searching Deezer, Spotify matches, and YouTube…";
         SetDownloadStatus($"Searching for “{query}”…");
 
@@ -254,6 +262,10 @@ public partial class MainWindow
             if (cts.IsCancellationRequested) return;
             foreach (var result in response.Results) _musicSearchResults.Add(result);
             if (_musicSearchResults.Count > 0) MusicSearchResults.SelectedIndex = 0;
+            SetMusicSearchEmptyState(
+                _musicSearchResults.Count == 0,
+                "No matches found",
+                "Try fewer fields, check the spelling, or search with a broader artist or album name.");
 
             var providerWarning = response.ProviderErrors.Count == 0
                 ? ""
@@ -270,6 +282,7 @@ public partial class MainWindow
         }
         catch (Exception ex)
         {
+            SetMusicSearchEmptyState(true, "Search is unavailable", "One or more music services could not be reached. Check the status above and try again.");
             MusicSearchStatus.Text = $"Search failed — {Shorten(ex.Message)}";
             SetDownloadStatus($"Search failed: {ex.Message}");
             Log.Error($"Music search failed for {query}", ex);
@@ -279,9 +292,19 @@ public partial class MainWindow
             if (ReferenceEquals(_musicSearchCts, cts))
             {
                 MusicSearchButton.IsEnabled = true;
-                MusicSearchButton.Content = "Search";
+                MusicSearchButton.Content = "Search catalog";
+                OverlayMusicSearchButton.IsEnabled = true;
+                OverlayMusicSearchButton.Content = "Search";
             }
         }
+    }
+
+    private void SetMusicSearchEmptyState(bool visible, string title, string body)
+    {
+        MusicSearchEmptyState.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        if (!visible) return;
+        MusicSearchEmptyTitle.Text = title;
+        MusicSearchEmptyBody.Text = body;
     }
 
     private void CloseMusicSearch_Click(object sender, RoutedEventArgs e)
@@ -290,6 +313,7 @@ public partial class MainWindow
         MusicSearchOverlay.Visibility = Visibility.Collapsed;
         MusicSearchResultsPanel.Visibility = Visibility.Collapsed;
         MusicSearchDetails.Visibility = Visibility.Collapsed;
+        MusicSearchEmptyState.Visibility = Visibility.Collapsed;
         SearchTrackBox.SelectAll();
         SearchTrackBox.Focus();
         SetDownloadStatus("Search closed — queued tracks are ready below");

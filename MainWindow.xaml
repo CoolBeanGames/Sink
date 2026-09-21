@@ -61,6 +61,30 @@
             <Setter Property="Padding" Value="11,8"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
+        <Style x:Key="DownloadCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="#12151C"/>
+            <Setter Property="BorderBrush" Value="#262C38"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+        </Style>
+        <Style x:Key="DownloadSearchFieldStyle" TargetType="TextBox">
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="#F4F6FA"/>
+            <Setter Property="CaretBrush" Value="#F4F6FA"/>
+            <Setter Property="Background" Value="#0F1218"/>
+            <Setter Property="BorderBrush" Value="#353C49"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="SelectionBrush" Value="#6559CE"/>
+            <Style.Triggers>
+                <Trigger Property="IsKeyboardFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="#8B7CFF"/>
+                    <Setter Property="Background" Value="#11141B"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="94"/></Grid.RowDefinitions>
@@ -440,10 +464,23 @@
                 <TextBlock x:Name="DownloadSubtitle" Foreground="#7D8493" FontSize="12" Text="Search across services or paste a link, tidy the details, then download."/>
             </StackPanel>
 
-            <Border Grid.Row="1" Margin="0,18,0,0" BorderBrush="#2B3040" BorderThickness="1" CornerRadius="12" Background="#12151C" Padding="14">
+            <Border Grid.Row="1" Margin="0,18,0,0" Style="{StaticResource DownloadCardStyle}" Padding="16,14">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                            <TextBlock Text="SEARCH THE CATALOG" Style="{StaticResource EyebrowStyle}"/>
+                            <TextBlock Text="Find a track, album, or artist" Foreground="#E7E9EE" FontSize="14" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                            <TextBlock Text="Fill in any field and press Enter. Results combine Deezer, Spotify matches, and YouTube." Foreground="#7D8493" FontSize="11" Margin="0,3,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+                            <Border Background="#3D1B1B" CornerRadius="5" Padding="7,3" Margin="0,0,5,0"><TextBlock Text="YouTube" Foreground="#FF8B8B" FontSize="9" FontWeight="SemiBold"/></Border>
+                            <Border Background="#1D3026" CornerRadius="5" Padding="7,3" Margin="0,0,5,0"><TextBlock Text="Spotify" Foreground="#8FE3AC" FontSize="9" FontWeight="SemiBold"/></Border>
+                            <Border Background="#1C2442" CornerRadius="5" Padding="7,3"><TextBlock Text="Deezer" Foreground="#9AABFF" FontSize="9" FontWeight="SemiBold"/></Border>
+                        </StackPanel>
+                    </Grid>
+                    <Grid Grid.Row="1" Margin="0,13,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
@@ -451,32 +488,44 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                            <TextBlock Text="Track" Foreground="#7D8493" FontSize="11" Margin="2,0,0,4"/>
-                            <TextBox x:Name="SearchTrackBox" Height="38" Padding="12,8" FontSize="13" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="#0F1218" BorderBrush="#353C49" BorderThickness="1" VerticalContentAlignment="Center" KeyDown="MusicSearchBox_KeyDown"/>
+                            <TextBlock Text="TRACK" Style="{StaticResource EyebrowStyle}" Margin="2,0,0,5"/>
+                            <TextBox x:Name="SearchTrackBox" Style="{StaticResource DownloadSearchFieldStyle}" KeyDown="MusicSearchBox_KeyDown" ToolTip="Track title — press Enter to search"/>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Margin="0,0,8,0">
-                            <TextBlock Text="Album" Foreground="#7D8493" FontSize="11" Margin="2,0,0,4"/>
-                            <TextBox x:Name="SearchAlbumBox" Height="38" Padding="12,8" FontSize="13" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="#0F1218" BorderBrush="#353C49" BorderThickness="1" VerticalContentAlignment="Center" KeyDown="MusicSearchBox_KeyDown"/>
+                            <TextBlock Text="ALBUM" Style="{StaticResource EyebrowStyle}" Margin="2,0,0,5"/>
+                            <TextBox x:Name="SearchAlbumBox" Style="{StaticResource DownloadSearchFieldStyle}" KeyDown="MusicSearchBox_KeyDown" ToolTip="Album title — press Enter to search"/>
                         </StackPanel>
                         <StackPanel Grid.Column="2" Margin="0,0,8,0">
-                            <TextBlock Text="Artist" Foreground="#7D8493" FontSize="11" Margin="2,0,0,4"/>
-                            <TextBox x:Name="SearchArtistBox" Height="38" Padding="12,8" FontSize="13" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="#0F1218" BorderBrush="#353C49" BorderThickness="1" VerticalContentAlignment="Center" KeyDown="MusicSearchBox_KeyDown"/>
+                            <TextBlock Text="ARTIST" Style="{StaticResource EyebrowStyle}" Margin="2,0,0,5"/>
+                            <TextBox x:Name="SearchArtistBox" Style="{StaticResource DownloadSearchFieldStyle}" KeyDown="MusicSearchBox_KeyDown" ToolTip="Artist name — press Enter to search"/>
                         </StackPanel>
-                        <Button x:Name="MusicSearchButton" Grid.Column="3" Content="Search" VerticalAlignment="Bottom" Click="MusicSearchButton_Click"
-                                Style="{StaticResource PrimaryButtonStyle}" Height="38" Padding="17,0" Margin="0,0,0,0"/>
+                        <Button x:Name="MusicSearchButton" Grid.Column="3" Content="Search catalog" VerticalAlignment="Bottom" Click="MusicSearchButton_Click"
+                                Style="{StaticResource PrimaryButtonStyle}" Height="40" Padding="17,0"/>
                     </Grid>
                 </Grid>
             </Border>
-            <Border Grid.Row="2" Margin="0,14,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#12151C">
+            <Border Grid.Row="2" Margin="0,14,0,0" Style="{StaticResource DownloadCardStyle}">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                    <DockPanel Margin="15,11,12,11">
-                        <Button DockPanel.Dock="Right" Content="＋  Add link" Click="AddLink_Click" Style="{StaticResource PrimaryButtonStyle}" Background="#272243" Foreground="#CBC5FF" Padding="12,7"/>
-                        <TextBlock Text="LINKS" Style="{StaticResource EyebrowStyle}" VerticalAlignment="Center"/>
-                    </DockPanel>
+                    <Grid Margin="16,12,12,12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                            <TextBlock Text="DOWNLOAD QUEUE" Style="{StaticResource EyebrowStyle}"/>
+                            <TextBlock Text="Paste a link or add something from catalog search" Foreground="#A4AAB6" FontSize="11" Margin="0,4,0,0"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" HorizontalAlignment="Right" Content="＋  Paste link" Click="AddLink_Click" Style="{StaticResource PrimaryButtonStyle}" Background="#272243" Foreground="#CBC5FF" Padding="13,8" ToolTip="Add a YouTube, Spotify, or Deezer link"/>
+                    </Grid>
                     <Border Grid.Row="1" BorderBrush="#20252F" BorderThickness="0,1,0,0">
                         <Grid>
-                            <TextBlock x:Name="DownloadEmptyHint" Text="No links yet — click Add link to paste one." Foreground="#6E7584" FontSize="12" Margin="16,18" HorizontalAlignment="Center"/>
+                            <Border x:Name="DownloadEmptyHint" Background="#0F1218" CornerRadius="9" Margin="12" Padding="18,16">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <Border Width="34" Height="34" CornerRadius="17" Background="#211E36" HorizontalAlignment="Center">
+                                        <TextBlock Text="↓" Foreground="#AFA7FF" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <TextBlock Text="Your queue is empty" Foreground="#D9DCE4" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,9,0,0"/>
+                                    <TextBlock Text="Search the catalog above or paste a direct link to get started." Foreground="#737B89" FontSize="11" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                                </StackPanel>
+                            </Border>
                             <TreeView x:Name="LinksTree" Background="Transparent" BorderThickness="0" MaxHeight="430" Padding="8,8,8,10"
                                       VirtualizingStackPanel.IsVirtualizing="False"
                                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -579,9 +628,10 @@
                 </Grid>
             </Border>
 
-            <Border x:Name="DownloadOptionsPanel" Grid.Row="3" VerticalAlignment="Top" Margin="0,16,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#12151C" Padding="16,14">
+            <Border x:Name="DownloadOptionsPanel" Grid.Row="3" VerticalAlignment="Top" Margin="0,16,0,0" Style="{StaticResource DownloadCardStyle}" Padding="16,14">
                 <StackPanel>
-                    <TextBlock Text="DOWNLOAD OPTIONS" Style="{StaticResource EyebrowStyle}" Margin="0,0,0,12"/>
+                    <TextBlock Text="DOWNLOAD OPTIONS" Style="{StaticResource EyebrowStyle}"/>
+                    <TextBlock Text="Applied to everything currently checked in the queue." Foreground="#737B89" FontSize="11" Margin="0,4,0,12"/>
                     <WrapPanel>
                         <CheckBox x:Name="OptMetadata" Content="Write metadata tags" IsChecked="True" Foreground="#C7CCD6" Margin="0,0,26,10"/>
                         <CheckBox x:Name="OptAlbumArt" Content="Embed album art" IsChecked="True" Foreground="#C7CCD6" Margin="0,0,26,10"/>
@@ -628,8 +678,11 @@
                 <Button x:Name="DownloadButton" Grid.Column="1" Content="⭳  Download" Click="StartDownloads_Click" Style="{StaticResource PrimaryButtonStyle}" Padding="18,10" VerticalAlignment="Center"/>
             </Grid>
 
-            <Border Grid.Row="5" Margin="0,16,0,0" Background="#161A22" BorderBrush="#2A303C" BorderThickness="1" CornerRadius="9" Padding="13,8">
-                <TextBlock x:Name="DownloadStatusBar" Text="Ready" Foreground="#9AA0AE" FontSize="11" TextTrimming="CharacterEllipsis"/>
+            <Border Grid.Row="5" Margin="0,14,0,0" Background="#161A22" BorderBrush="#2A303C" BorderThickness="1" CornerRadius="9" Padding="13,9">
+                <DockPanel>
+                    <Ellipse DockPanel.Dock="Left" Width="6" Height="6" Fill="#8B7CFF" Margin="0,0,9,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="DownloadStatusBar" Text="Ready — search the catalog or paste a link" Foreground="#A7ADBA" FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                </DockPanel>
             </Border>
         </Grid>
 
@@ -1099,7 +1152,10 @@
                     </Grid.ColumnDefinitions>
                     
                     <StackPanel Grid.Column="0" Margin="0,0,12,0">
-                        <Border BorderBrush="#353C49" BorderThickness="1" CornerRadius="4" Background="#0F1218" Margin="0,0,0,8">
+                        <TextBlock Text="CATALOG SEARCH" Style="{StaticResource EyebrowStyle}"/>
+                        <TextBlock Text="Find music to add" Foreground="#F4F6FA" FontSize="20" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                        <TextBlock Text="Search one field or combine them for a more exact match." Foreground="#7D8493" FontSize="11" Margin="0,3,0,12"/>
+                        <Border BorderBrush="#353C49" BorderThickness="1" CornerRadius="8" Background="#0F1218" Margin="0,0,0,10" Padding="4">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -1109,15 +1165,15 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,4,0">
                                     <TextBlock Text="Track" Foreground="#7D8493" FontSize="10" Margin="2,2,0,2"/>
-                                    <TextBox x:Name="OverlaySearchTrackBox" Height="30" Padding="8,0" FontSize="12" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center" KeyDown="OverlayMusicSearchBox_KeyDown" />
+                                    <TextBox x:Name="OverlaySearchTrackBox" Height="30" Padding="8,0" FontSize="12" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center" KeyDown="OverlayMusicSearchBox_KeyDown" ToolTip="Track title — press Enter to search" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Margin="0,0,4,0">
                                     <TextBlock Text="Album" Foreground="#7D8493" FontSize="10" Margin="2,2,0,2"/>
-                                    <TextBox x:Name="OverlaySearchAlbumBox" Height="30" Padding="8,0" FontSize="12" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center" KeyDown="OverlayMusicSearchBox_KeyDown" />
+                                    <TextBox x:Name="OverlaySearchAlbumBox" Height="30" Padding="8,0" FontSize="12" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center" KeyDown="OverlayMusicSearchBox_KeyDown" ToolTip="Album title — press Enter to search" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Margin="0,0,4,0">
                                     <TextBlock Text="Artist" Foreground="#7D8493" FontSize="10" Margin="2,2,0,2"/>
-                                    <TextBox x:Name="OverlaySearchArtistBox" Height="30" Padding="8,0" FontSize="12" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center" KeyDown="OverlayMusicSearchBox_KeyDown" />
+                                    <TextBox x:Name="OverlaySearchArtistBox" Height="30" Padding="8,0" FontSize="12" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center" KeyDown="OverlayMusicSearchBox_KeyDown" ToolTip="Artist name — press Enter to search" />
                                 </StackPanel>
                                 <Button x:Name="OverlayMusicSearchButton" Grid.Column="3" VerticalAlignment="Bottom" Content="Search" Click="OverlayMusicSearchButton_Click" Style="{StaticResource PrimaryButtonStyle}" Height="30" Padding="12,0" Margin="4"/>
                             </Grid>
@@ -1160,7 +1216,7 @@
                         </WrapPanel>
                     </StackPanel>
                     
-                    <Button Grid.Column="1" Content="Close" Click="CloseMusicSearch_Click" HorizontalAlignment="Right" Background="#242A34" Foreground="#C7CCD6" BorderThickness="0" Padding="13,9" Cursor="Hand" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Content="✕" Click="CloseMusicSearch_Click" HorizontalAlignment="Right" Background="#242A34" Foreground="#C7CCD6" BorderThickness="0" Padding="11,8" Cursor="Hand" VerticalAlignment="Top" ToolTip="Close search"/>
                 </Grid>
 
                 <Grid x:Name="MusicSearchResultsPanel" Grid.Row="1">
@@ -1242,6 +1298,16 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+
+                    <Border x:Name="MusicSearchEmptyState" Grid.Row="1" Background="#0F1218" BorderBrush="#262C38" BorderThickness="1" CornerRadius="9" Visibility="Collapsed">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="280">
+                            <Border Width="42" Height="42" CornerRadius="21" Background="#211E36" HorizontalAlignment="Center">
+                                <TextBlock Text="⌕" Foreground="#AFA7FF" FontSize="21" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock x:Name="MusicSearchEmptyTitle" Text="Searching the catalog…" Foreground="#E6E8ED" FontSize="14" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,12,0,0"/>
+                            <TextBlock x:Name="MusicSearchEmptyBody" Text="Checking Deezer, Spotify matches, and YouTube." Foreground="#737B89" FontSize="11" TextAlignment="Center" TextWrapping="Wrap" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Border>
 
                     <Border x:Name="MusicSearchDetails" Grid.Row="2" Margin="0,10,0,0" Background="#161A22"
                             BorderBrush="#2A303C" BorderThickness="1" CornerRadius="9" Padding="13" Visibility="Collapsed">
