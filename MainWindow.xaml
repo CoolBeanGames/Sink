@@ -253,13 +253,17 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"><Button Content="⚙" Click="Settings_Click" ToolTip="Settings" Margin="0,0,9,0" Padding="11,8" FontSize="14" Background="#161A22" Foreground="#BCC2CD" BorderBrush="#303744"/><Button Content="⊙  Duplicates" Click="Duplicates_Click" Margin="0,0,9,0" Padding="13,8" Background="#161A22" Foreground="#BCC2CD" BorderBrush="#303744"/><Button x:Name="CleanupTitlesButton" Content="🧹  Clean up" Click="CleanupTitles_Click" ToolTip="Strip Official Video/Cover/feat. tags and Album/Artist-name prefixes out of every track title" Visibility="Collapsed" Margin="0,0,9,0" Padding="13,8" Background="#161A22" Foreground="#BCC2CD" BorderBrush="#303744"/><Border Width="260" Height="39" Background="#12151C" BorderBrush="#262C38" BorderThickness="1" CornerRadius="10" Padding="12,7"><DockPanel><TextBlock Text="⌕" Foreground="#747B8B" Margin="0,0,8,0"/><TextBox x:Name="SearchBox" TextChanged="SearchBox_TextChanged" Background="Transparent" BorderThickness="0" Foreground="#F4F6FA" CaretBrush="#F4F6FA"/></DockPanel></Border></StackPanel>
             </Grid>
-            <ScrollViewer x:Name="GroupsScroller" Grid.Row="1" Margin="0,28,0,0" VerticalScrollBarVisibility="Auto">
+            <Grid x:Name="GroupsScroller" Grid.Row="1" Margin="0,28,0,0">
                 <ListBox x:Name="GroupsView" Background="Transparent" BorderThickness="0" SelectionMode="Extended"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Disabled" VirtualizingPanel.ScrollUnit="Pixel"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
                          MouseDoubleClick="GroupCard_MouseDoubleClick" ContextMenuOpening="GroupsView_ContextMenuOpening"
                          PreviewMouseLeftButtonDown="GroupCard_PreviewMouseLeftButtonDown" PreviewMouseMove="GroupCard_PreviewMouseMove">
                     <ListBox.ContextMenu><ContextMenu/></ListBox.ContextMenu>
-                    <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate><ctrl:VirtualizingWrapPanel ItemWidth="204" ItemHeight="212"/></ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
                             <Setter Property="Margin" Value="0,0,12,12"/>
@@ -284,7 +288,7 @@
                         <StackPanel Width="184"><Border Height="145" CornerRadius="12" Background="{Binding Color}" BorderBrush="#303744" BorderThickness="1" ClipToBounds="True"><Grid><Ellipse Width="92" Height="92" Stroke="#FFFFFF" StrokeThickness="1" Opacity="0.13"/><Ellipse Width="30" Height="30" Fill="#0B0D12" Opacity="0.35"/><TextBlock Text="{Binding Initial}" FontSize="36" Foreground="#DAD7FF" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding Art}" Stretch="UniformToFill"/><Ellipse Width="10" Height="10" Fill="#8B7CFF" Stroke="#12151C" StrokeThickness="1.5" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,8,0" Visibility="{Binding HasUnsyncedChanges, Converter={StaticResource B2V}}" ToolTip="Has changes not yet synced to the iPod"/></Grid></Border><TextBlock Text="{Binding Name}" Foreground="#F4F6FA" FontWeight="SemiBold" Margin="3,10,3,0" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Detail}" Foreground="#7D8493" FontSize="11" Margin="3,3,3,0"/></StackPanel>
                     </DataTemplate></ListBox.ItemTemplate>
                 </ListBox>
-            </ScrollViewer>
+            </Grid>
             <Border x:Name="TracksBorder" Grid.Row="1" Margin="0,28,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#12151C" Visibility="Collapsed">
                 <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                 <Border x:Name="SelectionBar" Visibility="Collapsed" Background="Transparent" BorderBrush="#262C38" BorderThickness="0,0,0,1" Padding="15,9"><DockPanel><Button Content="Clear" DockPanel.Dock="Right" Click="ClearSelection_Click" Background="Transparent" Foreground="#9D91FF" BorderThickness="0"/><TextBlock x:Name="SelectionText" Foreground="#7D8493" FontSize="11" VerticalAlignment="Center"/></DockPanel></Border>

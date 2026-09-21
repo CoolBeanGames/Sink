@@ -220,17 +220,9 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// Walks up from a click's OriginalSource for the nearest ScrollViewer
-    /// that's actually scrollable — skipping past one that reports zero
-    /// ScrollableHeight/Width instead of stopping at it. GroupsView (the
-    /// Albums/Artists/Genres card grid) sits inside an outer GroupsScroller
-    /// but also carries ScrollViewer.VerticalScrollBarVisibility="Disabled"
-    /// on itself, which deliberately makes its own internal template
-    /// ScrollViewer never scroll — walking up hits that inner, permanently
-    /// non-scrollable one first and used to stop there, so middle-drag
-    /// found "a" ScrollViewer and correctly (by its own logic) treated it as
-    /// nothing to scroll, never reaching the real GroupsScroller one level
-    /// further up. TracksGrid only has a single ScrollViewer in its chain
-    /// (its own, actually scrollable one), so it was never affected.
+    /// that's actually scrollable, skipping any nested viewer that reports
+    /// no scrollable extent. This works for the library grid's own virtualized
+    /// ListBox scroller as well as the track DataGrid.
     /// </summary>
     private static ScrollViewer? FindScrollViewer(DependencyObject? node)
     {
@@ -749,7 +741,7 @@ public partial class MainWindow : Window
             ?? members.Select(t => t.ArtworkPath).FirstOrDefault(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p));
         return new GroupCard(name, detail, initial,
             new SolidColorBrush((Color)ColorConverter.ConvertFromString(palette[Math.Abs(colorSeed.GetHashCode()) % palette.Length])),
-            LoadArtwork(artPath),
+            artPath,
             trackSyncDot && members.Any(t => t.HasUnsyncedChanges));
     }
 
@@ -2255,5 +2247,15 @@ public partial class MainWindow : Window
         finally { _ipodWriting = false; }
     }
 
-    private sealed record GroupCard(string Name, string Detail, string Initial, Brush Color, ImageSource? Art = null, bool HasUnsyncedChanges = false);
+    /// <summary>
+    /// Artwork is decoded when WPF realizes this card's data template, not when
+    /// the full album/artist list is built. The shared cache keeps revisited
+    /// cards cheap while virtualization keeps never-viewed artwork unloaded.
+    /// </summary>
+    private sealed record GroupCard(
+        string Name, string Detail, string Initial, Brush Color,
+        string? ArtPath = null, bool HasUnsyncedChanges = false)
+    {
+        public ImageSource? Art => LoadArtwork(ArtPath);
+    }
 }
