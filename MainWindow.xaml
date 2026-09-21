@@ -527,7 +527,10 @@
                                 </StackPanel>
                             </Border>
                             <TreeView x:Name="LinksTree" Background="Transparent" BorderThickness="0" MaxHeight="430" Padding="8,8,8,10"
-                                      VirtualizingStackPanel.IsVirtualizing="False"
+                                      VirtualizingStackPanel.IsVirtualizing="True"
+                                      VirtualizingStackPanel.VirtualizationMode="Recycling"
+                                      VirtualizingPanel.ScrollUnit="Pixel"
+                                      ScrollViewer.CanContentScroll="True"
                                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                       TreeViewItem.Expanded="LinksTree_ItemExpanded"
                                       SelectedItemChanged="LinksTree_SelectedItemChanged"
@@ -912,8 +915,22 @@
                 </StackPanel>
             </StackPanel>
 
-            <ScrollViewer Grid.Row="2" Margin="0,22,0,0" VerticalScrollBarVisibility="Auto">
-                <Grid>
+            <Grid Grid.Row="2" Margin="0,22,0,0">
+                <Grid.Resources>
+                    <Style x:Key="VirtualPodcastItem" TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="Margin" Value="0"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Focusable" Value="False"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem"><ContentPresenter/></ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Grid.Resources>
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Visibility="{Binding Visibility, ElementName=PodcastLibraryView}">
                     <!-- LIBRARY MODE -->
                     <ItemsControl x:Name="PodcastLibraryView">
                         <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -940,10 +957,15 @@
                             </Button>
                         </DataTemplate></ItemsControl.ItemTemplate>
                     </ItemsControl>
+                </ScrollViewer>
 
-                    <!-- SEARCH MODE -->
-                    <ItemsControl x:Name="PodcastSearchView" Visibility="Collapsed">
-                        <ItemsControl.ItemTemplate><DataTemplate>
+                <!-- SEARCH MODE -->
+                <ListBox x:Name="PodcastSearchView" Visibility="Collapsed" Background="Transparent" BorderThickness="0"
+                         ItemContainerStyle="{StaticResource VirtualPodcastItem}"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel">
+                        <ListBox.ItemTemplate><DataTemplate>
                             <Border Background="#12151C" BorderBrush="#20252F" BorderThickness="1" CornerRadius="10" Margin="0,0,0,8" Padding="12">
                                 <DockPanel>
                                     <Border Width="64" Height="64" CornerRadius="8" ClipToBounds="True" Background="#273A78" DockPanel.Dock="Left" Margin="0,0,12,0">
@@ -959,12 +981,16 @@
                                     </StackPanel>
                                 </DockPanel>
                             </Border>
-                        </DataTemplate></ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                        </DataTemplate></ListBox.ItemTemplate>
+                </ListBox>
 
-                    <!-- SHOW MODE -->
-                    <ItemsControl x:Name="EpisodeView" Visibility="Collapsed">
-                        <ItemsControl.ItemTemplate><DataTemplate>
+                <!-- SHOW MODE -->
+                <ListBox x:Name="EpisodeView" Visibility="Collapsed" Background="Transparent" BorderThickness="0"
+                         ItemContainerStyle="{StaticResource VirtualPodcastItem}"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel">
+                        <ListBox.ItemTemplate><DataTemplate>
                             <Border Background="#12151C" BorderBrush="#20252F" BorderThickness="1" CornerRadius="10" Margin="0,0,0,7" Padding="13,10"
                                     MouseMove="Episode_MouseMove" PreviewMouseLeftButtonDown="Episode_MouseDown">
                                 <Grid>
@@ -1012,13 +1038,13 @@
                                     <Setter TargetName="EyeClosed" Property="Visibility" Value="Visible"/>
                                 </DataTrigger>
                             </DataTemplate.Triggers>
-                        </DataTemplate></ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                        </DataTemplate></ListBox.ItemTemplate>
+                </ListBox>
 
-                    <TextBlock x:Name="PodcastEmptyHint" Foreground="#6E7584" FontSize="12" HorizontalAlignment="Center" Margin="0,40,0,0"
-                               Text="No podcasts yet — use Search to find a show and Subscribe."/>
-                </Grid>
-            </ScrollViewer>
+                <TextBlock x:Name="PodcastEmptyHint" Panel.ZIndex="2" IsHitTestVisible="False" Foreground="#6E7584" FontSize="12"
+                           HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0"
+                           Text="No podcasts yet — use Search to find a show and Subscribe."/>
+            </Grid>
         </Grid>
 
         <Border x:Name="DownloadDim" Grid.RowSpan="2" Grid.ColumnSpan="2" Panel.ZIndex="40" Visibility="Collapsed" Background="#99090B10"/>

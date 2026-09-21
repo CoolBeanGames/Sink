@@ -42,6 +42,7 @@ public partial class MainWindow : Window
     private Playlist? _activePlaylist;
     private readonly MediaPlayer _mediaPlayer = new();
     private readonly DispatcherTimer _playbackTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
+    private readonly DispatcherTimer _librarySearchTimer = new() { Interval = TimeSpan.FromMilliseconds(180) };
     private Track? _nowPlaying;
     private TimeSpan _simulatedPosition;
     private bool _isPlaying;
@@ -94,6 +95,11 @@ public partial class MainWindow : Window
         LoadLibrary();
         PlaylistList.ItemsSource = _playlists;
         _playbackTimer.Tick += PlaybackTimer_Tick;
+        _librarySearchTimer.Tick += (_, _) =>
+        {
+            _librarySearchTimer.Stop();
+            RenderLibrary();
+        };
         _mediaPlayer.MediaOpened += (_, _) => UpdatePlayerDuration();
         _mediaPlayer.MediaEnded += (_, _) => NextTrack();
         _mediaPlayer.Volume = 0.7;
@@ -427,7 +433,7 @@ public partial class MainWindow : Window
             // stale device entries are gone before downloading/pushing its
             // replacement so Clickwheel never sees concurrent DB writers.
             if (podcastsUpdated > 0)
-                foreach (var podcast in _podcasts.ToList()) _ = AutoDownloadAndPushAsync(podcast);
+                _ = AutoDownloadAndPushAllAsync();
             return (true, songsUpdated, podcastsUpdated);
         }
         catch (Exception ex)
@@ -1822,7 +1828,7 @@ public partial class MainWindow : Window
         ClearCardDragHighlight();
     }
 
-    private void Window_Drop(object sender, DragEventArgs e)
+    private async void Window_Drop(object sender, DragEventArgs e)
     {
         ImportOverlay.Visibility = Visibility.Collapsed;
         var card = IsImageFileDrop(e) ? HitTestGroupCard(e.GetPosition(this)) : null;
@@ -1840,7 +1846,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        var imported = MusicImporter.Import(paths);
+        PlaybackStatus.Text = "Importing music…";
+        var imported = await Task.Run(() => MusicImporter.Import(paths));
         foreach (var track in imported) _tracks.Add(track);
         RenderLibrary();
         if (imported.Count > 0)
@@ -1866,7 +1873,15 @@ public partial class MainWindow : Window
         RenderLibrary();
     }
 
-    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) { if (IsLoaded) RenderLibrary(); }
+    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!IsLoaded) return;
+        // RenderLibrary rebuilds grouped cards, autocomplete metadata, and play
+        // counts. Waiting for a brief typing pause avoids doing all of that on
+        // every individual keypress in a large library.
+        _librarySearchTimer.Stop();
+        _librarySearchTimer.Start();
+    }
 
     private void NewPlaylist_Click(object sender, RoutedEventArgs e)
     {

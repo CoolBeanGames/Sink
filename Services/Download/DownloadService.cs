@@ -258,6 +258,22 @@ public static partial class DownloadService
         var source = isPlaylist ? album : node.Title;
         var finished = new List<string>();
         var finalized = new HashSet<int>(); // playlist index already moved+tagged (single always uses -1)
+        var lastProgress = -1d;
+        var lastProgressAt = Stopwatch.GetTimestamp();
+
+        void ReportProgress(double value, DownloadNode? track = null, double trackValue = 0)
+        {
+            value = Math.Clamp(value, 0, 1);
+            var final = value >= 1;
+            if (!final && value - lastProgress < 0.01
+                && Stopwatch.GetElapsedTime(lastProgressAt) < TimeSpan.FromMilliseconds(125))
+                return;
+
+            lastProgress = value;
+            lastProgressAt = Stopwatch.GetTimestamp();
+            progress.Report(value);
+            if (track is not null) OnUi(() => track.Progress = trackValue);
+        }
 
         // Moves one track's produced file out of workDir, tags it, and reports
         // it — called the moment yt-dlp finishes that track (mid-run, from the
@@ -362,12 +378,10 @@ public static partial class DownloadService
             var pctMatch = ProgressLine().Match(line);
             if (pctMatch.Success && double.TryParse(pctMatch.Groups[1].Value, out var pct))
             {
-                progress.Report(Math.Clamp((current + pct / 100.0) / total, 0, 1));
-                if (isPlaylist && current >= 0 && current < titleOrder.Count)
-                {
-                    var track = titleOrder[current];
-                    OnUi(() => track.Progress = pct / 100.0);
-                }
+                var track = isPlaylist && current >= 0 && current < titleOrder.Count
+                    ? titleOrder[current]
+                    : null;
+                ReportProgress((current + pct / 100.0) / total, track, pct / 100.0);
             }
         }, token).ConfigureAwait(false);
 
@@ -394,7 +408,7 @@ public static partial class DownloadService
                     Log.Warn($"Track {trackNode.Index} \"{trackNode.Name}\" of {album}: no matchable ERROR/WARNING line — full stderr for this download:\n{stderr}");
             }
         }
-        progress.Report(1);
+        ReportProgress(1);
         if (finished.Count == 0)
         {
             var reason = FirstError(stderr) ?? "yt-dlp produced no audio";

@@ -30,6 +30,7 @@ public partial class MainWindow
     private bool _downloading;
     private CancellationTokenSource? _downloadCts;
     private CancellationTokenSource? _musicSearchCts;
+    private readonly SemaphoreSlim _downloadImportGate = new(1, 1);
 
     private void InitDownloadPage()
     {
@@ -1769,17 +1770,28 @@ public partial class MainWindow
     /// </summary>
     private async Task<IReadOnlyList<Track>> ImportFinalizedFileAsync(string path)
     {
+        await _downloadImportGate.WaitAsync();
         try
         {
             var tracks = await Task.Run(() => MusicImporter.Import([path]));
             foreach (var track in tracks) _tracks.Add(track);
-            if (tracks.Count > 0 && _source == LibrarySource.Music) RenderLibrary();
+            // A large album can finalize tracks much faster than tag/artwork
+            // import completes. Serializing that disk-heavy work avoids a burst
+            // of competing TagLib reads and image decodes, and the queue's final
+            // render below updates the library once instead of rebuilding it for
+            // every track while the Downloads page is covering it.
+            if (tracks.Count > 0 && _source == LibrarySource.Music && !_downloadViewActive)
+                RenderLibrary();
             return tracks;
         }
         catch (Exception ex)
         {
             Log.Warn($"Progressive import failed for {path}: {ex.Message}");
             return [];
+        }
+        finally
+        {
+            _downloadImportGate.Release();
         }
     }
 

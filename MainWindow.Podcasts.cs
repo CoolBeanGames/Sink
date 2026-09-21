@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -31,6 +32,9 @@ public partial class MainWindow
     private Podcast? _playingShow;
     private bool _podcastPaused;
     private Point _episodeDragStart;
+    private readonly SemaphoreSlim _podcastDownloadGate = new(1, 1);
+    private readonly SemaphoreSlim _podcastAutomationGate = new(1, 1);
+    private readonly SemaphoreSlim _podcastRefreshGate = new(1, 1);
 
     private const string PodcastDragFormat = "Sink.PodcastEpisode";
 
@@ -232,28 +236,43 @@ public partial class MainWindow
 
     private int _podcastDownloads;
 
-    private async Task DownloadEpisodeAsync(Podcast podcast, PodcastEpisode episode)
+    private async Task DownloadEpisodeAsync(Podcast podcast, PodcastEpisode episode, bool persist = true)
     {
-        var dir = Path.Combine(PodcastFolder(), Sanitize(podcast.Title));
-        PodcastStatus.Text = $"Downloading {episode.Title}…";
-        if (_podcastDownloads++ == 0) SpinIndicator(PodcastSpinner, true);
+        // Manual actions, auto-rules, and iPod replacement downloads all land
+        // on the same disk. Queue them so large episode files do not compete
+        // for I/O and make the rest of the machine stutter.
+        await _podcastDownloadGate.WaitAsync();
         try
         {
-            var progress = new Progress<double>(p => PodcastStatus.Text = $"Downloading {episode.Title} — {p * 100:0}%");
-            var path = await PodcastService.DownloadEpisodeAsync(episode, dir, progress);
-            episode.LocalPath = path;
-            episode.DownloadedAt = DateTime.UtcNow;
-            PodcastStore.Save(_podcasts);
-            PodcastStatus.Text = $"Downloaded {episode.Title}";
-        }
-        catch (Exception ex)
-        {
-            Log.Error($"Podcast episode download failed: {episode.Title}", ex);
-            PodcastStatus.Text = $"Download failed: {ex.Message}";
+            // A previous waiter may have completed the same episode while this
+            // request was queued.
+            if (episode.IsDownloaded) return;
+
+            var dir = Path.Combine(PodcastFolder(), Sanitize(podcast.Title));
+            PodcastStatus.Text = $"Downloading {episode.Title}…";
+            if (_podcastDownloads++ == 0) SpinIndicator(PodcastSpinner, true);
+            try
+            {
+                var progress = new Progress<double>(p => PodcastStatus.Text = $"Downloading {episode.Title} — {p * 100:0}%");
+                var path = await PodcastService.DownloadEpisodeAsync(episode, dir, progress);
+                episode.LocalPath = path;
+                episode.DownloadedAt = DateTime.UtcNow;
+                if (persist) PodcastStore.Save(_podcasts);
+                PodcastStatus.Text = $"Downloaded {episode.Title}";
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Podcast episode download failed: {episode.Title}", ex);
+                PodcastStatus.Text = $"Download failed: {ex.Message}";
+            }
+            finally
+            {
+                if (--_podcastDownloads <= 0) { _podcastDownloads = 0; SpinIndicator(PodcastSpinner, false); }
+            }
         }
         finally
         {
-            if (--_podcastDownloads <= 0) { _podcastDownloads = 0; SpinIndicator(PodcastSpinner, false); }
+            _podcastDownloadGate.Release();
         }
     }
 
@@ -314,10 +333,11 @@ public partial class MainWindow
         foreach (var episode in pending)
         {
             PodcastStatus.Text = $"Downloading {done + 1}/{pending.Count} — {episode.Title}";
-            await DownloadEpisodeAsync(_currentShow, episode);
+            await DownloadEpisodeAsync(_currentShow, episode, persist: false);
             if (episode.IsDownloaded) done++;
-            RenderPodcasts();
         }
+        if (done > 0) PodcastStore.Save(_podcasts);
+        RenderPodcasts();
         PodcastStatus.Text = $"Downloaded {done} of {pending.Count} episode{(pending.Count == 1 ? "" : "s")}";
     }
 
@@ -602,48 +622,70 @@ public partial class MainWindow
     // ---- Auto-download rules (task 62) ----------------------------------
 
     /// <summary>Returns how many episodes it actually downloaded, for the "podcast downloads complete" notification.</summary>
-    private async Task<int> RunAutoDownloadsAsync(Podcast podcast)
+    private async Task<int> RunAutoDownloadsAsync(Podcast podcast, bool updateUi = true)
     {
-        PodcastRules.Reconcile(podcast);
-        var downloaded = 0;
-        foreach (var episode in PodcastRules.DesiredDownloads(podcast))
+        await _podcastAutomationGate.WaitAsync();
+        try
         {
-            if (episode.IsDownloaded) continue;
-            await DownloadEpisodeAsync(podcast, episode);
-            if (episode.IsDownloaded) downloaded++;
+            var reconciled = PodcastRules.Reconcile(podcast);
+            var downloaded = 0;
+            foreach (var episode in PodcastRules.DesiredDownloads(podcast))
+            {
+                if (episode.IsDownloaded) continue;
+                await DownloadEpisodeAsync(podcast, episode, persist: false);
+                if (episode.IsDownloaded) downloaded++;
+            }
+            // One full-library JSON write per rule pass, rather than one per
+            // downloaded episode plus another write at the end.
+            if (reconciled || downloaded > 0) PodcastStore.Save(_podcasts);
+            if (updateUi) RenderPodcasts();
+            return downloaded;
         }
-        PodcastStore.Save(_podcasts);
-        RenderPodcasts();
-        return downloaded;
+        finally
+        {
+            _podcastAutomationGate.Release();
+        }
     }
 
     private async Task RefreshAllFeedsAsync()
     {
-        foreach (var podcast in _podcasts.ToList())
+        // Re-entering Podcasts while a refresh is active used to start a
+        // second full feed/download pass. Coalesce duplicate requests.
+        if (!await _podcastRefreshGate.WaitAsync(0)) return;
+        try
         {
-            var knownGuids = podcast.Episodes.Select(e => e.EpisodeGuid).ToHashSet();
-            try
+            foreach (var podcast in _podcasts.ToList())
             {
-                var fresh = await PodcastService.LoadFeedAsync(podcast.FeedUrl);
-                PodcastService.MergeFeed(podcast, fresh);
+                var knownGuids = podcast.Episodes.Select(e => e.EpisodeGuid).ToHashSet();
+                try
+                {
+                    var fresh = await PodcastService.LoadFeedAsync(podcast.FeedUrl);
+                    PodcastService.MergeFeed(podcast, fresh);
+                }
+                catch (Exception) { /* offline / bad feed — keep what we have */ }
+                PodcastRules.Reconcile(podcast);
+
+                var newCount = podcast.Episodes.Count(e => !knownGuids.Contains(e.EpisodeGuid));
+                if (newCount > 0)
+                    PostNotification("new-episodes", podcast.Id.ToString(),
+                        $"{newCount} new episode{(newCount == 1 ? "" : "s")} for {podcast.Title}");
             }
-            catch (Exception) { /* offline / bad feed — keep what we have */ }
-            PodcastRules.Reconcile(podcast);
+            PodcastStore.Save(_podcasts);
+            RenderPodcasts();
+            UpdatePodcastSidebarDot();
 
-            var newCount = podcast.Episodes.Count(e => !knownGuids.Contains(e.EpisodeGuid));
-            if (newCount > 0)
-                PostNotification("new-episodes", podcast.Id.ToString(),
-                    $"{newCount} new episode{(newCount == 1 ? "" : "s")} for {podcast.Title}");
+            var totalDownloaded = 0;
+            foreach (var podcast in _podcasts.ToList())
+                totalDownloaded += await RunAutoDownloadsAsync(podcast, updateUi: false);
+            RenderPodcasts();
+            if (totalDownloaded > 0)
+                PostNotification("podcast-downloads", null,
+                    $"Podcast downloads complete — {totalDownloaded} episode{(totalDownloaded == 1 ? "" : "s")} downloaded");
         }
-        PodcastStore.Save(_podcasts);
-        RenderPodcasts();
-        UpdatePodcastSidebarDot();
-
-        var totalDownloaded = 0;
-        foreach (var podcast in _podcasts.ToList()) totalDownloaded += await RunAutoDownloadsAsync(podcast);
-        if (totalDownloaded > 0)
-            PostNotification("podcast-downloads", null,
-                $"Podcast downloads complete — {totalDownloaded} episode{(totalDownloaded == 1 ? "" : "s")} downloaded");
+        finally
+        {
+            _podcastRefreshGate.Release();
+        }
     }
 
     // ---- iPod play-status + bookmark sync (tasks 63, 67) ----------------
@@ -775,6 +817,13 @@ public partial class MainWindow
                 $"Synced {added} new episode{(added == 1 ? "" : "s")} of {podcast.Title} to iPod");
     }
 
+    /// <summary>Runs replacement downloads and device writes one show at a time.</summary>
+    private async Task AutoDownloadAndPushAllAsync()
+    {
+        foreach (var podcast in _podcasts.ToList())
+            await AutoDownloadAndPushAsync(podcast);
+    }
+
     // ---- Rendering ----------------------------------------------------
 
     private void RenderPodcasts()
@@ -792,8 +841,10 @@ public partial class MainWindow
         switch (_podcastMode)
         {
             case PodcastMode.Library:
-                PodcastLibraryView.ItemsSource = null;
-                PodcastLibraryView.ItemsSource = _podcasts;
+                if (!ReferenceEquals(PodcastLibraryView.ItemsSource, _podcasts))
+                    PodcastLibraryView.ItemsSource = _podcasts;
+                else
+                    System.Windows.Data.CollectionViewSource.GetDefaultView(PodcastLibraryView.ItemsSource).Refresh();
                 PodcastTitle.Text = "Library";
                 PodcastSubtitle.Text = _podcasts.Count == 0 ? "" : $"{_podcasts.Count} show{(_podcasts.Count == 1 ? "" : "s")} subscribed";
                 PodcastEmptyHint.Visibility = _podcasts.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -835,7 +886,6 @@ public partial class MainWindow
         };
 
         var list = episodes.ToList();
-        EpisodeView.ItemsSource = null;
         EpisodeView.ItemsSource = list;
         PodcastEmptyHint.Visibility = list.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         PodcastEmptyHint.Text = "No episodes match.";

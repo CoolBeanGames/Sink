@@ -586,17 +586,15 @@ public static class MusicSearchService
         var combined = $"{result.Artist} {result.Title}".Trim();
         var q = combinedQuery.Trim();
 
-        var log = new List<string>();
-
-        int EvaluateField(string fieldValue, string targetQuery, string fieldName)
+        static int EvaluateField(string fieldValue, string targetQuery)
         {
             if (string.IsNullOrWhiteSpace(targetQuery) || string.IsNullOrWhiteSpace(fieldValue)) return 0;
             var t = fieldValue.Trim();
             var qTarget = targetQuery.Trim();
-            if (t.Equals(qTarget, StringComparison.OrdinalIgnoreCase)) { log.Add($"{fieldName} Exact (+1000)"); return 1000; }
-            if (t.StartsWith(qTarget, StringComparison.OrdinalIgnoreCase)) { log.Add($"{fieldName} StartsWith (+900)"); return 900; }
-            if (t.EndsWith(qTarget, StringComparison.OrdinalIgnoreCase)) { log.Add($"{fieldName} EndsWith (+800)"); return 800; }
-            if (t.Contains(qTarget, StringComparison.OrdinalIgnoreCase)) { log.Add($"{fieldName} Contains (+700)"); return 700; }
+            if (t.Equals(qTarget, StringComparison.OrdinalIgnoreCase)) return 1000;
+            if (t.StartsWith(qTarget, StringComparison.OrdinalIgnoreCase)) return 900;
+            if (t.EndsWith(qTarget, StringComparison.OrdinalIgnoreCase)) return 800;
+            if (t.Contains(qTarget, StringComparison.OrdinalIgnoreCase)) return 700;
             return 0;
         }
 
@@ -605,30 +603,22 @@ public static class MusicSearchService
 
         if (result.Kind == MusicSearchResultKind.Track && !string.IsNullOrWhiteSpace(trackQuery))
         {
-            baseScore += EvaluateField(title, trackQuery, "TrackTitle");
+            baseScore += EvaluateField(title, trackQuery);
             scoredFields = true;
         }
         else if (result.Kind == MusicSearchResultKind.Album && !string.IsNullOrWhiteSpace(albumQuery))
         {
-            baseScore += EvaluateField(title, albumQuery, "AlbumTitle");
+            baseScore += EvaluateField(title, albumQuery);
             scoredFields = true;
         }
 
         if (!string.IsNullOrWhiteSpace(artistQuery))
         {
-            int artistScore = EvaluateField(artist, artistQuery, "ArtistName");
+            int artistScore = EvaluateField(artist, artistQuery);
             if (result.Kind == MusicSearchResultKind.Artist)
             {
-                var titleArtistScore = EvaluateField(title, artistQuery, "ArtistTitleFallback");
-                if (titleArtistScore > artistScore)
-                {
-                    log.RemoveAll(x => x.StartsWith("ArtistName"));
-                    artistScore = titleArtistScore;
-                }
-                else
-                {
-                    log.RemoveAll(x => x.StartsWith("ArtistTitleFallback"));
-                }
+                var titleArtistScore = EvaluateField(title, artistQuery);
+                if (titleArtistScore > artistScore) artistScore = titleArtistScore;
             }
             baseScore += artistScore;
             scoredFields = true;
@@ -639,10 +629,10 @@ public static class MusicSearchService
             bool Matches(Func<string, string, bool> condition) =>
                 condition(title, q) || condition(combined, q);
 
-            if (Matches((t, s) => t.Equals(s, StringComparison.OrdinalIgnoreCase))) { log.Add("Combined Exact (+1000)"); baseScore = 1000; }
-            else if (Matches((t, s) => t.StartsWith(s, StringComparison.OrdinalIgnoreCase))) { log.Add("Combined StartsWith (+900)"); baseScore = 900; }
-            else if (Matches((t, s) => t.EndsWith(s, StringComparison.OrdinalIgnoreCase))) { log.Add("Combined EndsWith (+800)"); baseScore = 800; }
-            else if (Matches((t, s) => t.Contains(s, StringComparison.OrdinalIgnoreCase))) { log.Add("Combined Contains (+700)"); baseScore = 700; }
+            if (Matches((t, s) => t.Equals(s, StringComparison.OrdinalIgnoreCase))) baseScore = 1000;
+            else if (Matches((t, s) => t.StartsWith(s, StringComparison.OrdinalIgnoreCase))) baseScore = 900;
+            else if (Matches((t, s) => t.EndsWith(s, StringComparison.OrdinalIgnoreCase))) baseScore = 800;
+            else if (Matches((t, s) => t.Contains(s, StringComparison.OrdinalIgnoreCase))) baseScore = 700;
         }
 
         var words = KeyChars.Replace(q.ToLowerInvariant(), " ")
@@ -657,22 +647,16 @@ public static class MusicSearchService
             {
                 if (searchableTitle.Contains(word) || searchableArtist.Contains(word)) wordBonus++;
             }
-            if (wordBonus > 0) log.Add($"Words x{wordBonus} (+{wordBonus})");
         }
 
         if (result.MatchBonus > baseScore)
-        {
-            log.Add($"MatchBonus Override (+{result.MatchBonus} replaces {baseScore})");
             baseScore = result.MatchBonus;
-        }
 
-        var total = baseScore + wordBonus;
-        if (total > 0 || result.MatchBonus > 0)
-        {
-            Log.Info($"[Score] {result.Kind,-6} | {result.Artist,-15} | {title,-20} => {total} [{string.Join(", ", log)}]");
-        }
-
-        return total;
+        // This used to synchronously append one detailed log line for every
+        // candidate. Broad searches can score hundreds of candidates, turning
+        // ranking into hundreds of serialized disk writes. Provider failures
+        // remain logged; routine ranking stays in memory.
+        return baseScore + wordBonus;
     }
 
     private static bool Equivalent(string left, string right) => Normalize(left) == Normalize(right);

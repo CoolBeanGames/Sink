@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Text.Json;
@@ -150,11 +151,28 @@ public static class PodcastService
         var buffer = new byte[81920];
         long read = 0;
         int n;
+        var lastReported = 0d;
+        var lastReportAt = Stopwatch.GetTimestamp();
         while ((n = await source.ReadAsync(buffer, token).ConfigureAwait(false)) > 0)
         {
             await dest.WriteAsync(buffer.AsMemory(0, n), token).ConfigureAwait(false);
             read += n;
-            if (total > 0) progress?.Report((double)read / total);
+            if (total > 0)
+            {
+                var value = Math.Clamp((double)read / total, 0, 1);
+                // Large episodes can produce thousands of 80 KB reads. Posting
+                // every one to WPF's dispatcher makes the app feel frozen even
+                // though the transfer itself is healthy, so cap UI reports at
+                // roughly eight per second (while still reporting meaningful
+                // one-percent jumps immediately).
+                if (value - lastReported >= 0.01
+                    || Stopwatch.GetElapsedTime(lastReportAt) >= TimeSpan.FromMilliseconds(125))
+                {
+                    progress?.Report(value);
+                    lastReported = value;
+                    lastReportAt = Stopwatch.GetTimestamp();
+                }
+            }
         }
         progress?.Report(1);
         return path;
