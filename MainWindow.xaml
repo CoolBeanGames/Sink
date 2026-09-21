@@ -247,7 +247,7 @@
                 <StackPanel>
                     <Button x:Name="BackButton" Content="← Back" Visibility="Collapsed" Click="BackButton_Click" HorizontalAlignment="Left" Foreground="#9D91FF" Background="Transparent" BorderThickness="0" Padding="0,0,0,8"/>
                     <TextBlock Text="MUSIC COLLECTION" Style="{StaticResource EyebrowStyle}"/>
-                    <TextBlock x:Name="ViewTitle" Text="Albums" FontSize="34" FontWeight="SemiBold" Margin="0,4,0,2"/>
+                    <TextBlock x:Name="ViewTitle" Text="Albums" Foreground="#F4F6FA" FontSize="34" FontWeight="SemiBold" Margin="0,4,0,2"/>
                     <TextBlock x:Name="ViewSubtitle" Foreground="#7D8493" FontSize="12"/>
                     <TextBlock x:Name="PlaybackStatus" Foreground="#A79DFF" FontSize="11" Margin="0,5,0,0"/>
                 </StackPanel>
@@ -464,7 +464,7 @@
             </Grid.RowDefinitions>
             <StackPanel>
                 <TextBlock Text="GET MUSIC" Style="{StaticResource EyebrowStyle}"/>
-                <TextBlock Text="Download" FontSize="34" FontWeight="SemiBold" Margin="0,4,0,2"/>
+                <TextBlock Text="Download" Foreground="#F4F6FA" FontSize="34" FontWeight="SemiBold" Margin="0,4,0,2"/>
                 <TextBlock x:Name="DownloadSubtitle" Foreground="#7D8493" FontSize="12" Text="Search across services or paste a link, tidy the details, then download."/>
             </StackPanel>
 
@@ -870,7 +870,7 @@
                 <StackPanel>
                     <Button x:Name="PodcastBackButton" Content="← Shows" Visibility="Collapsed" Click="PodcastBack_Click" HorizontalAlignment="Left" Foreground="#9D91FF" Background="Transparent" BorderThickness="0" Padding="0,0,0,8"/>
                     <TextBlock Text="PODCASTS" Style="{StaticResource EyebrowStyle}"/>
-                    <TextBlock x:Name="PodcastTitle" Text="Library" FontSize="34" FontWeight="SemiBold" Margin="0,4,0,2"/>
+                    <TextBlock x:Name="PodcastTitle" Text="Library" Foreground="#F4F6FA" FontSize="34" FontWeight="SemiBold" Margin="0,4,0,2"/>
                     <TextBlock x:Name="PodcastSubtitle" Foreground="#7D8493" FontSize="12"/>
                     <TextBlock x:Name="PodcastStatus" Foreground="#A79DFF" FontSize="11" Margin="0,5,0,0"/>
                 </StackPanel>
