@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
+using Sink.Models;
 using Sink.Services;
 using Sink.Services.Download;
 
@@ -23,15 +24,34 @@ public sealed class SettingsWindow : SinkDialog
     private readonly UIElement _cookieFileRow;
     private readonly TextBox _deezerArl = Field();
 
-    private readonly Func<int> _refresh;
+    private readonly Func<IProgress<LibraryMaintenanceProgress>, Task<int>> _refresh;
     private readonly Action _export;
     private readonly Action _import;
-    private readonly Func<string> _organize;
+    private readonly Func<IProgress<LibraryMaintenanceProgress>, Task<string>> _organize;
+    private readonly List<Button> _actionButtons = [];
+    private readonly TextBlock _maintenanceStatus = new()
+    {
+        Foreground = Hex("#A79DFF"), FontSize = 11, Margin = new Thickness(0, 4, 0, 0),
+        TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed,
+    };
+    private readonly ProgressBar _maintenanceProgress = new()
+    {
+        Height = 5, Minimum = 0, Maximum = 100, Margin = new Thickness(0, 7, 0, 0),
+        Background = Hex("#1B1F28"), Foreground = Hex("#8B7CFF"), BorderThickness = new Thickness(0),
+        Visibility = Visibility.Collapsed,
+    };
+    private StackPanel? _footer;
+    private bool _maintenanceRunning;
 
     /// <summary>Set when the user pressed Save.</summary>
     public AppSettings? Result { get; private set; }
 
-    public SettingsWindow(AppSettings settings, Func<int> refreshLibrary, Action exportLibrary, Action importLibrary, Func<string> organizeLibrary)
+    public SettingsWindow(
+        AppSettings settings,
+        Func<IProgress<LibraryMaintenanceProgress>, Task<int>> refreshLibrary,
+        Action exportLibrary,
+        Action importLibrary,
+        Func<IProgress<LibraryMaintenanceProgress>, Task<string>> organizeLibrary)
     {
         _refresh = refreshLibrary;
         _export = exportLibrary;
@@ -161,38 +181,105 @@ public sealed class SettingsWindow : SinkDialog
         // width — wrapping to a second row degrades gracefully instead of
         // silently clipping the next one that gets added (task 155).
         var actions = new WrapPanel();
-        actions.Children.Add(SecondaryButton("Refresh library", (_, _) =>
+        var refreshButton = SecondaryButton("Refresh library", async (_, _) =>
         {
-            var n = _refresh();
-            MessageBox.Show(this, $"Re-read {n} track{(n == 1 ? "" : "s")}. Missing files were removed.", "Refresh library",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-        }));
+            await RunMaintenanceAsync("Refreshing library…", "Refresh library", async progress =>
+            {
+                var count = await _refresh(progress);
+                return $"Re-read {count} track{(count == 1 ? "" : "s")}. Missing files were removed.";
+            });
+        });
+        actions.Children.Add(refreshButton);
         actions.Children.Add(SecondaryButton("Export library…", (_, _) => _export()));
         actions.Children.Add(SecondaryButton("Import library…", (_, _) => _import()));
-        actions.Children.Add(SecondaryButton("Organize library…", (_, _) =>
+        var organizeButton = SecondaryButton("Organize library…", async (_, _) =>
         {
-            var summary = _organize();
-            MessageBox.Show(this, summary, "Organize library", MessageBoxButton.OK, MessageBoxImage.Information);
-        }));
+            await RunMaintenanceAsync("Organizing library…", "Organize library", _organize);
+        });
+        actions.Children.Add(organizeButton);
         actions.Children.Add(SecondaryButton("Open logs…", (_, _) => Log.OpenFolder()));
         for (var i = 0; i < actions.Children.Count; i++)
             actions.Children[i].SetValue(MarginProperty, new Thickness(i == 0 ? 0 : 8, 0, 0, 8));
+        _actionButtons.AddRange(actions.Children.OfType<Button>());
         body.Children.Add(actions);
+        body.Children.Add(_maintenanceStatus);
+        body.Children.Add(_maintenanceProgress);
         body.Children.Add(new TextBlock
         {
             Text = $"Logs — including why a download failed — are written to {Log.Directory}",
             Foreground = Hex("#6E7584"), FontSize = 11, Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap,
         });
 
-        var footer = new StackPanel
+        _footer = new StackPanel
         {
             Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 24, 0, 0),
         };
-        footer.Children.Add(FooterBtn("Cancel", primary: false, (_, _) => Close()));
-        footer.Children.Add(FooterBtn("Save", primary: true, Save_Click));
-        body.Children.Add(footer);
+        _footer.Children.Add(FooterBtn("Cancel", primary: false, (_, _) => Close()));
+        _footer.Children.Add(FooterBtn("Save", primary: true, Save_Click));
+        body.Children.Add(_footer);
 
         Content = body;
+        Closing += (_, e) =>
+        {
+            if (!_maintenanceRunning) return;
+            e.Cancel = true;
+            _maintenanceStatus.Text = "Wait for library maintenance to finish before closing Settings.";
+            _maintenanceStatus.Foreground = Hex("#E7B86E");
+        };
+    }
+
+    private async Task RunMaintenanceAsync(
+        string startingMessage,
+        string dialogTitle,
+        Func<IProgress<LibraryMaintenanceProgress>, Task<string>> work)
+    {
+        if (_maintenanceRunning) return;
+        _maintenanceRunning = true;
+        SetMaintenanceControlsEnabled(false);
+        _maintenanceStatus.Text = startingMessage;
+        _maintenanceStatus.Foreground = Hex("#A79DFF");
+        _maintenanceStatus.Visibility = Visibility.Visible;
+        _maintenanceProgress.Value = 0;
+        _maintenanceProgress.IsIndeterminate = true;
+        _maintenanceProgress.Visibility = Visibility.Visible;
+
+        var progress = new Progress<LibraryMaintenanceProgress>(update =>
+        {
+            _maintenanceStatus.Text = update.Message;
+            _maintenanceStatus.Foreground = Hex("#A79DFF");
+            _maintenanceProgress.IsIndeterminate = update.IsIndeterminate;
+            if (!update.IsIndeterminate) _maintenanceProgress.Value = update.Percent;
+        });
+
+        try
+        {
+            var summary = await work(progress);
+            _maintenanceStatus.Text = summary;
+            _maintenanceStatus.Foreground = Hex("#8FD69A");
+            _maintenanceProgress.IsIndeterminate = false;
+            _maintenanceProgress.Value = 100;
+            MessageBox.Show(this, summary, dialogTitle, MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"{dialogTitle} failed", ex);
+            _maintenanceStatus.Text = $"{dialogTitle} failed: {ex.Message}";
+            _maintenanceStatus.Foreground = Hex("#E0918C");
+            _maintenanceProgress.IsIndeterminate = false;
+            _maintenanceProgress.Value = 0;
+            MessageBox.Show(this, ex.Message, $"{dialogTitle} failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            _maintenanceRunning = false;
+            SetMaintenanceControlsEnabled(true);
+        }
+    }
+
+    private void SetMaintenanceControlsEnabled(bool enabled)
+    {
+        foreach (var button in _actionButtons) button.IsEnabled = enabled;
+        if (_footer is not null) _footer.IsEnabled = enabled;
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)

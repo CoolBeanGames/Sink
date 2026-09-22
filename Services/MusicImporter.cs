@@ -94,18 +94,37 @@ public static partial class MusicImporter
     /// in the library references yet. Files already in the right place are left
     /// alone. Finishes by deleting every folder the moves left empty.
     /// </summary>
-    public static OrganizeResult Organize(string libraryDir, IReadOnlyList<Track> tracks)
+    public static OrganizeResult Organize(
+        string libraryDir, IReadOnlyList<Track> tracks,
+        IProgress<LibraryMaintenanceProgress>? progress = null)
     {
         if (!Directory.Exists(libraryDir)) return new OrganizeResult(0, 0);
+        progress?.Report(new LibraryMaintenanceProgress("Scanning the library folder…"));
         var byPath = new Dictionary<string, Track>(StringComparer.OrdinalIgnoreCase);
         foreach (var t in tracks)
             if (!string.IsNullOrWhiteSpace(t.FilePath))
                 byPath[Path.GetFullPath(t.FilePath)] = t;
 
-        var moved = 0;
-        foreach (var file in Directory.EnumerateFiles(libraryDir, "*", SearchOption.AllDirectories).ToList())
+        List<string> files;
+        try
         {
-            if (!AudioExtensions.Contains(Path.GetExtension(file))) continue;
+            files = Directory.EnumerateFiles(libraryDir, "*", SearchOption.AllDirectories)
+                .Where(file => AudioExtensions.Contains(Path.GetExtension(file)))
+                .ToList();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return new OrganizeResult(0, 0);
+        }
+
+        var moved = 0;
+        var reportEvery = Math.Max(1, files.Count / 100);
+        for (var fileIndex = 0; fileIndex < files.Count; fileIndex++)
+        {
+            var file = files[fileIndex];
+            if (fileIndex % reportEvery == 0)
+                progress?.Report(new LibraryMaintenanceProgress(
+                    $"Organizing {Path.GetFileName(file)}", fileIndex, files.Count));
             var full = Path.GetFullPath(file);
             var track = byPath.GetValueOrDefault(full);
             var (artist, album) = track is not null ? (track.Artist, track.Album) : ReadArtistAlbum(file);
@@ -126,7 +145,9 @@ public static partial class MusicImporter
             moved++;
         }
 
+        progress?.Report(new LibraryMaintenanceProgress("Removing empty folders…"));
         var removed = RemoveEmptyFolders(libraryDir);
+        progress?.Report(new LibraryMaintenanceProgress("Organization complete", files.Count, files.Count));
         return new OrganizeResult(moved, removed);
     }
 
@@ -134,8 +155,17 @@ public static partial class MusicImporter
     private static int RemoveEmptyFolders(string root)
     {
         var removed = 0;
-        var dirs = Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories)
-            .OrderByDescending(d => d.Count(c => c == Path.DirectorySeparatorChar || c == Path.AltDirectorySeparatorChar));
+        List<string> dirs;
+        try
+        {
+            dirs = Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories)
+                .OrderByDescending(d => d.Count(c => c == Path.DirectorySeparatorChar || c == Path.AltDirectorySeparatorChar))
+                .ToList();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return 0;
+        }
         foreach (var dir in dirs)
         {
             try
