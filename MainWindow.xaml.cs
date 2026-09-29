@@ -2046,9 +2046,15 @@ public partial class MainWindow : Window
             menu.Items.Add(Item("Download album art", () => DownloadAlbumArt(cards[0].Name, tracks)));
         }
         if (kind == LibraryCategory.Genres && single)
+        {
             menu.Items.Add(Item("Set genre artwork…", () => SetGroupArtwork("genre", cards[0].Name)));
+            menu.Items.Add(Item("Search artwork online…", () => SearchGroupArtwork("genre", cards[0].Name)));
+        }
         if (kind == LibraryCategory.Artists && single)
+        {
             menu.Items.Add(Item("Set artist artwork…", () => SetGroupArtwork("artist", cards[0].Name)));
+            menu.Items.Add(Item("Search artwork online…", () => SearchGroupArtwork("artist", cards[0].Name)));
+        }
         menu.Items.Add(AddToPlaylistMenu(tracks));
         if (_source == LibrarySource.Ipod)
             menu.Items.Add(Item("Unsync from iPod", () => UnsyncTracks(tracks)));
@@ -2265,7 +2271,20 @@ public partial class MainWindow : Window
             PlaybackStatus.Text = $"Couldn't read that file";
             return;
         }
+        ApplyGroupArtwork(kindKey, name, data);
+    }
 
+    /// <summary>Right-click "Search artwork online…": pick an artist/genre image from Google Image results.</summary>
+    private void SearchGroupArtwork(string kindKey, string name)
+    {
+        var query = kindKey == "genre" ? $"{name} music" : $"{name} musician";
+        var dialog = new Dialogs.ArtworkSearchWindow(name, query) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.ImageBytes is not { } data) return;
+        ApplyGroupArtwork(kindKey, name, data);
+    }
+
+    private void ApplyGroupArtwork(string kindKey, string name, byte[] data)
+    {
         var saved = Artwork.SaveOverride($"{kindKey}:{name}", data);
         if (saved is null)
         {
