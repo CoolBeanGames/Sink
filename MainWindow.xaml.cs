@@ -93,6 +93,7 @@ public partial class MainWindow : Window
         var v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
         if (v is not null) VersionText.Text = $"v{v.Major}.{v.Minor}.{v.Build}";
         LoadLibrary();
+        ScheduleLibrarySizeUpdate();
         PlaylistList.ItemsSource = _playlists;
         _playbackTimer.Tick += PlaybackTimer_Tick;
         _librarySearchTimer.Tick += (_, _) =>
@@ -262,7 +263,42 @@ public partial class MainWindow : Window
         foreach (var id in data.SyncedTrackIds.Where(known.Contains)) _syncedTrackIds.Add(id);
     }
 
-    private void SaveLibrary() => LibraryStore.Save(_tracks, _playlists, _syncedTrackIds);
+    private void SaveLibrary()
+    {
+        LibraryStore.Save(_tracks, _playlists, _syncedTrackIds);
+        ScheduleLibrarySizeUpdate();
+    }
+
+    private DispatcherTimer? _librarySizeTimer;
+
+    /// <summary>
+    /// Recomputes the sidebar's library-size label shortly after the library
+    /// changes. Debounced because SaveLibrary runs in bursts (imports,
+    /// downloads, syncs), and the per-file stat runs off the UI thread since
+    /// the library can live on a slow or network drive.
+    /// </summary>
+    private void ScheduleLibrarySizeUpdate()
+    {
+        if (_librarySizeTimer is null)
+        {
+            _librarySizeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+            _librarySizeTimer.Tick += async (_, _) =>
+            {
+                _librarySizeTimer!.Stop();
+                var paths = _tracks.Select(t => t.FilePath).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                var total = await Task.Run(() =>
+                {
+                    long sum = 0;
+                    foreach (var path in paths)
+                        try { var info = new FileInfo(path); if (info.Exists) sum += info.Length; } catch { }
+                    return sum;
+                });
+                LibrarySizeText.Text = $"Library · {Bytes(total)} · {paths.Count} file{(paths.Count == 1 ? "" : "s")}";
+            };
+        }
+        _librarySizeTimer.Stop();
+        _librarySizeTimer.Start();
+    }
 
     private bool _ipodPolling;
     private bool _manualRescan;

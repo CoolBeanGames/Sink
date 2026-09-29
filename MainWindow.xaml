@@ -232,10 +232,14 @@
                         </StackPanel>
                     </Button>
                 </StackPanel>
-                <DockPanel Grid.Row="6" Margin="10,14,0,0" LastChildFill="False">
-                    <TextBlock x:Name="VersionText" Foreground="#5A616E" FontSize="10" Text="v0.13.0" VerticalAlignment="Center"/>
-                    <Button Content="🐞 Report a bug" Click="ReportBug_Click" DockPanel.Dock="Right" Background="Transparent" Foreground="#6E7584" BorderThickness="0" Padding="0" FontSize="10" ToolTip="File a bug straight into Zen, tagged for wherever you are right now"/>
-                </DockPanel>
+                <StackPanel Grid.Row="6" Margin="10,14,0,0">
+                    <TextBlock x:Name="LibrarySizeText" Foreground="#5A616E" FontSize="10" Margin="0,0,0,4"
+                               ToolTip="Total size of the music files in your library"/>
+                    <DockPanel LastChildFill="False">
+                        <TextBlock x:Name="VersionText" Foreground="#5A616E" FontSize="10" Text="v0.13.0" VerticalAlignment="Center"/>
+                        <Button Content="🐞 Report a bug" Click="ReportBug_Click" DockPanel.Dock="Right" Background="Transparent" Foreground="#6E7584" BorderThickness="0" Padding="0" FontSize="10" ToolTip="File a bug straight into Zen, tagged for wherever you are right now"/>
+                    </DockPanel>
+                </StackPanel>
             </Grid>
         </Border>
         
