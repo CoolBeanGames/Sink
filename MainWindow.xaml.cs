@@ -1177,8 +1177,10 @@ public partial class MainWindow : Window
         var podcastsAdded = 0;
         if (header is "Sync all" or "Sync music")
         {
-            songsAdded = await SyncTracksToDevice(_tracks.ToList());
-            await SyncAllPlaylistsToDevice();
+            // A full sync mirrors the library: songs and playlists deleted in
+            // Sink come off the device too, not just new ones going on.
+            songsAdded = await SyncTracksToDevice(_tracks.ToList(), mirror: true);
+            await SyncAllPlaylistsToDevice(mirror: true);
         }
         if (header is "Sync all" or "Sync podcasts")
             podcastsAdded = await SyncAllPodcastsToDevice();
@@ -1233,7 +1235,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Syncs tracks to the connected iPod — really writes the iTunesDB when the device is readable, otherwise stages them in the pending list. Returns how many tracks were actually added.</summary>
-    private async Task<int> SyncTracksToDevice(IReadOnlyList<Track> tracks)
+    private async Task<int> SyncTracksToDevice(IReadOnlyList<Track> tracks, bool mirror = false)
     {
         if (_ipodWriting) { PlaybackStatus.Text = "iPod is busy…"; return 0; }
         var root = _ipodDevice?.LibraryRoot;
@@ -1260,7 +1262,7 @@ public partial class MainWindow : Window
         var added = 0;
         try
         {
-            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.Sync(root, payload, progress, token, deviceId));
+            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.Sync(root, payload, progress, token, deviceId, mirror));
             PlaybackStatus.Text = result.Summary;
             added = result.Added;
         }
@@ -1338,7 +1340,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Pushes every playlist's membership onto the device's iTunesDB. No-op when the device isn't writable — there is nowhere to record a playlist without one.</summary>
-    private async Task SyncAllPlaylistsToDevice()
+    private async Task SyncAllPlaylistsToDevice(bool mirror = false)
     {
         var root = _ipodDevice?.LibraryRoot;
         if (root is null || _ipodWriting) return;
@@ -1353,7 +1355,16 @@ public partial class MainWindow : Window
             {
                 var tracks = _tracks.Where(t => playlist.TrackIds.Contains(t.Id)).ToList();
                 if (tracks.Count == 0) continue;
-                await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks, token: token, deviceId: deviceId));
+                await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks, token: token, deviceId: deviceId, mirror: mirror));
+            }
+            if (mirror)
+            {
+                // Playlists deleted (or emptied) in Sink leave the device too.
+                var keepNames = _playlists
+                    .Where(p => _tracks.Any(t => p.TrackIds.Contains(t.Id)))
+                    .Select(p => p.Name)
+                    .ToList();
+                await Task.Run(() => Sink.Services.Ipod.IpodWriteService.RemoveOrphanPlaylists(root, keepNames));
             }
         }
         catch (OperationCanceledException)

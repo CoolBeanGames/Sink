@@ -16,8 +16,10 @@ public sealed record IpodSyncResult(int Added, int AlreadyPresent, int Skipped, 
         get
         {
             if (Error is not null) return $"iPod update failed — {Error}. The database was restored.";
-            if (Removed > 0) return $"Removed {Removed} track{(Removed == 1 ? "" : "s")} from the iPod.";
-            return $"Synced {Added} track{(Added == 1 ? "" : "s")} to the iPod" +
+            var removed = Removed > 0 ? $"Removed {Removed} track{(Removed == 1 ? "" : "s")} from the iPod" : null;
+            if (removed is not null && Added == 0 && AlreadyPresent == 0 && Skipped == 0) return removed + ".";
+            return (removed is null ? "" : removed + ". ") +
+                   $"Synced {Added} track{(Added == 1 ? "" : "s")} to the iPod" +
                    (AlreadyPresent > 0 ? $", {AlreadyPresent} already there" : "") +
                    (Skipped > 0 ? $", {Skipped} skipped" : "") + ".";
         }
@@ -39,17 +41,26 @@ public static class IpodWriteService
         !string.IsNullOrWhiteSpace(path) && File.Exists(path) &&
         Supported.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
 
+    /// <param name="mirror">
+    /// Treat <paramref name="tracks"/> as the complete music library: every
+    /// on-device song that doesn't belong to one of them is removed, so the
+    /// device ends up matching the library instead of only ever gaining
+    /// tracks. Podcast episodes on the device are left to the podcast
+    /// reconcile. A library track whose file is temporarily missing still
+    /// protects its on-device copy — it just can't be (re)copied.
+    /// </param>
     public static IpodSyncResult Sync(
         string root,
         IReadOnlyList<Track> tracks,
         IProgress<(int done, int total, string message)>? progress = null,
         CancellationToken token = default,
-        string? deviceId = null)
+        string? deviceId = null,
+        bool mirror = false)
     {
         var eligible = tracks.Where(t => IsSyncable(t.FilePath)).ToList();
         var skipped = tracks.Count - eligible.Count;
-        if (eligible.Count == 0) return new IpodSyncResult(0, 0, skipped, null);
-        Log.Info($"iPod sync: {eligible.Count} eligible track(s), {skipped} skipped, root {root}");
+        if (eligible.Count == 0 && !mirror) return new IpodSyncResult(0, 0, skipped, null);
+        Log.Info($"iPod sync: {eligible.Count} eligible track(s), {skipped} skipped, mirror {mirror}, root {root}");
 
         IPod ipod;
         try { ipod = IpodReader.Open(root); ipod.AssertIsWritable(); }
@@ -57,7 +68,7 @@ public static class IpodWriteService
 
         string? backup = null;
         var locked = false;
-        int added = 0, present = 0;
+        int added = 0, present = 0, removed = 0;
         var changedDb = false;
         CwPlaylist? podcastsPlaylist = null;
         try
@@ -66,6 +77,24 @@ public static class IpodWriteService
             IPodBackup.EnableBackups = false;
             ipod.AcquireLock();
             locked = true;
+
+            // Remove first, so space freed by songs deleted from the library
+            // is available for the ones being added.
+            if (mirror)
+            {
+                progress?.Report((0, Math.Max(1, eligible.Count), "Removing songs no longer in the library"));
+                var keep = LibraryKeys(tracks);
+                var orphans = new List<CwTrack>();
+                foreach (var t in ipod.Tracks)
+                    if (!IsPodcast(t) && !keep.Contains(DeviceKey(t))) orphans.Add(t);
+                foreach (var orphan in orphans)
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (ipod.Tracks.Remove(orphan)) removed++;
+                }
+                if (removed > 0) changedDb = true;
+                Log.Info($"iPod sync: mirror removed {removed} of {orphans.Count} on-device song(s) not in the library");
+            }
 
             var byKey = BuildKeyIndex(ipod);
             for (var i = 0; i < eligible.Count; i++)
@@ -122,7 +151,7 @@ public static class IpodWriteService
                 ipod.SaveChanges();
                 DriveEject.Flush(root); // force the write out of the OS cache — a quick eject right after used to lose it (task 144)
             }
-            return new IpodSyncResult(added, present, skipped, null);
+            return new IpodSyncResult(added, present, skipped, null, Removed: removed);
         }
         catch (OperationCanceledException)
         {
@@ -154,12 +183,14 @@ public static class IpodWriteService
         IReadOnlyList<Track> tracks,
         IProgress<(int done, int total, string message)>? progress = null,
         CancellationToken token = default,
-        string? deviceId = null)
+        string? deviceId = null,
+        bool mirror = false)
     {
         var eligible = tracks.Where(t => IsSyncable(t.FilePath)).ToList();
         var skipped = tracks.Count - eligible.Count;
         if (eligible.Count == 0) return new IpodSyncResult(0, 0, skipped, null);
         Log.Info($"iPod playlist sync: \"{playlistName}\", {eligible.Count} eligible track(s), root {root}");
+        var members = new HashSet<CwTrack>(ReferenceEqualityComparer.Instance);
 
         IPod ipod;
         try { ipod = IpodReader.Open(root); ipod.AssertIsWritable(); }
@@ -235,6 +266,28 @@ public static class IpodWriteService
                     playlist.AddTrack(onDevice);
                     changedDb = true;
                 }
+                if (onDevice is not null) members.Add(onDevice);
+            }
+
+            // Songs taken out of the library's playlist leave the device's
+            // copy of it too — the playlist should match, not only grow.
+            // The key check keeps a member whose library track wasn't reached
+            // (out of space, file missing) from being dropped.
+            if (mirror)
+            {
+                var keep = LibraryKeys(tracks);
+                var stale = new List<CwTrack>();
+                for (var j = 0; j < playlist.TrackCount; j++)
+                {
+                    var member = playlist[j];
+                    if (!members.Contains(member) && !keep.Contains(DeviceKey(member))) stale.Add(member);
+                }
+                foreach (var member in stale) playlist.RemoveTrack(member);
+                if (stale.Count > 0)
+                {
+                    changedDb = true;
+                    Log.Info($"iPod playlist sync: removed {stale.Count} track(s) no longer in \"{playlistName}\"");
+                }
             }
 
             if (changedDb)
@@ -295,6 +348,51 @@ public static class IpodWriteService
             Log.Error("iPod playlist remove failed", ex);
             if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
             return false;
+        }
+        finally
+        {
+            if (locked) { try { ipod.ReleaseLock(); } catch { } }
+        }
+    }
+
+    /// <summary>
+    /// Mirror half of a full sync for playlists: deletes every on-device
+    /// playlist whose name isn't in <paramref name="keepNames"/> (tracks are
+    /// left alone). The master library and the device's Podcasts playlist are
+    /// never touched. Returns how many playlists were removed.
+    /// </summary>
+    public static int RemoveOrphanPlaylists(string root, IReadOnlyCollection<string> keepNames)
+    {
+        var keep = keepNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        keep.Add("Podcasts");
+        IPod ipod;
+        try { ipod = IpodReader.Open(root); ipod.AssertIsWritable(); }
+        catch (Exception ex) { Log.Error("iPod orphan playlist remove: open failed", ex); return 0; }
+
+        var orphans = new List<CwPlaylist>();
+        foreach (var p in ipod.Playlists)
+            if (!p.IsMaster && !keep.Contains(p.Name ?? "")) orphans.Add(p);
+        if (orphans.Count == 0) return 0;
+
+        string? backup = null;
+        var locked = false;
+        try
+        {
+            backup = BackupDatabase(root);
+            IPodBackup.EnableBackups = false;
+            ipod.AcquireLock();
+            locked = true;
+            foreach (var playlist in orphans) ipod.Playlists.Remove(playlist, deleteTracks: false);
+            ipod.SaveChanges();
+            DriveEject.Flush(root);
+            Log.Info($"iPod sync: removed {orphans.Count} playlist(s) no longer in the library: {string.Join(", ", orphans.Select(p => p.Name))}");
+            return orphans.Count;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("iPod orphan playlist remove failed", ex);
+            if (!string.IsNullOrEmpty(backup)) TryRestore(backup);
+            return 0;
         }
         finally
         {
@@ -554,6 +652,32 @@ public static class IpodWriteService
         if (onDevice is null || !string.Equals(src.Genre, "Podcast", StringComparison.OrdinalIgnoreCase)) return;
         onDevice.PodcastFlag = true;
         onDevice.MediaType = CwMediaType.Podcast;
+    }
+
+    private static string DeviceKey(CwTrack t) =>
+        IpodDbTrack.MakeKey(t.Title, t.Artist, t.Album, IpodReader.SafeInt(t.TrackNumber));
+
+    private static bool IsPodcast(CwTrack t) =>
+        t.PodcastFlag || t.MediaType == CwMediaType.Podcast ||
+        string.Equals(t.Genre, "Podcast", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Every identity an on-device copy of these library tracks could carry:
+    /// the current one, the file-name title <see cref="NewTrackFrom"/> falls
+    /// back to for an untitled track, and the last synced one (a retag not
+    /// yet pushed).
+    /// </summary>
+    private static HashSet<string> LibraryKeys(IEnumerable<Track> tracks)
+    {
+        var keys = new HashSet<string>();
+        foreach (var t in tracks)
+        {
+            keys.Add(IpodDbTrack.MakeKey(t.Title, t.Artist, t.Album, t.TrackNumber));
+            if (string.IsNullOrWhiteSpace(t.Title) && !string.IsNullOrWhiteSpace(t.FilePath))
+                keys.Add(IpodDbTrack.MakeKey(Path.GetFileNameWithoutExtension(t.FilePath), t.Artist, t.Album, t.TrackNumber));
+            if (t.LastSyncedKey is not null) keys.Add(t.LastSyncedKey);
+        }
+        return keys;
     }
 
     /// <summary>Snapshot of every on-device track's current identity, for matching a local track to its existing copy without relying on Clickwheel's own (exact, case-sensitive) Add() dedup.</summary>
