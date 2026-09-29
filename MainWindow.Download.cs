@@ -242,6 +242,14 @@ public partial class MainWindow
             return;
         }
 
+        var searchKey = $"{track}\n{album}\n{artist}";
+        if (MusicSearchOverlay.Visibility != Visibility.Visible && searchKey == _lastMusicSearchKey)
+        {
+            ReopenMusicSearch();
+            return;
+        }
+        _lastMusicSearchKey = null;
+
         _musicSearchCts?.Cancel();
         _musicSearchCts?.Dispose();
         var cts = _musicSearchCts = new CancellationTokenSource();
@@ -277,6 +285,8 @@ public partial class MainWindow
             SetDownloadStatus(_musicSearchResults.Count == 0
                 ? $"No search results for “{query}”"
                 : $"Found {_musicSearchResults.Count} result{(_musicSearchResults.Count == 1 ? "" : "s")} — select one to edit its details");
+            _lastMusicSearchKey = searchKey;
+            _musicSearchScrollOffset = 0;
         }
         catch (OperationCanceledException)
         {
@@ -308,9 +318,46 @@ public partial class MainWindow
         MusicSearchEmptyBody.Text = body;
     }
 
+    /// <summary>
+    /// Terms of the last search that finished, so searching the same terms
+    /// again after closing the results reopens them as they were instead of
+    /// hitting every service again. Cleared as soon as a different search starts.
+    /// </summary>
+    private string? _lastMusicSearchKey;
+    private double _musicSearchScrollOffset;
+    private bool _musicSearchEmptyWasVisible;
+
+    private void ReopenMusicSearch()
+    {
+        MusicSearchOverlay.Visibility = Visibility.Visible;
+        MusicSearchResultsPanel.Visibility = Visibility.Visible;
+        MusicSearchEmptyState.Visibility = _musicSearchEmptyWasVisible ? Visibility.Visible : Visibility.Collapsed;
+        MusicSearchDetails.Visibility = MusicSearchResults.SelectedItem is null ? Visibility.Collapsed : Visibility.Visible;
+        var offset = _musicSearchScrollOffset;
+        // The list only has a laid-out ScrollViewer once it's visible again.
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => FindChildScrollViewer(MusicSearchResults)?.ScrollToVerticalOffset(offset));
+        SetDownloadStatus($"Showing the previous {_musicSearchResults.Count} result{(_musicSearchResults.Count == 1 ? "" : "s")}");
+    }
+
+    private static ScrollViewer? FindChildScrollViewer(DependencyObject parent)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is ScrollViewer sv) return sv;
+            if (FindChildScrollViewer(child) is { } found) return found;
+        }
+        return null;
+    }
+
     private void CloseMusicSearch_Click(object sender, RoutedEventArgs e)
     {
         _musicSearchCts?.Cancel();
+        if (MusicSearchOverlay.Visibility == Visibility.Visible)
+        {
+            _musicSearchScrollOffset = FindChildScrollViewer(MusicSearchResults)?.VerticalOffset ?? 0;
+            _musicSearchEmptyWasVisible = MusicSearchEmptyState.Visibility == Visibility.Visible;
+        }
         MusicSearchOverlay.Visibility = Visibility.Collapsed;
         MusicSearchResultsPanel.Visibility = Visibility.Collapsed;
         MusicSearchDetails.Visibility = Visibility.Collapsed;
