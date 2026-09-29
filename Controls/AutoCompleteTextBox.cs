@@ -8,7 +8,7 @@ using Sink.Services;
 
 namespace Sink.Controls;
 
-public enum SuggestionField { None, Artist, Album, Genre, Title }
+public enum SuggestionField { None, Artist, Album, Genre, Title, Any }
 
 /// <summary>
 /// A dark-styled text box that drops down matching suggestions as you type and
@@ -36,6 +36,12 @@ public class AutoCompleteTextBox : TextBox
 
     /// <summary>Explicit suggestion list; overrides <see cref="SuggestionField"/> when set.</summary>
     public IEnumerable<string>? Suggestions { get; set; }
+
+    /// <summary>Suggestions read fresh on every keystroke (for lists that change while the box is in use); overrides everything else.</summary>
+    public Func<IEnumerable<string>>? SuggestionProvider { get; set; }
+
+    /// <summary>Most suggestions shown at once; the list scrolls past what fits.</summary>
+    public int MaxSuggestions { get; set; } = 12;
 
     public AutoCompleteTextBox()
     {
@@ -72,12 +78,14 @@ public class AutoCompleteTextBox : TextBox
     }
 
     private IReadOnlyList<string> Source() =>
-        Suggestions?.ToList() ?? SuggestionField switch
+        SuggestionProvider?.Invoke().ToList() ?? Suggestions?.ToList() ?? SuggestionField switch
         {
             SuggestionField.Artist => MetadataIndex.ArtistSuggestions(),
             SuggestionField.Album => MetadataIndex.AlbumSuggestions(),
             SuggestionField.Genre => MetadataIndex.GenreSuggestions(),
             SuggestionField.Title => MetadataIndex.TitleSuggestions(),
+            SuggestionField.Any => MetadataIndex.ArtistSuggestions().Concat(MetadataIndex.AlbumSuggestions())
+                .Concat(MetadataIndex.TitleSuggestions()).Concat(MetadataIndex.GenreSuggestions()).ToList(),
             _ => [],
         };
 
@@ -87,12 +95,19 @@ public class AutoCompleteTextBox : TextBox
         var q = Text?.Trim() ?? "";
         if (q.Length == 0) { Close(); return; }
 
+        // Narrows by prefix on every keystroke: "M" offers every value
+        // starting with M, "My" drops "Modest Mouse", "My C" leaves only "My
+        // Chemical Romance". Values where a later word starts with what's
+        // typed ("Mouse" for "Mo") follow the whole-value matches, so "The
+        // Beatles" is still found by "Bea". Mid-word hits are never offered.
         var all = Source();
-        var starts = all.Where(x => x.StartsWith(q, StringComparison.OrdinalIgnoreCase)
-                                    && !x.Equals(q, StringComparison.OrdinalIgnoreCase));
-        var contains = all.Where(x => !x.StartsWith(q, StringComparison.OrdinalIgnoreCase)
-                                      && x.Contains(q, StringComparison.OrdinalIgnoreCase));
-        var matches = starts.Concat(contains).Distinct(StringComparer.OrdinalIgnoreCase).Take(8).ToList();
+        var starts = all.Where(x => x.StartsWith(q, StringComparison.OrdinalIgnoreCase));
+        var wordStarts = all.Where(x => !x.StartsWith(q, StringComparison.OrdinalIgnoreCase) && HasWordStartingWith(x, q));
+        var matches = starts.Concat(wordStarts)
+            .Where(x => !x.Equals(q, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(MaxSuggestions)
+            .ToList();
         if (matches.Count == 0) { Close(); return; }
 
         _list.ItemsSource = matches;
@@ -137,6 +152,14 @@ public class AutoCompleteTextBox : TextBox
         Close();
         GetBindingExpression(TextProperty)?.UpdateSource();
         return true;
+    }
+
+    private static bool HasWordStartingWith(string value, string query)
+    {
+        for (var i = value.IndexOf(query, 1, StringComparison.OrdinalIgnoreCase); i > 0;
+             i = i + 1 < value.Length ? value.IndexOf(query, i + 1, StringComparison.OrdinalIgnoreCase) : -1)
+            if (!char.IsLetterOrDigit(value[i - 1])) return true;
+        return false;
     }
 
     private void Close() => _popup.IsOpen = false;

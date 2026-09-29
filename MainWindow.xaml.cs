@@ -94,6 +94,7 @@ public partial class MainWindow : Window
         if (v is not null) VersionText.Text = $"v{v.Major}.{v.Minor}.{v.Build}";
         LoadLibrary();
         ScheduleLibrarySizeUpdate();
+        _tracks.CollectionChanged += (_, _) => ScheduleLibrarySizeUpdate();
         PlaylistList.ItemsSource = _playlists;
         _playbackTimer.Tick += PlaybackTimer_Tick;
         _librarySearchTimer.Tick += (_, _) =>
@@ -270,34 +271,56 @@ public partial class MainWindow : Window
     }
 
     private DispatcherTimer? _librarySizeTimer;
+    private bool _librarySizeRunning;
+    private bool _librarySizeDirty;
+    /// <summary>File path → size, so a refresh only stats files it hasn't seen (per-run copy, touched only off the UI thread).</summary>
+    private Dictionary<string, long> _librarySizeCache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Recomputes the sidebar's library-size label shortly after the library
-    /// changes. Debounced because SaveLibrary runs in bursts (imports,
-    /// downloads, syncs), and the per-file stat runs off the UI thread since
-    /// the library can live on a slow or network drive.
+    /// Refreshes the sidebar's library-size label whenever the library
+    /// changes — including each track a download imports — at most about
+    /// once a second. Throttled rather than debounced so a long download
+    /// burst still updates it live instead of waiting for the burst to end.
+    /// The per-file stat runs off the UI thread (the library can live on a
+    /// slow or network drive) and only for files not already measured.
     /// </summary>
     private void ScheduleLibrarySizeUpdate()
     {
+        _librarySizeDirty = true;
         if (_librarySizeTimer is null)
         {
-            _librarySizeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+            _librarySizeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             _librarySizeTimer.Tick += async (_, _) =>
             {
-                _librarySizeTimer!.Stop();
-                var paths = _tracks.Select(t => t.FilePath).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                var total = await Task.Run(() =>
+                if (_librarySizeRunning) return;
+                if (!_librarySizeDirty) { _librarySizeTimer!.Stop(); return; }
+                _librarySizeDirty = false;
+                _librarySizeRunning = true;
+                try
                 {
-                    long sum = 0;
-                    foreach (var path in paths)
-                        try { var info = new FileInfo(path); if (info.Exists) sum += info.Length; } catch { }
-                    return sum;
-                });
-                LibrarySizeText.Text = $"Library · {Bytes(total)} · {paths.Count} file{(paths.Count == 1 ? "" : "s")}";
+                    var paths = _tracks.Select(t => t.FilePath).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                    var previous = _librarySizeCache;
+                    var (total, cache) = await Task.Run(() =>
+                    {
+                        var next = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+                        long sum = 0;
+                        foreach (var path in paths)
+                        {
+                            if (!previous.TryGetValue(path, out var size))
+                                try { var info = new FileInfo(path); size = info.Exists ? info.Length : -1; } catch { size = -1; }
+                            if (size < 0) continue; // missing now; re-check next time
+                            next[path] = size;
+                            sum += size;
+                        }
+                        return (sum, next);
+                    });
+                    _librarySizeCache = cache;
+                    LibrarySizeText.Text = $"Library · {Bytes(total)} · {paths.Count} file{(paths.Count == 1 ? "" : "s")}";
+                }
+                finally { _librarySizeRunning = false; }
             };
         }
-        _librarySizeTimer.Stop();
-        _librarySizeTimer.Start();
+        if (!_librarySizeTimer.IsEnabled) _librarySizeTimer.Start();
     }
 
     private bool _ipodPolling;

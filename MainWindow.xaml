@@ -255,7 +255,7 @@
                     <TextBlock x:Name="ViewSubtitle" Foreground="#7D8493" FontSize="12"/>
                     <TextBlock x:Name="PlaybackStatus" Foreground="#A79DFF" FontSize="11" Margin="0,5,0,0"/>
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"><Button Content="⚙" Click="Settings_Click" ToolTip="Settings" Margin="0,0,9,0" Padding="11,8" FontSize="14" Background="#161A22" Foreground="#BCC2CD" BorderBrush="#303744"/><Button Content="⊙  Duplicates" Click="Duplicates_Click" Margin="0,0,9,0" Padding="13,8" Background="#161A22" Foreground="#BCC2CD" BorderBrush="#303744"/><Button x:Name="CleanupTitlesButton" Content="🧹  Clean up" Click="CleanupTitles_Click" ToolTip="Strip Official Video/Cover/feat. tags and Album/Artist-name prefixes out of every track title" Visibility="Collapsed" Margin="0,0,9,0" Padding="13,8" Background="#161A22" Foreground="#BCC2CD" BorderBrush="#303744"/><Border Width="260" Height="39" Background="#12151C" BorderBrush="#262C38" BorderThickness="1" CornerRadius="10" Padding="12,7"><DockPanel><TextBlock Text="⌕" Foreground="#747B8B" Margin="0,0,8,0"/><TextBox x:Name="SearchBox" TextChanged="SearchBox_TextChanged" Background="Transparent" BorderThickness="0" Foreground="#F4F6FA" CaretBrush="#F4F6FA"/></DockPanel></Border></StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"><Button Content="⚙" Click="Settings_Click" ToolTip="Settings" Margin="0,0,9,0" Padding="11,8" FontSize="14" Background="#161A22" Foreground="#BCC2CD" BorderBrush="#303744"/><Button Content="⊙  Duplicates" Click="Duplicates_Click" Margin="0,0,9,0" Padding="13,8" Background="#161A22" Foreground="#BCC2CD" BorderBrush="#303744"/><Button x:Name="CleanupTitlesButton" Content="🧹  Clean up" Click="CleanupTitles_Click" ToolTip="Strip Official Video/Cover/feat. tags and Album/Artist-name prefixes out of every track title" Visibility="Collapsed" Margin="0,0,9,0" Padding="13,8" Background="#161A22" Foreground="#BCC2CD" BorderBrush="#303744"/><Border Width="260" Height="39" Background="#12151C" BorderBrush="#262C38" BorderThickness="1" CornerRadius="10" Padding="12,7"><DockPanel><TextBlock Text="⌕" Foreground="#747B8B" Margin="0,0,8,0"/><ctrl:AutoCompleteTextBox SuggestionField="Any" x:Name="SearchBox" TextChanged="SearchBox_TextChanged" Background="Transparent" BorderThickness="0" Foreground="#F4F6FA" CaretBrush="#F4F6FA"/></DockPanel></Border></StackPanel>
             </Grid>
             <Grid x:Name="GroupsScroller" Grid.Row="1" Margin="0,28,0,0">
                 <ListBox x:Name="GroupsView" Background="Transparent" BorderThickness="0" SelectionMode="Extended"
@@ -621,9 +621,20 @@
                                                     <Grid.RenderTransform><RotateTransform/></Grid.RenderTransform>
                                                     <Ellipse Stroke="#8B7CFF" StrokeThickness="1.8" StrokeDashArray="3.1 1.5" StrokeDashCap="Round"/>
                                                 </Grid>
-                                                <TextBox DockPanel.Dock="Left" Width="300" Tag="Name" Text="{Binding Name, UpdateSourceTrigger=LostFocus}"
-                                                         Style="{StaticResource NodeField}" PreviewMouseLeftButtonDown="NodeName_PreviewMouseDown"
-                                                         ToolTip="Double-click a track or single to preview it · arrow keys move between fields"/>
+                                                <ctrl:AutoCompleteTextBox DockPanel.Dock="Left" Width="300" Tag="Name" Text="{Binding Name, UpdateSourceTrigger=LostFocus}"
+                                                         PreviewMouseLeftButtonDown="NodeName_PreviewMouseDown"
+                                                         ToolTip="Double-click a track or single to preview it · arrow keys move between fields">
+                                                    <!-- The name box holds an artist, album or track title depending on the row. -->
+                                                    <ctrl:AutoCompleteTextBox.Style>
+                                                        <Style TargetType="ctrl:AutoCompleteTextBox" BasedOn="{StaticResource NodeField}">
+                                                            <Setter Property="SuggestionField" Value="Title"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Kind}" Value="Artist"><Setter Property="SuggestionField" Value="Artist"/></DataTrigger>
+                                                                <DataTrigger Binding="{Binding Kind}" Value="Album"><Setter Property="SuggestionField" Value="Album"/></DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </ctrl:AutoCompleteTextBox.Style>
+                                                </ctrl:AutoCompleteTextBox>
                                                 <TextBox DockPanel.Dock="Left" Width="44" Tag="Track" Text="{Binding TrackNumberText, UpdateSourceTrigger=LostFocus}"
                                                          Style="{StaticResource NodeField}" Visibility="{Binding ShowTrackNumber, Converter={StaticResource B2V}}"
                                                          ToolTip="Track number"/>
@@ -712,7 +723,7 @@
                 <Border Width="260" Height="39" HorizontalAlignment="Right" VerticalAlignment="Top" Background="#12151C" BorderBrush="#262C38" BorderThickness="1" CornerRadius="10" Padding="12,7">
                     <DockPanel>
                         <TextBlock Text="⌕" Foreground="#747B8B" Margin="0,0,8,0"/>
-                        <TextBox x:Name="TagsSearchBox" TextChanged="TagsSearchBox_TextChanged" Background="Transparent" BorderThickness="0" Foreground="#F4F6FA" CaretBrush="#F4F6FA"/>
+                        <ctrl:AutoCompleteTextBox SuggestionField="Any" x:Name="TagsSearchBox" TextChanged="TagsSearchBox_TextChanged" Background="Transparent" BorderThickness="0" Foreground="#F4F6FA" CaretBrush="#F4F6FA"/>
                     </DockPanel>
                 </Border>
             </Grid>
@@ -885,7 +896,7 @@
                 <Border Width="290" Height="39" HorizontalAlignment="Right" VerticalAlignment="Top" Background="#12151C" BorderBrush="#262C38" BorderThickness="1" CornerRadius="10" Padding="12,7">
                     <DockPanel>
                         <TextBlock Text="⌕" Foreground="#747B8B" Margin="0,0,8,0"/>
-                        <TextBox x:Name="PodcastSearchBox" KeyDown="PodcastSearchBox_KeyDown" Background="Transparent" BorderThickness="0" Foreground="#F4F6FA" CaretBrush="#F4F6FA"/>
+                        <ctrl:AutoCompleteTextBox x:Name="PodcastSearchBox" KeyDown="PodcastSearchBox_KeyDown" Background="Transparent" BorderThickness="0" Foreground="#F4F6FA" CaretBrush="#F4F6FA"/>
                     </DockPanel>
                 </Border>
             </Grid>

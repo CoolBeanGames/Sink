@@ -41,6 +41,15 @@ public partial class MainWindow
     private void InitPodcasts()
     {
         _podcasts.AddRange(PodcastStore.Load());
+        // Directory search autocompletes from shows you follow and the last
+        // search's results (titles and hosts).
+        PodcastSearchBox.SuggestionProvider = () =>
+            _podcasts.SelectMany(p => new[] { p.Title, p.Author })
+                .Concat(_searchResults.SelectMany(r => new[] { r.Title, r.Author }))
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Select(s => s.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(s => s, StringComparer.OrdinalIgnoreCase);
         _podcastPlayer.Volume = 0.7;
         _podcastPlayer.MediaOpened += (_, _) =>
         {
