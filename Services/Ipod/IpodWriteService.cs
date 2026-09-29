@@ -57,7 +57,7 @@ public static class IpodWriteService
         string? deviceId = null,
         bool mirror = false)
     {
-        var eligible = tracks.Where(t => IsSyncable(t.FilePath)).ToList();
+        var eligible = tracks.Where(t => IsSyncable(t.FilePath) || IpodTranscoder.CanTranscode(t.FilePath)).ToList();
         var skipped = tracks.Count - eligible.Count;
         if (eligible.Count == 0 && !mirror) return new IpodSyncResult(0, 0, skipped, null);
         Log.Info($"iPod sync: {eligible.Count} eligible track(s), {skipped} skipped, mirror {mirror}, root {root}");
@@ -97,13 +97,19 @@ public static class IpodWriteService
             }
 
             var byKey = BuildKeyIndex(ipod);
+            using var prefetch = new IpodTranscoder.Prefetcher(token);
             for (var i = 0; i < eligible.Count; i++)
             {
                 token.ThrowIfCancellationRequested(); // task 129 — Stop syncing button
                 var src = eligible[i];
+                PrefetchAhead(prefetch, byKey, eligible, i);
                 progress?.Report((i, eligible.Count, $"Copying {src.Title}"));
                 var currentKey = IpodDbTrack.MakeKey(src.Title, src.Artist, src.Album, src.TrackNumber);
-                var onDevice = FindDriftedTrack(byKey, src, currentKey);
+                // A file that has to be converted is matched against the device
+                // up front, so a re-sync never re-converts what's already there
+                // just to have Add() reject it as a duplicate.
+                var onDevice = FindDriftedTrack(byKey, src, currentKey)
+                    ?? (IpodTranscoder.NeedsTranscode(src.FilePath) ? byKey.GetValueOrDefault(currentKey) : null);
                 if (onDevice is not null)
                 {
                     present++;
@@ -113,7 +119,8 @@ public static class IpodWriteService
                 {
                     try
                     {
-                        onDevice = ipod.Tracks.Add(NewTrackFrom(src));
+                        onDevice = AddTrack(ipod, src, prefetch, progress, i, eligible.Count);
+                        if (onDevice is null) { skipped++; continue; }
                         MarkPodcast(onDevice, src);
                         added++;
                         changedDb = true;
@@ -186,7 +193,7 @@ public static class IpodWriteService
         string? deviceId = null,
         bool mirror = false)
     {
-        var eligible = tracks.Where(t => IsSyncable(t.FilePath)).ToList();
+        var eligible = tracks.Where(t => IsSyncable(t.FilePath) || IpodTranscoder.CanTranscode(t.FilePath)).ToList();
         var skipped = tracks.Count - eligible.Count;
         if (eligible.Count == 0) return new IpodSyncResult(0, 0, skipped, null);
         Log.Info($"iPod playlist sync: \"{playlistName}\", {eligible.Count} eligible track(s), root {root}");
@@ -213,13 +220,19 @@ public static class IpodWriteService
             Log.Info($"iPod playlist sync: \"{playlistName}\" {(isNewPlaylist ? "created" : "found existing")}, had {playlist.TrackCount} track(s), {ipod.Playlists.Count} playlist(s) total on device");
 
             var byKey = BuildKeyIndex(ipod);
+            using var prefetch = new IpodTranscoder.Prefetcher(token);
             for (var i = 0; i < eligible.Count; i++)
             {
                 token.ThrowIfCancellationRequested(); // task 129 — Stop syncing button
                 var src = eligible[i];
+                PrefetchAhead(prefetch, byKey, eligible, i);
                 progress?.Report((i, eligible.Count, $"Copying {src.Title}"));
                 var currentKey = IpodDbTrack.MakeKey(src.Title, src.Artist, src.Album, src.TrackNumber);
-                var onDevice = FindDriftedTrack(byKey, src, currentKey);
+                // A file that has to be converted is matched against the device
+                // up front, so a re-sync never re-converts what's already there
+                // just to have Add() reject it as a duplicate.
+                var onDevice = FindDriftedTrack(byKey, src, currentKey)
+                    ?? (IpodTranscoder.NeedsTranscode(src.FilePath) ? byKey.GetValueOrDefault(currentKey) : null);
                 if (onDevice is not null)
                 {
                     present++;
@@ -229,7 +242,8 @@ public static class IpodWriteService
                 {
                     try
                     {
-                        onDevice = ipod.Tracks.Add(NewTrackFrom(src));
+                        onDevice = AddTrack(ipod, src, prefetch, progress, i, eligible.Count);
+                        if (onDevice is null) { skipped++; continue; }
                         MarkPodcast(onDevice, src);
                         added++;
                         changedDb = true;
@@ -743,13 +757,56 @@ public static class IpodWriteService
         catch (Exception ex) { Log.Warn($"iPod playlist sync: verify re-read failed: {ex.Message}"); }
     }
 
-    private static NewTrack NewTrackFrom(Track src)
+    /// <summary>
+    /// Copies one library track onto the device, converting it first when the
+    /// iPod can't play its format (FLAC and friends). Returns null â€” the track
+    /// is skipped â€” if that conversion fails; the temporary converted file is
+    /// deleted as soon as Clickwheel has copied it (Add copies immediately).
+    /// </summary>
+    private static CwTrack? AddTrack(IPod ipod, Track src, IpodTranscoder.Prefetcher prefetch,
+        IProgress<(int done, int total, string message)>? progress, int index, int total)
+    {
+        string? temp = null;
+        try
+        {
+            var file = src.FilePath!;
+            if (IpodTranscoder.NeedsTranscode(file))
+            {
+                progress?.Report((index, total, $"Converting {src.Title}"));
+                try { temp = prefetch.Take(file); }
+                catch (InvalidOperationException ex)
+                {
+                    Log.Warn($"iPod sync: skipped {file} â€” {ex.Message}");
+                    return null;
+                }
+                progress?.Report((index, total, $"Copying {src.Title}"));
+                file = temp;
+            }
+            return ipod.Tracks.Add(NewTrackFrom(src, file));
+        }
+        finally { IpodTranscoder.TryDelete(temp); }
+    }
+
+    /// <summary>Starts converting the next few tracks that will need it while the current one copies.</summary>
+    private static void PrefetchAhead(IpodTranscoder.Prefetcher prefetch, Dictionary<string, CwTrack> byKey, List<Track> eligible, int index)
+    {
+        for (var j = index; j < Math.Min(eligible.Count, index + 4); j++)
+        {
+            var t = eligible[j];
+            if (!IpodTranscoder.NeedsTranscode(t.FilePath)) continue;
+            if (byKey.ContainsKey(IpodDbTrack.MakeKey(t.Title, t.Artist, t.Album, t.TrackNumber))) continue;
+            if (t.LastSyncedKey is not null && byKey.ContainsKey(t.LastSyncedKey)) continue;
+            prefetch.Queue(t.FilePath!);
+        }
+    }
+
+    private static NewTrack NewTrackFrom(Track src, string file)
     {
         uint length = (uint)Math.Clamp(src.Duration.TotalMilliseconds, 0, uint.MaxValue);
         uint bitrate = 0;
         try
         {
-            using var media = TagLib.File.Create(src.FilePath);
+            using var media = TagLib.File.Create(file);
             if (media.Properties.Duration > TimeSpan.Zero)
                 length = (uint)Math.Clamp(media.Properties.Duration.TotalMilliseconds, 0, uint.MaxValue);
             bitrate = (uint)Math.Max(0, media.Properties.AudioBitrate);
@@ -758,7 +815,7 @@ public static class IpodWriteService
 
         return new NewTrack
         {
-            FilePath = src.FilePath!,
+            FilePath = file,
             Title = string.IsNullOrWhiteSpace(src.Title) ? Path.GetFileNameWithoutExtension(src.FilePath) : src.Title,
             Artist = src.Artist,
             AlbumArtist = src.Artist,
