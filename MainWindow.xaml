@@ -497,15 +497,15 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Margin="0,0,8,0">
                             <TextBlock Text="TRACK" Style="{StaticResource EyebrowStyle}" Margin="2,0,0,5"/>
-                            <TextBox x:Name="SearchTrackBox" Style="{StaticResource DownloadSearchFieldStyle}" KeyDown="MusicSearchBox_KeyDown" ToolTip="Track title — press Enter to search"/>
+                            <ctrl:AutoCompleteTextBox SuggestionField="Title" x:Name="SearchTrackBox" Style="{StaticResource DownloadSearchFieldStyle}" KeyDown="MusicSearchBox_KeyDown" ToolTip="Track title — press Enter to search"/>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Margin="0,0,8,0">
                             <TextBlock Text="ALBUM" Style="{StaticResource EyebrowStyle}" Margin="2,0,0,5"/>
-                            <TextBox x:Name="SearchAlbumBox" Style="{StaticResource DownloadSearchFieldStyle}" KeyDown="MusicSearchBox_KeyDown" ToolTip="Album title — press Enter to search"/>
+                            <ctrl:AutoCompleteTextBox SuggestionField="Album" x:Name="SearchAlbumBox" Style="{StaticResource DownloadSearchFieldStyle}" KeyDown="MusicSearchBox_KeyDown" ToolTip="Album title — press Enter to search"/>
                         </StackPanel>
                         <StackPanel Grid.Column="2" Margin="0,0,8,0">
                             <TextBlock Text="ARTIST" Style="{StaticResource EyebrowStyle}" Margin="2,0,0,5"/>
-                            <TextBox x:Name="SearchArtistBox" Style="{StaticResource DownloadSearchFieldStyle}" KeyDown="MusicSearchBox_KeyDown" ToolTip="Artist name — press Enter to search"/>
+                            <ctrl:AutoCompleteTextBox SuggestionField="Artist" x:Name="SearchArtistBox" Style="{StaticResource DownloadSearchFieldStyle}" KeyDown="MusicSearchBox_KeyDown" ToolTip="Artist name — press Enter to search"/>
                         </StackPanel>
                         <Button x:Name="MusicSearchButton" Grid.Column="3" Content="Search catalog" VerticalAlignment="Bottom" Click="MusicSearchButton_Click"
                                 Style="{StaticResource PrimaryButtonStyle}" Height="40" Padding="17,0"/>
@@ -1203,15 +1203,15 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0" Margin="0,0,4,0">
                                     <TextBlock Text="Track" Foreground="#7D8493" FontSize="10" Margin="2,2,0,2"/>
-                                    <TextBox x:Name="OverlaySearchTrackBox" Height="30" Padding="8,0" FontSize="12" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center" KeyDown="OverlayMusicSearchBox_KeyDown" ToolTip="Track title — press Enter to search" />
+                                    <ctrl:AutoCompleteTextBox SuggestionField="Title" x:Name="OverlaySearchTrackBox" Height="30" Padding="8,0" FontSize="12" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center" KeyDown="OverlayMusicSearchBox_KeyDown" ToolTip="Track title — press Enter to search" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Margin="0,0,4,0">
                                     <TextBlock Text="Album" Foreground="#7D8493" FontSize="10" Margin="2,2,0,2"/>
-                                    <TextBox x:Name="OverlaySearchAlbumBox" Height="30" Padding="8,0" FontSize="12" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center" KeyDown="OverlayMusicSearchBox_KeyDown" ToolTip="Album title — press Enter to search" />
+                                    <ctrl:AutoCompleteTextBox SuggestionField="Album" x:Name="OverlaySearchAlbumBox" Height="30" Padding="8,0" FontSize="12" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center" KeyDown="OverlayMusicSearchBox_KeyDown" ToolTip="Album title — press Enter to search" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Margin="0,0,4,0">
                                     <TextBlock Text="Artist" Foreground="#7D8493" FontSize="10" Margin="2,2,0,2"/>
-                                    <TextBox x:Name="OverlaySearchArtistBox" Height="30" Padding="8,0" FontSize="12" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center" KeyDown="OverlayMusicSearchBox_KeyDown" ToolTip="Artist name — press Enter to search" />
+                                    <ctrl:AutoCompleteTextBox SuggestionField="Artist" x:Name="OverlaySearchArtistBox" Height="30" Padding="8,0" FontSize="12" Foreground="#F4F6FA" CaretBrush="#F4F6FA" Background="Transparent" BorderThickness="0" VerticalContentAlignment="Center" KeyDown="OverlayMusicSearchBox_KeyDown" ToolTip="Artist name — press Enter to search" />
                                 </StackPanel>
                                 <Button x:Name="OverlayMusicSearchButton" Grid.Column="3" VerticalAlignment="Bottom" Content="Search" Click="OverlayMusicSearchButton_Click" Style="{StaticResource PrimaryButtonStyle}" Height="30" Padding="12,0" Margin="4"/>
                             </Grid>

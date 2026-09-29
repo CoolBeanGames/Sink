@@ -41,6 +41,31 @@ public partial class MainWindow
         _previewPlayer.MediaEnded += (_, _) => StopPreview("finished");
         foreach (var node in DownloadQueueStore.Load()) _rootNodes.Add(node);
         RefreshDownloadChrome();
+        MetadataIndex.ExtraSource = QueuedMetadata;
+    }
+
+    /// <summary>
+    /// Every value already typed or fetched into the download queue, so the
+    /// queue's own fields and the catalog search boxes can autocomplete from
+    /// it as well as from the library — artist and album nodes included. A
+    /// mixed playlist container's "artist" is really the playlist's name, so
+    /// it isn't offered as an artist.
+    /// </summary>
+    private IEnumerable<MetadataValues> QueuedMetadata()
+    {
+        var stack = new Stack<DownloadNode>(_rootNodes);
+        while (stack.Count > 0)
+        {
+            var node = stack.Pop();
+            var isTrack = node.Kind is DownloadKind.Track or DownloadKind.Single;
+            var isPlaylistName = node.Kind == DownloadKind.Artist && node.IsMixedPlaylist;
+            yield return new MetadataValues(
+                isTrack ? node.Title : null,
+                isPlaylistName ? null : node.Artist,
+                node.Album,
+                node.Genre);
+            foreach (var child in node.Children) stack.Push(child);
+        }
     }
 
     // ---- Per-row "busy" spinner --------------------------------------

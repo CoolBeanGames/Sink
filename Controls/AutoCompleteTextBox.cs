@@ -8,7 +8,7 @@ using Sink.Services;
 
 namespace Sink.Controls;
 
-public enum SuggestionField { None, Artist, Album, Genre }
+public enum SuggestionField { None, Artist, Album, Genre, Title }
 
 /// <summary>
 /// A dark-styled text box that drops down matching suggestions as you type and
@@ -74,9 +74,10 @@ public class AutoCompleteTextBox : TextBox
     private IReadOnlyList<string> Source() =>
         Suggestions?.ToList() ?? SuggestionField switch
         {
-            SuggestionField.Artist => MetadataIndex.Artists,
-            SuggestionField.Album => MetadataIndex.Albums,
-            SuggestionField.Genre => MetadataIndex.Genres,
+            SuggestionField.Artist => MetadataIndex.ArtistSuggestions(),
+            SuggestionField.Album => MetadataIndex.AlbumSuggestions(),
+            SuggestionField.Genre => MetadataIndex.GenreSuggestions(),
+            SuggestionField.Title => MetadataIndex.TitleSuggestions(),
             _ => [],
         };
 
