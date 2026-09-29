@@ -510,7 +510,11 @@
             </Border>
             <Border Grid.Row="2" Margin="0,14,0,0" Style="{StaticResource DownloadCardStyle}">
                 <Grid>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <!-- The queue row takes whatever height the card has left, so the
+                         tree scrolls inside it. It used to be Auto with a fixed
+                         MaxHeight, which overflowed the card on shorter windows and
+                         clipped the last rows and the bottom of the scrollbar. -->
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                     <Grid Margin="16,12,12,12">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Margin="0,0,16,0">
@@ -521,7 +525,7 @@
                     </Grid>
                     <Border Grid.Row="1" BorderBrush="#20252F" BorderThickness="0,1,0,0">
                         <Grid>
-                            <Border x:Name="DownloadEmptyHint" Background="#0F1218" CornerRadius="9" Margin="12" Padding="18,16">
+                            <Border x:Name="DownloadEmptyHint" Background="#0F1218" CornerRadius="9" Margin="12" Padding="18,16" VerticalAlignment="Top">
                                 <StackPanel HorizontalAlignment="Center">
                                     <Border Width="34" Height="34" CornerRadius="17" Background="#211E36" HorizontalAlignment="Center">
                                         <TextBlock Text="↓" Foreground="#AFA7FF" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -530,7 +534,7 @@
                                     <TextBlock Text="Search the catalog above or paste a direct link to get started." Foreground="#737B89" FontSize="11" HorizontalAlignment="Center" Margin="0,3,0,0"/>
                                 </StackPanel>
                             </Border>
-                            <TreeView x:Name="LinksTree" Background="Transparent" BorderThickness="0" MaxHeight="430" Padding="8,8,8,10"
+                            <TreeView x:Name="LinksTree" Background="Transparent" BorderThickness="0" Padding="8,8,8,10"
                                       VirtualizingStackPanel.IsVirtualizing="True"
                                       VirtualizingStackPanel.VirtualizationMode="Recycling"
                                       VirtualizingPanel.ScrollUnit="Pixel"
