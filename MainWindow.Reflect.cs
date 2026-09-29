@@ -22,7 +22,44 @@ public partial class MainWindow
     private void InitReflect()
     {
         _listenEvents.AddRange(ReflectStore.Load());
+        if (BackfillListenSnapshots()) ReflectStore.Save(_listenEvents);
         RecomputePlayCounts();
+    }
+
+    /// <summary>
+    /// Copies song/show details onto listen events recorded before events
+    /// carried their own, while the item is still in the library — so a later
+    /// delete doesn't erase it from Reflect. Returns true if anything changed.
+    /// </summary>
+    private bool BackfillListenSnapshots()
+    {
+        var tracksById = _tracks.GroupBy(t => t.Id).ToDictionary(g => g.Key, g => g.First());
+        var changed = false;
+        foreach (var ev in _listenEvents)
+        {
+            if (ev.HasSnapshot) continue;
+            if (ev.Kind == ListenKind.Song && tracksById.TryGetValue(ev.ItemId, out var track))
+            {
+                ev.SnapshotFrom(track);
+                changed = true;
+            }
+            else if (ev.Kind == ListenKind.PodcastEpisode && SnapshotPodcast(ev))
+                changed = true;
+        }
+        return changed;
+    }
+
+    private bool SnapshotPodcast(ListenEvent ev)
+    {
+        foreach (var show in _podcasts)
+            foreach (var episode in show.Episodes)
+                if (episode.Id == ev.ItemId)
+                {
+                    ev.Title = episode.Title;
+                    ev.Show = show.Title;
+                    return true;
+                }
+        return false;
     }
 
     /// <summary>
@@ -77,7 +114,9 @@ public partial class MainWindow
         var threshold = TimeSpan.FromSeconds(Math.Min(30, Math.Max(1, full.TotalSeconds)));
         if (_simulatedPosition < threshold) return;
         var completed = full > TimeSpan.Zero && _simulatedPosition >= full - TimeSpan.FromSeconds(2);
-        _listenEvents.Add(new ListenEvent { Kind = ListenKind.Song, ItemId = _nowPlaying.Id, Duration = _simulatedPosition, Completed = completed });
+        var listen = new ListenEvent { Kind = ListenKind.Song, ItemId = _nowPlaying.Id, Duration = _simulatedPosition, Completed = completed };
+        listen.SnapshotFrom(_nowPlaying);
+        _listenEvents.Add(listen);
         ReflectStore.Save(_listenEvents);
         _nowPlayingListenRecorded = true;
         // Live-refresh the PLAYS column (and Tags page) right away rather
@@ -90,7 +129,9 @@ public partial class MainWindow
     private void RecordPodcastListen(Guid episodeId, TimeSpan elapsed, bool completed)
     {
         if (elapsed < TimeSpan.FromSeconds(30) && !completed) return;
-        _listenEvents.Add(new ListenEvent { Kind = ListenKind.PodcastEpisode, ItemId = episodeId, Duration = elapsed, Completed = completed });
+        var listen = new ListenEvent { Kind = ListenKind.PodcastEpisode, ItemId = episodeId, Duration = elapsed, Completed = completed };
+        SnapshotPodcast(listen);
+        _listenEvents.Add(listen);
         ReflectStore.Save(_listenEvents);
     }
 
@@ -134,7 +175,11 @@ public partial class MainWindow
             if (delta > 0)
             {
                 for (var i = 0; i < delta; i++)
-                    _listenEvents.Add(new ListenEvent { Kind = ListenKind.Song, ItemId = track.Id, Duration = track.Duration, Completed = true });
+                    {
+                        var listen = new ListenEvent { Kind = ListenKind.Song, ItemId = track.Id, Duration = track.Duration, Completed = true };
+                        listen.SnapshotFrom(track);
+                        _listenEvents.Add(listen);
+                    }
                 recorded += delta;
             }
             else deltaZero++;
@@ -206,9 +251,18 @@ public partial class MainWindow
         ReflectYearSubtitle.Text = $"{DateTime.Now.Year} so far";
         var yearStart = new DateTime(DateTime.Now.Year, 1, 1);
         var thisYear = _listenEvents.Where(ev => ev.Occurred >= yearStart).ToList();
-        var songEvents = thisYear.Where(ev => ev.Kind == ListenKind.Song).ToList();
+        if (BackfillListenSnapshots()) ReflectStore.Save(_listenEvents);
         var podcastEvents = thisYear.Where(ev => ev.Kind == ListenKind.PodcastEpisode).ToList();
-        var tracksById = _tracks.ToDictionary(t => t.Id);
+        var tracksById = _tracks.GroupBy(t => t.Id).ToDictionary(g => g.Key, g => g.First());
+        // A song still in the library shows its current details; a deleted
+        // one falls back to what was recorded with the listen itself.
+        var songEvents = thisYear.Where(ev => ev.Kind == ListenKind.Song)
+            .Select(ev => (Event: ev, Info: tracksById.TryGetValue(ev.ItemId, out var t)
+                ? new ListenInfo(t.Title, t.Artist, t.Album, t.Genre)
+                : ev.HasSnapshot ? new ListenInfo(ev.Title!, ev.Artist ?? "", ev.Album ?? "", ev.Genre ?? "") : null))
+            .Where(x => x.Info is not null)
+            .Select(x => (x.Event, Info: x.Info!))
+            .ToList();
 
         var totalTime = TimeSpan.FromTicks(thisYear.Sum(ev => ev.Duration.Ticks));
         ReflectTotalTimeText.Text = FormatDuration(totalTime);
@@ -218,18 +272,17 @@ public partial class MainWindow
 
         ReflectEpisodesCompletedText.Text = podcastEvents.Count(ev => ev.Completed).ToString();
 
-        ReflectTopSongs.ItemsSource = songEvents.GroupBy(ev => ev.ItemId)
-            .Select(g => (Track: tracksById.GetValueOrDefault(g.Key), Count: g.Count()))
-            .Where(x => x.Track is not null)
+        ReflectTopSongs.ItemsSource = songEvents.GroupBy(x => (x.Info.Title.ToLowerInvariant(), x.Info.Artist.ToLowerInvariant()))
+            .Select(g => (g.First().Info, Count: g.Count()))
             .OrderByDescending(x => x.Count)
             .Take(10)
-            .Select(x => new RankedRow(x.Track!.Title, $"{x.Track.Artist} — {ListenText(x.Count)}"))
+            .Select(x => new RankedRow(x.Info.Title, $"{x.Info.Artist} — {ListenText(x.Count)}"))
             .ToList();
 
         ReflectTopAlbums.ItemsSource = songEvents
-            .Select(ev => tracksById.GetValueOrDefault(ev.ItemId))
-            .Where(t => t is not null && !string.IsNullOrWhiteSpace(t.Album))
-            .GroupBy(t => (t!.Album, t.Artist))
+            .Select(x => x.Info)
+            .Where(i => !string.IsNullOrWhiteSpace(i.Album))
+            .GroupBy(i => (i.Album, i.Artist))
             .Select(g => (g.Key.Album, g.Key.Artist, Count: g.Count()))
             .OrderByDescending(x => x.Count)
             .Take(10)
@@ -237,9 +290,9 @@ public partial class MainWindow
             .ToList();
 
         ReflectTopArtists.ItemsSource = songEvents
-            .Select(ev => tracksById.GetValueOrDefault(ev.ItemId))
-            .Where(t => t is not null && !string.IsNullOrWhiteSpace(t.Artist))
-            .GroupBy(t => t!.Artist)
+            .Select(x => x.Info)
+            .Where(i => !string.IsNullOrWhiteSpace(i.Artist))
+            .GroupBy(i => i.Artist)
             .Select(g => (Artist: g.Key, Count: g.Count()))
             .OrderByDescending(x => x.Count)
             .Take(10)
@@ -247,26 +300,29 @@ public partial class MainWindow
             .ToList();
 
         ReflectTopGenres.ItemsSource = songEvents
-            .Select(ev => tracksById.GetValueOrDefault(ev.ItemId))
-            .Where(t => t is not null && !string.IsNullOrWhiteSpace(t.Genre))
-            .GroupBy(t => t!.Genre)
+            .Select(x => x.Info)
+            .Where(i => !string.IsNullOrWhiteSpace(i.Genre))
+            .GroupBy(i => i.Genre)
             .Select(g => (Genre: g.Key, Count: g.Count()))
             .OrderByDescending(x => x.Count)
             .Take(5)
             .Select(x => new RankedRow(x.Genre, ListenText(x.Count)))
             .ToList();
 
-        var showByEpisode = _podcasts.SelectMany(p => p.Episodes.Select(ep => (ep.Id, Show: p))).ToDictionary(x => x.Id, x => x.Show);
+        var showByEpisode = _podcasts.SelectMany(p => p.Episodes.Select(ep => (ep.Id, Show: p)))
+            .GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First().Show.Title);
         ReflectTopPodcasts.ItemsSource = podcastEvents
-            .Select(ev => showByEpisode.GetValueOrDefault(ev.ItemId))
-            .Where(show => show is not null)
-            .GroupBy(show => show!.Title)
+            .Select(ev => showByEpisode.GetValueOrDefault(ev.ItemId) ?? ev.Show)
+            .Where(show => !string.IsNullOrWhiteSpace(show))
+            .GroupBy(show => show!)
             .Select(g => (Title: g.Key, Count: g.Count()))
             .OrderByDescending(x => x.Count)
             .Take(5)
             .Select(x => new RankedRow(x.Title, ListenText(x.Count)))
             .ToList();
     }
+
+    private sealed record ListenInfo(string Title, string Artist, string Album, string Genre);
 
     private static string ListenText(int count) => $"{count} listen{(count == 1 ? "" : "s")}";
 

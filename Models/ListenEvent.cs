@@ -17,4 +17,25 @@ public sealed class ListenEvent
 
     /// <summary>Reached its natural end rather than being skipped/switched away from.</summary>
     public bool Completed { get; init; }
+
+    // What was listened to, copied onto the event itself so Reflect can still
+    // show it after the song (or podcast show) is deleted from the library.
+    // Null on events recorded before this existed until they're backfilled
+    // from a still-present library item.
+    public string? Title { get; set; }
+    public string? Artist { get; set; }
+    public string? Album { get; set; }
+    public string? Genre { get; set; }
+    /// <summary>Podcast episodes only: the show's title.</summary>
+    public string? Show { get; set; }
+
+    public bool HasSnapshot => Title is not null;
+
+    public void SnapshotFrom(Track track)
+    {
+        Title = track.Title;
+        Artist = track.Artist;
+        Album = track.Album;
+        Genre = track.Genre;
+    }
 }
