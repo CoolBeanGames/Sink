@@ -722,7 +722,9 @@ public partial class MainWindow : Window
         var query = SearchBox?.Text?.Trim() ?? "";
         var ipodOnDevice = _source == LibrarySource.Ipod && _ipodLibrary is not null;
         var source = _source != LibrarySource.Ipod ? _tracks.ToList()
-            : ipodOnDevice ? _ipodTracks.ToList()
+            // Podcast episodes live under the iPod's Podcasts view, not its
+            // Songs/Artists/Albums/Genres.
+            : ipodOnDevice ? IpodMusicTracks()
             : _tracks.Where(track => _syncedTrackIds.Contains(track.Id)).ToList();
         if (_artistFilter is not null) source = source.Where(track => track.Artist == _artistFilter).ToList();
         IEnumerable<Track> visible = source;

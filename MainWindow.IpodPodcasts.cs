@@ -41,6 +41,16 @@ public partial class MainWindow
         return result;
     }
 
+    /// <summary>The adapted iPod tracks that are music (everything but podcast episodes), paired by index with the raw read like <see cref="IpodPodcastEpisodes"/>.</summary>
+    private List<Track> IpodMusicTracks()
+    {
+        if (_ipodLibrary is null) return [];
+        var result = new List<Track>();
+        var raw = _ipodLibrary.Tracks;
+        for (var i = 0; i < raw.Count && i < _ipodTracks.Count; i++)
+            if (!raw[i].IsPodcast) result.Add(_ipodTracks[i]);
+        return result;
+    }
     private void RenderIpodPodcasts()
     {
         GroupsScroller.Visibility = Visibility.Collapsed;
