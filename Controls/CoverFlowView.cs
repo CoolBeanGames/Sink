@@ -32,6 +32,10 @@ public sealed class CoverFlowView : UserControl
     private const double Spacing = T + 0.018;
     /// <summary>Extra room either side of the pulled-out case.</summary>
     private const double Gap = W / 2 + 0.28;
+    /// <summary>Width of the black hinge bar down the spine edge of the front and back.</summary>
+    private const double HingeWidth = 0.09;
+    /// <summary>Vertical field of view: WPF's FieldOfView is horizontal, so it's recomputed from this on resize to keep the shelf framed at any window shape.</summary>
+    private const double VerticalFov = 17;
     private const int BackWidth = 568, BackHeight = 500, BackHeaderHeight = 86, BackRowMax = 30;
 
     public event Action? CloseRequested;
@@ -97,7 +101,7 @@ public sealed class CoverFlowView : UserControl
         root.Children.Add(bar);
 
         // --- 3D scene ---
-        _viewport.Camera = new PerspectiveCamera(new Point3D(0, 0.5, 7.6), new Vector3D(0, -0.1, -1), new Vector3D(0, 1, 0), 36);
+        _viewport.Camera = new PerspectiveCamera(new Point3D(0, 0.5, 7.6), new Vector3D(0, -0.075, -1), new Vector3D(0, 1, 0), 36);
         var lights = new Model3DGroup();
         lights.Children.Add(new AmbientLight(Color.FromRgb(0x8C, 0x86, 0x80)));
         lights.Children.Add(new DirectionalLight(Color.FromRgb(0xD8, 0xD2, 0xC8), new Vector3D(-0.35, -0.55, -1)));
@@ -107,6 +111,15 @@ public sealed class CoverFlowView : UserControl
         _viewport.Children.Add(_caseRoot);
         Grid.SetRow(_viewport, 1);
         root.Children.Add(_viewport);
+        // Keep the vertical framing fixed: a shorter or wider window used to
+        // shrink the visible height and clip the top of the selected case.
+        _viewport.SizeChanged += (_, _) =>
+        {
+            if (_viewport.ActualHeight <= 0 || _viewport.Camera is not PerspectiveCamera camera) return;
+            var aspect = _viewport.ActualWidth / _viewport.ActualHeight;
+            var half = Math.Tan(VerticalFov * Math.PI / 360) * aspect;
+            camera.FieldOfView = Math.Min(150, 2 * Math.Atan(half) * 180 / Math.PI);
+        };
 
         // --- caption + play ---
         var footer = new StackPanel { Margin = new Thickness(24, 0, 24, 22), HorizontalAlignment = HorizontalAlignment.Center };
@@ -379,8 +392,17 @@ public sealed class CoverFlowView : UserControl
                 return model;
             }
             double x0 = -W / 2, x1 = W / 2, y0 = -H / 2, y1 = H / 2, z0 = -T / 2, z1 = T / 2;
-            Face(new(x0, y0, z1), new(x1, y0, z1), new(x1, y1, z1), new(x0, y1, z1), front);                    // front: art
-            _back = Face(new(x1, y0, z0), new(x0, y0, z0), new(x0, y1, z0), new(x1, y1, z0), plastic, true);    // back: tracks (lazy)
+            // A real jewel case's hinge: a black bar down the spine edge of
+            // both faces — left of the art on the front, right of the insert
+            // on the back.
+            var hinge = new MaterialGroup();
+            hinge.Children.Add(new DiffuseMaterial(new SolidColorBrush(Color.FromRgb(0x0E, 0x0E, 0x10))));
+            hinge.Children.Add(new SpecularMaterial(new SolidColorBrush(Color.FromArgb(0x70, 0xFF, 0xFF, 0xFF)), 40));
+            var xh = x0 + HingeWidth;
+            Face(new(x0, y0, z1), new(xh, y0, z1), new(xh, y1, z1), new(x0, y1, z1), hinge);                    // front hinge
+            Face(new(xh, y0, z1), new(x1, y0, z1), new(x1, y1, z1), new(xh, y1, z1), front);                    // front: art
+            Face(new(xh, y0, z0), new(x0, y0, z0), new(x0, y1, z0), new(xh, y1, z0), hinge);                    // back hinge
+            _back = Face(new(x1, y0, z0), new(xh, y0, z0), new(xh, y1, z0), new(x1, y1, z0), plastic, true);    // back: tracks (lazy)
             Face(new(x0, y0, z0), new(x0, y0, z1), new(x0, y1, z1), new(x0, y1, z0),
                 new DiffuseMaterial(new ImageBrush(Spine(album))));                                                 // spine (−X)
             Face(new(x1, y0, z1), new(x1, y0, z0), new(x1, y1, z0), new(x1, y1, z1), plastic);                  // opening edge
