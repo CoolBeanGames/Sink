@@ -58,6 +58,38 @@ public sealed class Track : ITitleTrimmable
     [JsonIgnore]
     public bool IsMissing { get; set; }
 
+    /// <summary>Result of the last "Check quality" / "Download high quality" analysis (an <c>AudioQualityVerdict</c> name) of <see cref="QualityCheckedPath"/>.</summary>
+    public string? QualityVerdict { get; set; }
+    public string? QualityCheckedPath { get; set; }
+
+    /// <summary>
+    /// What playback will actually open — the library file's format, plus the
+    /// analysed quality when it's been checked ("FLAC · fake" is an MP3 in a
+    /// FLAC wrapper) and whether a separate high-quality original is kept.
+    /// </summary>
+    [JsonIgnore]
+    public string FormatText
+    {
+        get
+        {
+            var ext = System.IO.Path.GetExtension(FilePath ?? "").TrimStart('.').ToUpperInvariant();
+            if (ext.Length == 0) ext = "?";
+            var checkedThisFile = QualityVerdict is not null
+                && string.Equals(QualityCheckedPath, FilePath, StringComparison.OrdinalIgnoreCase);
+            var quality = !checkedThisFile ? "" : QualityVerdict switch
+            {
+                "Lossless" => " · lossless",
+                "FakeLossless" => " · fake",
+                _ => "",
+            };
+            return ext + quality + (OriginalPath is null ? "" : " · HQ kept");
+        }
+    }
+
+    [JsonIgnore]
+    public string FileTooltip =>
+        (FilePath ?? "(no file)") + (OriginalPath is null ? "" : $"\nHigh-quality original: {OriginalPath}");
+
     /// <summary>
     /// Total tracked listens (in-app + folded-in iPod plays) — recomputed by
     /// MainWindow.RecomputePlayCounts from ReflectStore's ListenEvents, not

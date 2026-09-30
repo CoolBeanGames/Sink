@@ -47,7 +47,13 @@ public partial class MainWindow
                 var track = tracks[i];
                 PlaybackStatus.Text = $"({i + 1}/{tracks.Count}) Checking quality of {track.Title}…";
                 var snapshot = (track.FilePath, track.OriginalPath);
-                if (!await Task.Run(() => NeedsHighQuality(snapshot.FilePath, snapshot.OriginalPath, keep, targetExtension)))
+                var (needed, checkedPath, verdict) = await Task.Run(() => NeedsHighQuality(snapshot.FilePath, snapshot.OriginalPath, keep, targetExtension));
+                if (verdict is { } v && checkedPath is not null && string.Equals(checkedPath, track.FilePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    track.QualityVerdict = v.ToString();
+                    track.QualityCheckedPath = checkedPath;
+                }
+                if (!needed)
                 {
                     alreadyGood++;
                     continue;
@@ -97,7 +103,9 @@ public partial class MainWindow
     }
 
     /// <summary>Whether a track needs a (re)download under the rules above. Blocking — runs the spectral check.</summary>
-    private static bool NeedsHighQuality(string? filePath, string? originalPath, bool keepHighQuality, string targetExtension)
+    /// <returns>Whether a download is needed, plus which file was analysed and its verdict (for the FORMAT column).</returns>
+    private static (bool Needed, string? CheckedPath, AudioQualityVerdict? Verdict) NeedsHighQuality(
+        string? filePath, string? originalPath, bool keepHighQuality, string targetExtension)
     {
         static bool IsFlac(string? path) =>
             path is not null && string.Equals(Path.GetExtension(path), ".flac", StringComparison.OrdinalIgnoreCase);
@@ -107,13 +115,51 @@ public partial class MainWindow
             var highQuality = originalPath is not null && File.Exists(originalPath) ? originalPath
                 : IsFlac(filePath) && File.Exists(filePath) ? filePath
                 : null;
-            return highQuality is null || AudioQuality.Classify(highQuality) != AudioQualityVerdict.Lossless;
+            if (highQuality is null) return (true, null, null);
+            var verdict = AudioQuality.Classify(highQuality);
+            return (verdict != AudioQualityVerdict.Lossless, highQuality, verdict);
         }
 
-        if (filePath is null || !File.Exists(filePath)) return true;
-        if (!string.Equals(Path.GetExtension(filePath), targetExtension, StringComparison.OrdinalIgnoreCase)) return true;
+        if (filePath is null || !File.Exists(filePath)) return (true, null, null);
+        if (!string.Equals(Path.GetExtension(filePath), targetExtension, StringComparison.OrdinalIgnoreCase)) return (true, null, null);
+        if (!IsFlac(filePath)) return (false, null, null);
         // Already the chosen format: only a fake FLAC still needs replacing.
-        return IsFlac(filePath) && AudioQuality.Classify(filePath) == AudioQualityVerdict.FakeLossless;
+        var fileVerdict = AudioQuality.Classify(filePath);
+        return (fileVerdict == AudioQualityVerdict.FakeLossless, filePath, fileVerdict);
+    }
+
+    /// <summary>Right-click "Check quality": analyses each track's library file and shows the result in the FORMAT column.</summary>
+    private async void CheckQuality(IReadOnlyList<Track> tracks)
+    {
+        int lossless = 0, fake = 0, lossy = 0, missing = 0;
+        for (var i = 0; i < tracks.Count; i++)
+        {
+            var track = tracks[i];
+            PlaybackStatus.Text = $"({i + 1}/{tracks.Count}) Checking quality of {track.Title}…";
+            var path = track.FilePath;
+            var verdict = await Task.Run(() => AudioQuality.Classify(path));
+            switch (verdict)
+            {
+                case AudioQualityVerdict.Lossless: lossless++; break;
+                case AudioQualityVerdict.FakeLossless: fake++; break;
+                case AudioQualityVerdict.Lossy: lossy++; break;
+                default: missing++; break;
+            }
+            if (verdict == AudioQualityVerdict.Missing) continue;
+            track.QualityVerdict = verdict.ToString();
+            track.QualityCheckedPath = path;
+        }
+        SaveLibrary();
+        TracksGrid.Items.Refresh();
+        PlaybackStatus.Text = $"Quality: {lossless} lossless, {fake} fake FLAC, {lossy} lossy" + (missing > 0 ? $", {missing} missing" : "")
+                              + (fake + lossy > 0 ? " — right-click ▸ Download high quality to upgrade" : "");
+    }
+
+    private void ShowInExplorer(string path)
+    {
+        if (!File.Exists(path)) { PlaybackStatus.Text = $"File not found: {path}"; return; }
+        try { System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\""); }
+        catch (Exception ex) { PlaybackStatus.Text = $"Couldn't open Explorer: {ex.Message}"; }
     }
 
     /// <summary>
@@ -147,6 +193,8 @@ public partial class MainWindow
         track.FilePath = destination;
         track.FileName = Path.GetFileName(destination);
         track.IsMissing = false;
+        track.QualityVerdict = null; // a new file, possibly at the same path — the old verdict no longer applies
+        track.QualityCheckedPath = null;
 
         if (newOriginal is not null)
         {
