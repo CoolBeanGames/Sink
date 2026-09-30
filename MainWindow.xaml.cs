@@ -1225,60 +1225,136 @@ public partial class MainWindow : Window
     private async void SyncIpod_Click(object sender, RoutedEventArgs e)
     {
         var header = (sender as MenuItem)?.Header as string ?? "";
-        // Pull whatever the device gained (play counts, podcast positions)
-        // since the last time Sink actually read it, right before any write
-        // below. The connect-time read alone wasn't enough — a device that
-        // never re-triggers a fresh connect event (same drive root, or the
-        // iPod's flapping identities) stayed "already loaded" and a click on
-        // Sync never picked up new listens (task 157).
-        var (refreshed, songsUpdated, podcastsUpdated) = (false, 0, 0);
-        if (_ipodDevice?.LibraryRoot is string syncRoot && !_ipodWriting)
-            (refreshed, songsUpdated, podcastsUpdated) = await RefreshIpodLibraryFromDeviceAsync(syncRoot);
-        var songsAdded = 0;
-        var podcastsAdded = 0;
-        if (header is "Sync all" or "Sync music")
+        var syncMusic = header is "Sync all" or "Sync music";
+        var syncPodcasts = header is "Sync all" or "Sync podcasts";
+        var changesOnly = !syncMusic && !syncPodcasts;
+        BeginSyncSession(1
+            + (syncMusic ? _tracks.Count + _playlists.Count : 0)
+            + (syncPodcasts ? PodcastEpisodesToSyncCount() : 0)
+            + (changesOnly ? 1 : 0));
+        try
         {
-            // A full sync mirrors the library: songs and playlists deleted in
-            // Sink come off the device too, not just new ones going on.
-            songsAdded = await SyncTracksToDevice(_tracks.ToList(), mirror: true);
-            await SyncAllPlaylistsToDevice(mirror: true);
-        }
-        if (header is "Sync all" or "Sync podcasts")
-            podcastsAdded = await SyncAllPodcastsToDevice();
-        if (header is not ("Sync all" or "Sync music" or "Sync podcasts"))
-        {
-            // "Sync changes" — flush play counts, podcast played status and
-            // bookmark positions (device→app, already happened above via
-            // RefreshIpodLibraryFromDeviceAsync), then push app→device
-            // metadata-only updates — in-app play counts and the
-            // exclude-from-shuffle flag — onto tracks already on the device.
-            // Never touches song/episode files; a never-synced track still
-            // needs "Sync all"/"Sync music".
-            var metadataUpdated = 0;
-            if (_ipodDevice?.LibraryRoot is string metaRoot && !_ipodWriting)
+            // Pull whatever the device gained (play counts, podcast positions)
+            // since the last time Sink actually read it, right before any write
+            // below. The connect-time read alone wasn't enough — a device that
+            // never re-triggers a fresh connect event (same drive root, or the
+            // iPod's flapping identities) stayed "already loaded" and a click on
+            // Sync never picked up new listens (task 157).
+            var (refreshed, songsUpdated, podcastsUpdated) = (false, 0, 0);
+            BeginSyncPhase(1);
+            if (_ipodDevice?.LibraryRoot is string syncRoot && !_ipodWriting)
+                (refreshed, songsUpdated, podcastsUpdated) = await RefreshIpodLibraryFromDeviceAsync(syncRoot);
+            EndSyncPhase();
+            var songsAdded = 0;
+            var podcastsAdded = 0;
+            if (syncMusic)
             {
-                RecomputePlayCounts();
-                var snapshot = _tracks.ToList();
-                var metaDeviceId = _ipodLibrary?.SerialNumber;
-                _ipodWriting = true;
-                try
-                {
-                    metadataUpdated = await Task.Run(() =>
-                        Sink.Services.Ipod.IpodWriteService.PushTrackMetadata(metaRoot, snapshot, metaDeviceId));
-                }
-                finally { _ipodWriting = false; }
-                SaveLibrary(); // persists LastSyncedKey/SyncedIpodPlayCounts set above
+                // A full sync mirrors the library: songs and playlists deleted in
+                // Sink come off the device too, not just new ones going on.
+                BeginSyncPhase(_tracks.Count);
+                songsAdded = await SyncTracksToDevice(_tracks.ToList(), mirror: true);
+                EndSyncPhase();
+                BeginSyncPhase(_playlists.Count);
+                await SyncAllPlaylistsToDevice(mirror: true);
+                EndSyncPhase();
             }
-            StartIpodSync();
-            PlaybackStatus.Text = !refreshed
-                ? "Connect an iPod before syncing changes"
-                : songsUpdated == 0 && podcastsUpdated == 0 && metadataUpdated == 0
-                    ? "No new play counts or podcast status to sync"
-                    : $"Synced changes — {songsUpdated} song play{(songsUpdated == 1 ? "" : "s")}, {podcastsUpdated} podcast update{(podcastsUpdated == 1 ? "" : "s")}, {metadataUpdated} track update{(metadataUpdated == 1 ? "" : "s")}";
+            if (syncPodcasts)
+            {
+                BeginSyncPhase(PodcastEpisodesToSyncCount());
+                podcastsAdded = await SyncAllPodcastsToDevice();
+                EndSyncPhase();
+            }
+            if (changesOnly)
+            {
+                BeginSyncPhase(1);
+                // "Sync changes" — flush play counts, podcast played status and
+                // bookmark positions (device→app, already happened above via
+                // RefreshIpodLibraryFromDeviceAsync), then push app→device
+                // metadata-only updates — in-app play counts and the
+                // exclude-from-shuffle flag — onto tracks already on the device.
+                // Never touches song/episode files; a never-synced track still
+                // needs "Sync all"/"Sync music".
+                var metadataUpdated = 0;
+                if (_ipodDevice?.LibraryRoot is string metaRoot && !_ipodWriting)
+                {
+                    RecomputePlayCounts();
+                    var snapshot = _tracks.ToList();
+                    var metaDeviceId = _ipodLibrary?.SerialNumber;
+                    _ipodWriting = true;
+                    try
+                    {
+                        metadataUpdated = await Task.Run(() =>
+                            Sink.Services.Ipod.IpodWriteService.PushTrackMetadata(metaRoot, snapshot, metaDeviceId));
+                    }
+                    finally { _ipodWriting = false; }
+                    SaveLibrary(); // persists LastSyncedKey/SyncedIpodPlayCounts set above
+                }
+                EndSyncPhase();
+                PlaybackStatus.Text = !refreshed
+                    ? "Connect an iPod before syncing changes"
+                    : songsUpdated == 0 && podcastsUpdated == 0 && metadataUpdated == 0
+                        ? "No new play counts or podcast status to sync"
+                        : $"Synced changes — {songsUpdated} song play{(songsUpdated == 1 ? "" : "s")}, {podcastsUpdated} podcast update{(podcastsUpdated == 1 ? "" : "s")}, {metadataUpdated} track update{(metadataUpdated == 1 ? "" : "s")}";
+            }
+            if (songsAdded > 0 || podcastsAdded > 0)
+                PostNotification("sync-complete", null,
+                    $"Syncing complete — {songsAdded} song{(songsAdded == 1 ? "" : "s")} synced, {podcastsAdded} podcast{(podcastsAdded == 1 ? "" : "s")} synced");
         }
-        if (songsAdded > 0 || podcastsAdded > 0)
-            PostNotification("sync-complete", null,
-                $"Syncing complete — {songsAdded} song{(songsAdded == 1 ? "" : "s")} synced, {podcastsAdded} podcast{(podcastsAdded == 1 ? "" : "s")} synced");
+        finally { EndSyncSession(); }
+    }
+
+    // ---- Combined sync progress ------------------------------------------
+    // One "sync session" spans every step of a Sync all / Sync music /
+    // Sync podcasts / Sync changes run. Each step is a phase worth a planned
+    // number of units (tracks, playlists, episodes); its own done/total
+    // progress is scaled into that share, so the SYNCING percentage next to
+    // the iPod label climbs steadily across all of them instead of resetting
+    // per step. Outside a session (one playlist, "Sync to iPod" on a
+    // selection) the percentage is just that operation's own.
+
+    private bool _syncSessionActive;
+    private double _syncSessionTotal = 1, _syncSessionDone, _syncPhaseBase, _syncPhaseUnits;
+    private int _syncPhaseId;
+
+    private void BeginSyncSession(int totalUnits)
+    {
+        _syncSessionTotal = Math.Max(1, totalUnits);
+        _syncSessionDone = _syncPhaseBase = _syncPhaseUnits = 0;
+        StartIpodSync(indefinite: true);
+        _syncSessionActive = _ipodSyncing;
+        ShowSyncPercent(0);
+    }
+
+    private void BeginSyncPhase(int units)
+    {
+        _syncPhaseId++;
+        _syncPhaseBase = _syncSessionDone;
+        _syncPhaseUnits = Math.Max(0, units);
+    }
+
+    private void EndSyncPhase()
+    {
+        _syncSessionDone = _syncPhaseBase + _syncPhaseUnits;
+        ShowSyncPercent(_syncSessionDone / _syncSessionTotal);
+    }
+
+    private void EndSyncSession()
+    {
+        _syncSessionActive = false;
+        StopIpodSync();
+    }
+
+    /// <summary>Progress from whatever step is running (done of total), folded into the session when there is one.</summary>
+    private void ReportSyncStep(int done, int total)
+    {
+        var step = total > 0 ? Math.Clamp((double)done / total, 0, 1) : 0;
+        ShowSyncPercent(_syncSessionActive ? (_syncPhaseBase + step * _syncPhaseUnits) / _syncSessionTotal : step);
+    }
+
+    private void ShowSyncPercent(double fraction)
+    {
+        if (!_ipodSyncing) return;
+        IpodStateText.Text = $"SYNCING · {(int)Math.Floor(Math.Clamp(fraction, 0, 1) * 100)}%";
     }
 
     private bool _ipodWriting;
@@ -1290,8 +1366,18 @@ public partial class MainWindow : Window
     /// <summary>Auto-sync on connect (task 138 — only tracks were pushed, playlist membership never followed).</summary>
     private async Task SyncOnConnectAsync()
     {
-        var added = await SyncTracksToDevice(_tracks.ToList());
-        await SyncAllPlaylistsToDevice();
+        int added;
+        BeginSyncSession(_tracks.Count + _playlists.Count);
+        try
+        {
+            BeginSyncPhase(_tracks.Count);
+            added = await SyncTracksToDevice(_tracks.ToList());
+            EndSyncPhase();
+            BeginSyncPhase(_playlists.Count);
+            await SyncAllPlaylistsToDevice();
+            EndSyncPhase();
+        }
+        finally { EndSyncSession(); }
         if (added > 0) PostNotification("sync-complete", null, $"Syncing complete — {added} song{(added == 1 ? "" : "s")} synced, 0 podcasts synced");
     }
 
@@ -1412,8 +1498,11 @@ public partial class MainWindow : Window
         var token = _ipodSyncCts.Token;
         try
         {
-            foreach (var playlist in _playlists.ToList())
+            var allPlaylists = _playlists.ToList();
+            for (var p = 0; p < allPlaylists.Count; p++)
             {
+                var playlist = allPlaylists[p];
+                ReportSyncStep(p, allPlaylists.Count);
                 var tracks = _tracks.Where(t => playlist.TrackIds.Contains(t.Id)).ToList();
                 if (tracks.Count == 0) continue;
                 await Task.Run(() => Sink.Services.Ipod.IpodWriteService.SyncPlaylist(root, playlist.Name, tracks, token: token, deviceId: deviceId, mirror: mirror));
@@ -1453,9 +1542,12 @@ public partial class MainWindow : Window
     /// </summary>
     private IProgress<(int done, int total, string message)> SyncProgress()
     {
+        var phase = _syncPhaseId;
         void Update((int done, int total, string message) p)
         {
             if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(() => Update(p)); return; }
+            // A late update from an earlier step must not count against the current one.
+            if (phase == _syncPhaseId) ReportSyncStep(p.done, p.total);
             var digits = p.total.ToString().Length;
             var paddedDone = (p.done + 1).ToString($"D{digits}");
             PlaybackStatus.Text = $"({paddedDone}/{p.total}) - {p.message}";
@@ -1566,6 +1658,7 @@ public partial class MainWindow : Window
 
     private void StopIpodSync()
     {
+        if (_syncSessionActive) return; // the session ends it once every step is done
         RecordRotation.BeginAnimation(RotateTransform.AngleProperty, null);
         SpinIndicator(IpodSpinner, false);
         _ipodSyncing = false;

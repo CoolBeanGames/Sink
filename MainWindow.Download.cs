@@ -1127,6 +1127,14 @@ public partial class MainWindow
             menu.Items.Add(Item("Number tracks by list order", () => NumberTracksByOrder(node.Parent)));
         if (node.Kind == DownloadKind.Album)
             menu.Items.Add(Item("Rescan tracks", () => { node.Scanned = false; node.IsExpanded = true; _ = ScanAlbumTracksAsync(node); }));
+        AddCatalogSearchItems(menu, node.Kind switch
+        {
+            DownloadKind.Album => MusicSearchResultKind.Album,
+            DownloadKind.Track or DownloadKind.Single => MusicSearchResultKind.Track,
+            _ => MusicSearchResultKind.Artist,
+        },
+            album: FirstFilled(node.Album, node.Parent?.Album),
+            artist: FirstFilled(node.Artist, node.Parent?.Artist, node.Parent?.Parent?.Artist));
         menu.Items.Add(Item("Copy link", () => CopyToClipboard(node.Url)));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Remove", () =>
@@ -1134,6 +1142,43 @@ public partial class MainWindow
             if (node.Parent is null) _rootNodes.Remove(node);
             else node.Parent.Children.Remove(node);
         }));
+    }
+
+    /// <summary>
+    /// Right-click shortcuts that jump the catalog search up a level: an album
+    /// offers "Search for artist", a track "Search for album" (with its artist,
+    /// so a common album title still finds the right one).
+    /// </summary>
+    private void AddCatalogSearchItems(ContextMenu menu, MusicSearchResultKind kind, string? album, string? artist)
+    {
+        if (kind == MusicSearchResultKind.Album && artist is not null)
+            menu.Items.Add(Item($"Search for artist “{artist}”", () => SearchCatalogFor("", "", artist)));
+        else if (kind == MusicSearchResultKind.Track && album is not null)
+            menu.Items.Add(Item($"Search for album “{album}”", () => SearchCatalogFor("", album, artist ?? "")));
+    }
+
+    private void SearchCatalogFor(string track, string album, string artist)
+    {
+        SearchTrackBox.Text = track;
+        SearchAlbumBox.Text = album;
+        SearchArtistBox.Text = artist;
+        _ = RunMusicSearchAsync();
+    }
+
+    private static string? FirstFilled(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v) && !v.Equals("Unknown Artist", StringComparison.OrdinalIgnoreCase)
+                                   && !v.Equals("Unknown Album", StringComparison.OrdinalIgnoreCase))?.Trim();
+
+    private void MusicSearchResults_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        var menu = MusicSearchResults.ContextMenu!;
+        menu.Items.Clear();
+        if (MusicSearchResults.SelectedItem is not MusicSearchResult result) { e.Handled = true; return; }
+        // An album result's Title is the album name.
+        AddCatalogSearchItems(menu, result.Kind,
+            album: result.Kind == MusicSearchResultKind.Album ? FirstFilled(result.Title) : FirstFilled(result.Album),
+            artist: FirstFilled(result.Artist));
+        if (menu.Items.Count == 0) e.Handled = true;
     }
 
     /// <summary>
@@ -1695,7 +1740,13 @@ public partial class MainWindow
                         UpdateAggregateProgress(queue);
                         ResetIdleTimeout();
                     });
-                    var status = new Progress<string>(s => SetDownloadStatus(s + linkLabel));
+                    // "Downloading: …" lines carry their own "n/total" inside an
+                    // album; a lone track gets its place in the queue instead.
+                    var itemCounter = $" - {index + 1}/{queue.Count}";
+                    var status = new Progress<string>(s => SetDownloadStatus(
+                        !s.StartsWith("Downloading: ", StringComparison.Ordinal) ? s + linkLabel
+                        : node.Kind is DownloadKind.Track or DownloadKind.Single ? s + itemCounter
+                        : s));
 
                     // Relocate (copy/move) and add each track the moment it's
                     // finalized, instead of waiting for the whole album to

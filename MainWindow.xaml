@@ -1274,7 +1274,9 @@
 
                     <ListBox x:Name="MusicSearchResults" Grid.Row="1" Background="#0F1218" BorderBrush="#262C38" BorderThickness="1"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.ScrollUnit="Pixel"
-                             SelectionChanged="MusicSearchResults_SelectionChanged">
+                             SelectionChanged="MusicSearchResults_SelectionChanged"
+                             ContextMenuOpening="MusicSearchResults_ContextMenuOpening">
+                        <ListBox.ContextMenu><ContextMenu/></ListBox.ContextMenu>
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch"/>

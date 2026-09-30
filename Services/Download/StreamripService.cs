@@ -57,8 +57,8 @@ public static partial class StreamripService
                     track.StatusText = "Downloading from Deezer…";
                 });
                 status?.Report(selected.Count == 1
-                    ? $"Downloading {track.Name} from Deezer"
-                    : $"Downloading track {i + 1}/{selected.Count} from Deezer");
+                    ? DownloadService.DownloadingLabel(track, options)
+                    : DownloadService.DownloadingLabel(track, options, i + 1, selected.Count));
 
                 try
                 {

@@ -614,6 +614,10 @@ public partial class MainWindow
         }
     }
 
+    /// <summary>How many episodes a podcast sync will push — its share of the combined sync percentage.</summary>
+    private int PodcastEpisodesToSyncCount() =>
+        _podcasts.Sum(show => show.Episodes.Count(PodcastRules.ShouldSyncToIpod));
+
     /// <summary>Pushes every downloaded episode across all subscribed shows onto the device (task 137 — "Sync podcasts" did nothing but spin the indicator). Returns how many episodes were actually added.</summary>
     private async Task<int> SyncAllPodcastsToDevice()
     {

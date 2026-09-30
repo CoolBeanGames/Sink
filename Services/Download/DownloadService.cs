@@ -160,6 +160,26 @@ public static partial class DownloadService
     /// caller doing copy/move-on-import can relocate each track as it lands
     /// instead of flushing the whole album at the end (task 121).
     /// </summary>
+    /// <summary>
+    /// The status-bar line for the track being downloaded:
+    /// "Downloading: Title - Album - Artist (Genre).ext - n/total". Blank
+    /// album/artist/genre fall back to the containing album/artist node and
+    /// are left out when still unknown; the counter only appears for a track
+    /// inside an album or playlist.
+    /// </summary>
+    internal static string DownloadingLabel(DownloadNode track, DownloadOptions options, int? n = null, int? total = null)
+    {
+        static string? First(params string?[] values) => values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim();
+        var title = First(track.Title, track.ScannedTitle, track.Name) ?? "Unknown track";
+        var album = First(track.Album, track.Parent?.Album);
+        var artist = First(track.Artist, track.Parent?.Artist, track.Parent?.Parent?.Artist);
+        var genre = First(track.Genre, track.Parent?.Genre, track.Parent?.Parent?.Genre);
+        if (string.Equals(genre, "Unknown", StringComparison.OrdinalIgnoreCase)) genre = null; // scan placeholder, not a real genre
+        var text = "Downloading: " + string.Join(" - ", new[] { title, album, artist }.Where(p => p is not null))
+                   + (genre is null ? "" : $" ({genre})") + "." + options.FormatExtension;
+        return n is { } index && total is { } count ? $"{text} - {index}/{count}" : text;
+    }
+
     public static async Task<IReadOnlyList<string>> DownloadAsync(
         DownloadNode node, DownloadOptions options, IProgress<double> progress,
         IProgress<string>? status = null, IProgress<string>? onTrackFile = null,
@@ -372,7 +392,9 @@ public static partial class DownloadService
             {
                 current = n - 1;
                 MarkTrackProgress(n);
-                status?.Report(isPlaylist ? $"Downloading track {n}/{total} from {source}" : $"Downloading {source}");
+                status?.Report(!isPlaylist ? DownloadingLabel(node, options)
+                    : n - 1 < titleOrder.Count ? DownloadingLabel(titleOrder[n - 1], options, n, total)
+                    : $"Downloading: track {n} of {node.Name} - {n}/{total}");
             }
 
             var pctMatch = ProgressLine().Match(line);
