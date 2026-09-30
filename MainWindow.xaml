@@ -245,6 +245,32 @@
         
         <GridSplitter Grid.Column="0" Width="4" Background="Transparent" VerticalAlignment="Stretch" HorizontalAlignment="Right" Cursor="SizeWE"/>
 
+        <!-- Now-playing backdrop: the playing artist's artwork (a podcast's
+             show art) at 20% behind the content area, blurred and feathered
+             out at the edges. Declared before the pages so it sits behind
+             them; fades in/out in code (ShowNowPlayingBackdrop). -->
+        <Grid x:Name="NowPlayingBackdrop" Grid.Column="1" Margin="24,96,24,16" IsHitTestVisible="False" Opacity="0" ClipToBounds="True">
+            <Grid.OpacityMask>
+                <RadialGradientBrush GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                    <GradientStop Color="#FF000000" Offset="0.35"/>
+                    <GradientStop Color="#00000000" Offset="1"/>
+                </RadialGradientBrush>
+            </Grid.OpacityMask>
+            <!-- A heavily blurred copy fills the whole area, so the edges read as soft blur... -->
+            <Image x:Name="NowPlayingBackdropBlur" Stretch="UniformToFill" Opacity="0.2" Margin="-40">
+                <Image.Effect><BlurEffect Radius="40" KernelType="Gaussian"/></Image.Effect>
+            </Image>
+            <!-- ...and a sharp copy fades into it towards the middle. -->
+            <Image x:Name="NowPlayingBackdropImage" Stretch="UniformToFill" Opacity="0.2">
+                <Image.OpacityMask>
+                    <RadialGradientBrush GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+                        <GradientStop Color="#FF000000" Offset="0.2"/>
+                        <GradientStop Color="#00000000" Offset="0.85"/>
+                    </RadialGradientBrush>
+                </Image.OpacityMask>
+            </Image>
+        </Grid>
+
         <Grid x:Name="MusicPage" Grid.Column="1" Margin="38,32,38,30">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <Grid>

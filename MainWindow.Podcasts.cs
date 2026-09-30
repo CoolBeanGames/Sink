@@ -402,6 +402,7 @@ public partial class MainWindow
         PlayerTitle.Text = episode.Title;
         PlayerArtist.Text = show.Title;
         PlayerArtInitial.Text = string.IsNullOrEmpty(show.Title) ? "🎙" : show.Title[..1].ToUpperInvariant();
+        _nowPlayingArtistArt = null; // the show art is the backdrop
         SetNowPlayingArt(show.ArtworkUrl);
         PlayPauseButton.Content = "Ⅱ";
         ProgressSlider.Maximum = Math.Max(1, episode.Duration.TotalSeconds);

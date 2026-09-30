@@ -865,8 +865,7 @@ public partial class MainWindow : Window
 
         if (string.IsNullOrWhiteSpace(source))
         {
-            PlayerArtImage.Source = null;
-            PlayerArtImage.Visibility = Visibility.Collapsed;
+            ApplyNowPlayingArt(null);
             return;
         }
 
@@ -893,6 +892,29 @@ public partial class MainWindow : Window
     {
         PlayerArtImage.Source = art;
         PlayerArtImage.Visibility = art is null ? Visibility.Collapsed : Visibility.Visible;
+        // The record's label shows the album (or show) art, cropped to its
+        // circle; it's inside RecordSpinGroup, so it turns with the record.
+        RecordLabel.Fill = art is null
+            ? new SolidColorBrush(Color.FromRgb(0x3A, 0x40, 0x4B))
+            : new ImageBrush(art) { Stretch = Stretch.UniformToFill };
+        // Backdrop: the artist's own artwork when there is one, else this art.
+        ShowNowPlayingBackdrop(art is null ? null : LoadArtwork(_nowPlayingArtistArt) ?? art);
+    }
+
+    /// <summary>Artist artwork for the playing track (null for podcasts, which use the show art).</summary>
+    private string? _nowPlayingArtistArt;
+
+    private void ShowNowPlayingBackdrop(ImageSource? image)
+    {
+        var duration = TimeSpan.FromMilliseconds(450);
+        if (image is null)
+        {
+            NowPlayingBackdrop.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, duration));
+            return;
+        }
+        NowPlayingBackdropImage.Source = image;
+        NowPlayingBackdropBlur.Source = image;
+        NowPlayingBackdrop.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(1, duration));
     }
 
     private static ImageSource? LoadArtwork(string? path)
@@ -993,6 +1015,7 @@ public partial class MainWindow : Window
         PlayerArtist.Text = $"{track.Artist} · {track.FormatText}";
         PlayerArtist.ToolTip = track.FileTooltip;
         PlayerArtInitial.Text = string.IsNullOrEmpty(track.Album) ? "♫" : track.Album[..1].ToUpperInvariant();
+        _nowPlayingArtistArt = Artwork.CachedPath($"artist:{track.Artist}");
         SetNowPlayingArt(track.ArtworkPath);
         PlaybackStatus.Text = $"▶  Playing {track.Title} — {track.Artist}";
         PlayPauseButton.Content = "Ⅱ";
@@ -1956,7 +1979,7 @@ public partial class MainWindow : Window
         if (_nowPlaying is not null && ids.Contains(_nowPlaying.Id))
         {
             _mediaPlayer.Stop(); _mediaPlayer.Close(); _nowPlaying = null; _isPlaying = false; _playbackTimer.Stop();
-            PlayerTitle.Text = "Choose something to play"; PlayerArtist.Text = "Your library is ready"; PlayerArtInitial.Text = "♫"; PlayPauseButton.Content = "▶";
+            PlayerTitle.Text = "Choose something to play"; PlayerArtist.Text = "Your library is ready"; PlayerArtInitial.Text = "♫"; PlayPauseButton.Content = "▶"; SetNowPlayingArt(null);
             UpdateRecordSpin();
         }
         PlaylistList.Items.Refresh();
@@ -2521,7 +2544,7 @@ public partial class MainWindow : Window
         if (_nowPlaying is not null && ids.Contains(_nowPlaying.Id))
         {
             _mediaPlayer.Stop(); _mediaPlayer.Close(); _nowPlaying = null; _isPlaying = false; _playbackTimer.Stop();
-            PlayerTitle.Text = "Choose something to play"; PlayerArtist.Text = "Your library is ready"; PlayerArtInitial.Text = "♫"; PlayPauseButton.Content = "▶";
+            PlayerTitle.Text = "Choose something to play"; PlayerArtist.Text = "Your library is ready"; PlayerArtInitial.Text = "♫"; PlayPauseButton.Content = "▶"; SetNowPlayingArt(null);
             UpdateRecordSpin();
         }
         PlaylistList.Items.Refresh();
