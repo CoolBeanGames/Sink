@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
 using Sink.Models;
@@ -47,6 +48,8 @@ public sealed class CoverFlowView : UserControl
     private readonly Dictionary<MeshGeometry3D, (CaseVisual Case, bool IsBack)> _meshes = [];
     private readonly Viewport3D _viewport = new() { ClipToBounds = true };
     private readonly ModelVisual3D _caseRoot = new();
+    /// <summary>Contact shadows on the shelf; added before the cases so they're drawn under them.</summary>
+    private readonly ModelVisual3D _shadowRoot = new();
     private readonly AutoCompleteTextBox _search;
     private readonly TextBlock _caption = new() { FontSize = 20, FontWeight = FontWeights.SemiBold, Foreground = Ink, HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
     private readonly TextBlock _subCaption = new() { FontSize = 12, Foreground = SoftInk, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 3, 0, 0) };
@@ -108,6 +111,7 @@ public sealed class CoverFlowView : UserControl
         lights.Children.Add(new DirectionalLight(Color.FromRgb(0x50, 0x4C, 0x48), new Vector3D(0.6, -0.2, -0.4)));
         _viewport.Children.Add(new ModelVisual3D { Content = lights });
         _viewport.Children.Add(new ModelVisual3D { Content = Shelf() });
+        _viewport.Children.Add(_shadowRoot);
         _viewport.Children.Add(_caseRoot);
         Grid.SetRow(_viewport, 1);
         root.Children.Add(_viewport);
@@ -226,6 +230,7 @@ public sealed class CoverFlowView : UserControl
             || a.Tracks.Any(t => t.Title.Contains(q, StringComparison.OrdinalIgnoreCase))).ToList();
 
         _caseRoot.Children.Clear();
+        _shadowRoot.Children.Clear();
         _meshes.Clear();
         _cases.Clear();
         foreach (var album in shown)
@@ -233,6 +238,7 @@ public sealed class CoverFlowView : UserControl
             var c = new CaseVisual(album, _meshes);
             _cases.Add(c);
             _caseRoot.Children.Add(c.Visual);
+            _shadowRoot.Children.Add(c.Shadow);
         }
         _flipped = -1;
         var again = keep is null ? -1 : shown.ToList().IndexOf(keep);
@@ -287,63 +293,74 @@ public sealed class CoverFlowView : UserControl
     /// printed with the album art slides out of the case and flies, spinning
     /// and growing, into the bottom-right corner where Sink's record turntable
     /// sits; playback starts as it lands, which is when the record appears.
+    /// One disc at a time: a double-click (or a second click mid-flight) is ignored.
     /// </summary>
     private void PlayWithDisc(CaseVisual c, int index)
     {
         var tracks = c.Album.Tracks;
-        if (index < 0 || index >= tracks.Count) return;
+        if (index < 0 || index >= tracks.Count || _discInFlight) return;
         if (!TryProject(c, out var centre, out var radius))
         {
             PlayRequested?.Invoke(tracks, index);
             return;
         }
+        _discInFlight = true;
 
         var size = radius * 2;
-        var disc = Disc(c.Album, size);
+        var (disc, print, shadowOffset) = Disc(c.Album, size);
         var move = new TranslateTransform(centre.X - radius, centre.Y - radius);
-        var spin = new RotateTransform(0, radius, radius);
         var scale = new ScaleTransform(1, 1, radius, radius);
         var transforms = new TransformGroup();
-        transforms.Children.Add(spin);
         transforms.Children.Add(scale);
         transforms.Children.Add(move);
         disc.RenderTransform = transforms;
+        // Only the printed disc turns; the glare above it stays where the light is.
+        var spin = new RotateTransform(0, radius, radius);
+        print.RenderTransform = spin;
         _effects.Children.Add(disc);
 
         // 1) slide out of the case, sideways, like pulling it from the tray
         var slide = TimeSpan.FromMilliseconds(380);
-        var ease = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut };
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         var outX = centre.X - radius + radius * 1.15;
-        disc.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(0.2, 1, TimeSpan.FromMilliseconds(160)));
+        disc.BeginAnimation(OpacityProperty, new DoubleAnimation(0.2, 1, TimeSpan.FromMilliseconds(160)));
 
         // 2) fly into the corner — the record's centre — spinning, sized like the record (300 px)
         var fly = TimeSpan.FromMilliseconds(760);
-        var flyEase = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut };
+        var flyEase = new CubicEase { EasingMode = EasingMode.EaseInOut };
         var target = new Point(ActualWidth, ActualHeight);
         var endScale = 300 / size;
-        var start = slide;
-        var y = new System.Windows.Media.Animation.DoubleAnimation(target.Y - radius, fly) { BeginTime = start, EasingFunction = flyEase };
-        var sequenceX = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames();
-        sequenceX.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(outX, System.Windows.Media.Animation.KeyTime.FromTimeSpan(slide), ease));
-        sequenceX.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(target.X - radius, System.Windows.Media.Animation.KeyTime.FromTimeSpan(slide + fly), flyEase));
+        var sequenceX = new DoubleAnimationUsingKeyFrames();
+        sequenceX.KeyFrames.Add(new EasingDoubleKeyFrame(outX, KeyTime.FromTimeSpan(slide), ease));
+        sequenceX.KeyFrames.Add(new EasingDoubleKeyFrame(target.X - radius, KeyTime.FromTimeSpan(slide + fly), flyEase));
         move.BeginAnimation(TranslateTransform.XProperty, sequenceX);
-        move.BeginAnimation(TranslateTransform.YProperty, y);
-        scale.BeginAnimation(ScaleTransform.ScaleXProperty, new System.Windows.Media.Animation.DoubleAnimation(endScale, fly) { BeginTime = start, EasingFunction = flyEase });
-        scale.BeginAnimation(ScaleTransform.ScaleYProperty, new System.Windows.Media.Animation.DoubleAnimation(endScale, fly) { BeginTime = start, EasingFunction = flyEase });
-        spin.BeginAnimation(RotateTransform.AngleProperty, new System.Windows.Media.Animation.DoubleAnimation(0, 720, slide + fly) { EasingFunction = flyEase });
+        move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(target.Y - radius, fly) { BeginTime = slide, EasingFunction = flyEase });
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(endScale, fly) { BeginTime = slide, EasingFunction = flyEase });
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(endScale, fly) { BeginTime = slide, EasingFunction = flyEase });
+        spin.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(0, 720, slide + fly) { EasingFunction = flyEase });
+        // The shadow falls further away as the disc lifts off, then settles as it lands.
+        var lift = new DoubleAnimationUsingKeyFrames();
+        lift.KeyFrames.Add(new EasingDoubleKeyFrame(size * 0.02, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        lift.KeyFrames.Add(new EasingDoubleKeyFrame(size * 0.14, KeyTime.FromTimeSpan(slide + fly * 0.5), flyEase));
+        lift.KeyFrames.Add(new EasingDoubleKeyFrame(size * 0.03, KeyTime.FromTimeSpan(slide + fly), flyEase));
+        shadowOffset.BeginAnimation(TranslateTransform.XProperty, lift);
+        shadowOffset.BeginAnimation(TranslateTransform.YProperty, lift);
 
         // 3) land: start playing (the record slides in underneath) and fade the disc away
         var land = new System.Windows.Threading.DispatcherTimer { Interval = slide + fly };
         land.Tick += (_, _) =>
         {
             land.Stop();
+            _discInFlight = false;
             PlayRequested?.Invoke(tracks, index);
-            var fade = new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(420)) { BeginTime = TimeSpan.FromMilliseconds(200) };
+            var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(420)) { BeginTime = TimeSpan.FromMilliseconds(200) };
             fade.Completed += (_, _) => _effects.Children.Remove(disc);
             disc.BeginAnimation(OpacityProperty, fade);
         };
         land.Start();
     }
+
+    private bool _discInFlight;
 
     /// <summary>Where the case's centre lands on screen, and how big a CD inside it looks.</summary>
     private bool TryProject(CaseVisual c, out Point centre, out double radius)
@@ -357,19 +374,31 @@ public sealed class CoverFlowView : UserControl
         return true;
     }
 
-    /// <summary>A CD: silver with a faint rainbow sheen, the album art printed on it, and a clear centre ring and hole.</summary>
-    private static FrameworkElement Disc(CoverFlowAlbum album, double size)
+    /// <summary>
+    /// A CD in three layers: a soft shadow (its offset is returned so it can
+    /// fall away as the disc lifts), the printed disc — silver, the album art,
+    /// the clear centre ring and hole — which is what spins, and a glare on
+    /// top that doesn't spin: a bright highlight and a rainbow streak that stay
+    /// put under the light while the print turns beneath them.
+    /// </summary>
+    private static (FrameworkElement Disc, FrameworkElement Print, TranslateTransform ShadowOffset) Disc(CoverFlowAlbum album, double size)
     {
-        var grid = new Grid { Width = size, Height = size };
+        var root = new Grid { Width = size, Height = size };
+
+        var shadowOffset = new TranslateTransform(size * 0.02, size * 0.02);
+        root.Children.Add(new System.Windows.Shapes.Ellipse
+        {
+            Fill = new SolidColorBrush(Color.FromArgb(0x70, 0x2B, 0x20, 0x15)),
+            RenderTransform = shadowOffset,
+            Effect = new System.Windows.Media.Effects.BlurEffect { Radius = Math.Max(6, size * 0.08) },
+        });
+
+        var print = new Grid { Width = size, Height = size };
         var silver = new RadialGradientBrush { GradientOrigin = new Point(0.35, 0.3) };
         silver.GradientStops.Add(new GradientStop(Color.FromRgb(0xF4, 0xF5, 0xF7), 0));
         silver.GradientStops.Add(new GradientStop(Color.FromRgb(0xC6, 0xCA, 0xD1), 0.75));
         silver.GradientStops.Add(new GradientStop(Color.FromRgb(0x9A, 0x9F, 0xA8), 1));
-        grid.Children.Add(new System.Windows.Shapes.Ellipse { Fill = silver, Stroke = new SolidColorBrush(Color.FromArgb(0x60, 0x00, 0x00, 0x00)), StrokeThickness = 1 });
-        var sheen = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1), Opacity = 0.35 };
-        foreach (var (colour, offset) in new[] { (Colors.Transparent, 0.2), (Color.FromRgb(0xFF, 0x7A, 0xC8), 0.38), (Color.FromRgb(0x7A, 0xD8, 0xFF), 0.5), (Color.FromRgb(0xC8, 0xFF, 0x7A), 0.62), (Colors.Transparent, 0.8) })
-            sheen.GradientStops.Add(new GradientStop(colour, offset));
-        grid.Children.Add(new System.Windows.Shapes.Ellipse { Fill = sheen });
+        print.Children.Add(new System.Windows.Shapes.Ellipse { Fill = silver, Stroke = new SolidColorBrush(Color.FromArgb(0x60, 0x00, 0x00, 0x00)), StrokeThickness = 1 });
         if (album.ArtPath is { } path && File.Exists(path))
         {
             try
@@ -381,14 +410,29 @@ public sealed class CoverFlowView : UserControl
                 art.UriSource = new Uri(path);
                 art.EndInit();
                 art.Freeze();
-                grid.Children.Add(new System.Windows.Shapes.Ellipse { Margin = new Thickness(size * 0.06), Fill = new ImageBrush(art) { Stretch = Stretch.UniformToFill } });
+                print.Children.Add(new System.Windows.Shapes.Ellipse { Margin = new Thickness(size * 0.06), Fill = new ImageBrush(art) { Stretch = Stretch.UniformToFill } });
             }
             catch { }
         }
-        grid.Children.Add(new System.Windows.Shapes.Ellipse { Width = size * 0.3, Height = size * 0.3, Fill = new SolidColorBrush(Color.FromArgb(0xE0, 0xDA, 0xDD, 0xE2)) });
-        grid.Children.Add(new System.Windows.Shapes.Ellipse { Width = size * 0.11, Height = size * 0.11, Fill = new SolidColorBrush(Color.FromRgb(0xE9, 0xE2, 0xD6)), Stroke = new SolidColorBrush(Color.FromArgb(0x50, 0, 0, 0)) });
-        grid.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 18, ShadowDepth = 4, Opacity = 0.35 };
-        return grid;
+        print.Children.Add(new System.Windows.Shapes.Ellipse { Width = size * 0.3, Height = size * 0.3, Fill = new SolidColorBrush(Color.FromArgb(0xE0, 0xDA, 0xDD, 0xE2)) });
+        print.Children.Add(new System.Windows.Shapes.Ellipse { Width = size * 0.11, Height = size * 0.11, Fill = new SolidColorBrush(Color.FromRgb(0xE9, 0xE2, 0xD6)), Stroke = new SolidColorBrush(Color.FromArgb(0x50, 0, 0, 0)) });
+        root.Children.Add(print);
+
+        // Glare: fixed to the light, not the disc.
+        var streak = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
+        foreach (var (colour, offset) in new[]
+                 {
+                     (Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 0.18), (Color.FromArgb(0x55, 0xFF, 0x8A, 0xD0), 0.36),
+                     (Color.FromArgb(0x70, 0xFF, 0xFF, 0xFF), 0.45), (Color.FromArgb(0x55, 0x8A, 0xDC, 0xFF), 0.54),
+                     (Color.FromArgb(0x40, 0xD0, 0xFF, 0x8A), 0.63), (Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 0.8),
+                 })
+            streak.GradientStops.Add(new GradientStop(colour, offset));
+        root.Children.Add(new System.Windows.Shapes.Ellipse { Fill = streak, IsHitTestVisible = false });
+        var hotspot = new RadialGradientBrush { Center = new Point(0.3, 0.26), GradientOrigin = new Point(0.3, 0.26), RadiusX = 0.28, RadiusY = 0.2 };
+        hotspot.GradientStops.Add(new GradientStop(Color.FromArgb(0xB0, 0xFF, 0xFF, 0xFF), 0));
+        hotspot.GradientStops.Add(new GradientStop(Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 1));
+        root.Children.Add(new System.Windows.Shapes.Ellipse { Fill = hotspot, IsHitTestVisible = false });
+        return (root, print, shadowOffset);
     }
 
     private void OnFrame(object? sender, EventArgs e)
@@ -497,6 +541,15 @@ public sealed class CoverFlowView : UserControl
         public ModelVisual3D Visual { get; } = new();
         private readonly AxisAngleRotation3D _rotation = new(new Vector3D(0, 1, 0), 90);
         private readonly TranslateTransform3D _translate = new();
+        private readonly TranslateTransform3D _shadowTranslate = new();
+        private readonly RadialGradientBrush _shadowBrush;
+
+        /// <summary>
+        /// A soft shadow on the shelf around the case's footprint. It turns and
+        /// slides with the case but stays on the wood, and fades out as the case
+        /// lifts off the shelf.
+        /// </summary>
+        public ModelVisual3D Shadow { get; } = new();
         private readonly GeometryModel3D _back;
         private double[] _rowTops = [];
 
@@ -544,6 +597,22 @@ public sealed class CoverFlowView : UserControl
             Face(new(x0, y0, z0), new(x1, y0, z0), new(x1, y0, z1), new(x0, y0, z1), plastic);                  // bottom
 
             Visual.Content = group;
+
+            _shadowBrush = new RadialGradientBrush();
+            _shadowBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0xD0, 0x14, 0x0B, 0x04), 0.3));
+            _shadowBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0x00, 0x14, 0x0B, 0x04), 1));
+            double sx0 = x0 - 0.18, sx1 = x1 + 0.18, sz0 = z0 - 0.3, sz1 = z1 + 0.45, sy = y0 + 0.003;
+            var shadowMesh = new MeshGeometry3D
+            {
+                Positions = [new(sx0, sy, sz1), new(sx1, sy, sz1), new(sx1, sy, sz0), new(sx0, sy, sz0)],
+                TextureCoordinates = [new Point(0, 1), new Point(1, 1), new Point(1, 0), new Point(0, 0)],
+                TriangleIndices = [0, 1, 2, 0, 2, 3],
+            };
+            Shadow.Content = new GeometryModel3D(shadowMesh, new DiffuseMaterial(_shadowBrush));
+            var shadowTransform = new Transform3DGroup();
+            shadowTransform.Children.Add(new RotateTransform3D(_rotation));
+            shadowTransform.Children.Add(_shadowTranslate);
+            Shadow.Transform = shadowTransform;
             var transform = new Transform3DGroup();
             transform.Children.Add(new RotateTransform3D(_rotation));
             transform.Children.Add(_translate);
@@ -565,6 +634,9 @@ public sealed class CoverFlowView : UserControl
             _translate.OffsetX = x;
             _translate.OffsetY = s * 0.22;
             _translate.OffsetZ = s * 1.05 + flip * 0.3;
+            _shadowTranslate.OffsetX = x;
+            _shadowTranslate.OffsetZ = _translate.OffsetZ;
+            _shadowBrush.Opacity = Math.Clamp(1 - s * 1.6, 0, 1);
             // Spine-out on the shelf is +90° (the −X spine faces the camera);
             // selected turns to 0° (front), flipped carries on to 180° (back).
             _rotation.Angle = 90 * (1 - s) + 180 * flip;
