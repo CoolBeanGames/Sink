@@ -94,6 +94,7 @@ public partial class MainWindow : Window
         if (v is not null) VersionText.Text = $"v{v.Major}.{v.Minor}.{v.Build}";
         LoadLibrary();
         _ = ScanForMissingFilesAsync();
+        InitCardSize();
         ScheduleLibrarySizeUpdate();
         _tracks.CollectionChanged += (_, _) => ScheduleLibrarySizeUpdate();
         PlaylistList.ItemsSource = _playlists;
@@ -781,6 +782,7 @@ public partial class MainWindow : Window
 
         var showTracks = _category is LibraryCategory.Songs or LibraryCategory.Playlist || _drilldown is not null;
         GroupsScroller.Visibility = showTracks ? Visibility.Collapsed : Visibility.Visible;
+        CardSizePanel.Visibility = GroupsScroller.Visibility;
         TracksBorder.Visibility = showTracks ? Visibility.Visible : Visibility.Collapsed;
         BackButton.Visibility = _drilldown is null && _artistFilter is null ? Visibility.Collapsed : Visibility.Visible;
         CleanupTitlesButton.Visibility = _category == LibraryCategory.Songs && _source == LibrarySource.Music
