@@ -44,6 +44,14 @@ public sealed class Track : ITitleTrimmable
     public string DurationText => Duration.ToString(@"m\:ss");
 
     /// <summary>
+    /// Set by the startup scan when this track's file can't be found (drive
+    /// offline, file moved or deleted). Not persisted: every startup checks
+    /// again, so it clears itself once the file is back.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsMissing { get; set; }
+
+    /// <summary>
     /// Total tracked listens (in-app + folded-in iPod plays) — recomputed by
     /// MainWindow.RecomputePlayCounts from ReflectStore's ListenEvents, not
     /// persisted itself. Surfaced directly on the Songs list so play-count

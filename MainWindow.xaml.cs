@@ -93,6 +93,7 @@ public partial class MainWindow : Window
         var v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
         if (v is not null) VersionText.Text = $"v{v.Major}.{v.Minor}.{v.Build}";
         LoadLibrary();
+        _ = ScanForMissingFilesAsync();
         ScheduleLibrarySizeUpdate();
         _tracks.CollectionChanged += (_, _) => ScheduleLibrarySizeUpdate();
         PlaylistList.ItemsSource = _playlists;
@@ -262,6 +263,46 @@ public partial class MainWindow : Window
         }
         var known = _tracks.Select(t => t.Id).ToHashSet();
         foreach (var id in data.SyncedTrackIds.Where(known.Contains)) _syncedTrackIds.Add(id);
+    }
+
+    /// <summary>
+    /// Runs on every startup: checks that each track's file is really there,
+    /// off the UI thread (the library is often on a network drive). Missing
+    /// tracks get a red error light, and their album/artist/genre cards a red
+    /// light plus greyscale art, until a later startup finds them again.
+    /// </summary>
+    private async Task ScanForMissingFilesAsync()
+    {
+        var snapshot = _tracks.Select(t => (t.Id, t.FilePath)).ToList();
+        HashSet<Guid> missing;
+        try
+        {
+            missing = await Task.Run(() => snapshot
+                .Where(t => string.IsNullOrWhiteSpace(t.FilePath) || !File.Exists(t.FilePath))
+                .Select(t => t.Id)
+                .ToHashSet());
+        }
+        catch (Exception ex)
+        {
+            Services.Log.Error("Missing-file scan failed", ex);
+            return;
+        }
+        var changed = false;
+        foreach (var track in _tracks)
+        {
+            var isMissing = missing.Contains(track.Id);
+            if (track.IsMissing == isMissing) continue;
+            track.IsMissing = isMissing;
+            changed = true;
+        }
+        Services.Log.Info($"Missing-file scan: {missing.Count} of {snapshot.Count} track file(s) not found");
+        if (missing.Count > 0)
+            PlaybackStatus.Text = $"{missing.Count} track{(missing.Count == 1 ? "" : "s")} can't be found — marked in red";
+        if (changed)
+        {
+            _artCache.Clear();
+            RenderLibrary();
+        }
     }
 
     private void SaveLibrary()
@@ -803,7 +844,8 @@ public partial class MainWindow : Window
         return new GroupCard(name, detail, initial,
             new SolidColorBrush((Color)ColorConverter.ConvertFromString(palette[Math.Abs(colorSeed.GetHashCode()) % palette.Length])),
             artPath,
-            trackSyncDot && members.Any(t => t.HasUnsyncedChanges));
+            trackSyncDot && members.Any(t => t.HasUnsyncedChanges),
+            members.Any(t => t.IsMissing));
     }
 
     private static readonly Dictionary<string, ImageSource> _artCache = [];
@@ -2457,8 +2499,26 @@ public partial class MainWindow : Window
     /// </summary>
     private sealed record GroupCard(
         string Name, string Detail, string Initial, Brush Color,
-        string? ArtPath = null, bool HasUnsyncedChanges = false)
+        string? ArtPath = null, bool HasUnsyncedChanges = false, bool HasMissing = false)
     {
-        public ImageSource? Art => LoadArtwork(ArtPath);
+        /// <summary>Greyscale while any of the card's tracks can't be found (startup scan).</summary>
+        public ImageSource? Art => HasMissing ? LoadGreyArtwork(ArtPath) : LoadArtwork(ArtPath);
+    }
+
+    private static readonly Dictionary<string, ImageSource> _greyArtCache = [];
+
+    private static ImageSource? LoadGreyArtwork(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        if (_greyArtCache.TryGetValue(path, out var cached)) return cached;
+        if (LoadArtwork(path) is not BitmapSource colour) return null;
+        try
+        {
+            var grey = new FormatConvertedBitmap(colour, PixelFormats.Gray8, null, 0);
+            grey.Freeze();
+            _greyArtCache[path] = grey;
+            return grey;
+        }
+        catch { return colour; }
     }
 }

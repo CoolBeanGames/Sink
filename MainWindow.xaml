@@ -289,7 +289,7 @@
                         </Style>
                     </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate><DataTemplate>
-                        <StackPanel Width="184"><Border Height="145" CornerRadius="12" Background="{Binding Color}" BorderBrush="#303744" BorderThickness="1" ClipToBounds="True"><Grid><Ellipse Width="92" Height="92" Stroke="#FFFFFF" StrokeThickness="1" Opacity="0.13"/><Ellipse Width="30" Height="30" Fill="#0B0D12" Opacity="0.35"/><TextBlock Text="{Binding Initial}" FontSize="36" Foreground="#DAD7FF" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding Art}" Stretch="UniformToFill"/><Ellipse Width="10" Height="10" Fill="#8B7CFF" Stroke="#12151C" StrokeThickness="1.5" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,8,0" Visibility="{Binding HasUnsyncedChanges, Converter={StaticResource B2V}}" ToolTip="Has changes not yet synced to the iPod"/></Grid></Border><TextBlock Text="{Binding Name}" Foreground="#F4F6FA" FontWeight="SemiBold" Margin="3,10,3,0" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Detail}" Foreground="#7D8493" FontSize="11" Margin="3,3,3,0"/></StackPanel>
+                        <StackPanel Width="184"><Border Height="145" CornerRadius="12" Background="{Binding Color}" BorderBrush="#303744" BorderThickness="1" ClipToBounds="True"><Grid><Ellipse Width="92" Height="92" Stroke="#FFFFFF" StrokeThickness="1" Opacity="0.13"/><Ellipse Width="30" Height="30" Fill="#0B0D12" Opacity="0.35"/><TextBlock Text="{Binding Initial}" FontSize="36" Foreground="#DAD7FF" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding Art}" Stretch="UniformToFill"/><Ellipse Width="10" Height="10" Fill="#8B7CFF" Stroke="#12151C" StrokeThickness="1.5" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,8,0" Visibility="{Binding HasUnsyncedChanges, Converter={StaticResource B2V}}" ToolTip="Has changes not yet synced to the iPod"/><Ellipse Width="10" Height="10" Fill="#E5484D" Stroke="#12151C" StrokeThickness="1.5" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8,8,0,0" Visibility="{Binding HasMissing, Converter={StaticResource B2V}}" ToolTip="Some of these tracks' files can't be found"><Ellipse.Effect><DropShadowEffect ShadowDepth="0" BlurRadius="8" Color="#E5484D" Opacity="0.9"/></Ellipse.Effect></Ellipse></Grid></Border><TextBlock Text="{Binding Name}" Foreground="#F4F6FA" FontWeight="SemiBold" Margin="3,10,3,0" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Detail}" Foreground="#7D8493" FontSize="11" Margin="3,3,3,0"/></StackPanel>
                     </DataTemplate></ListBox.ItemTemplate>
                 </ListBox>
             </Grid>
@@ -320,6 +320,24 @@
                                             </Style>
                                         </TextBlock.Style>
                                     </TextBlock>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="" Width="14">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Ellipse Width="7" Height="7" Fill="#E5484D" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="This track's file can't be found">
+                                        <Ellipse.Style>
+                                            <Style TargetType="Ellipse">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsMissing}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Ellipse.Style>
+                                    </Ellipse>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
