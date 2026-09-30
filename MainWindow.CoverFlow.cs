@@ -15,6 +15,7 @@ public partial class MainWindow
     private CoverFlowView? _coverFlow;
     private GridLength _sidebarWidthBeforeCoverFlow;
     private double _sidebarMinWidthBeforeCoverFlow;
+    private int _ipodCanvasZBeforeCoverFlow;
 
     private void CoverFlow_Click(object sender, RoutedEventArgs e) => OpenCoverFlow();
 
@@ -52,6 +53,10 @@ public partial class MainWindow
         Grid.SetColumnSpan(_coverFlow, 2);
         Panel.SetZIndex(_coverFlow, 60);
         RootGrid.Children.Add(_coverFlow);
+        // The record turntable (bottom-right) shows above the shelf, so the CD
+        // that flies out of a case on play has somewhere to land.
+        _ipodCanvasZBeforeCoverFlow = Panel.GetZIndex(IpodCanvas);
+        Panel.SetZIndex(IpodCanvas, 61);
         _coverFlow.Focus();
     }
 
@@ -60,6 +65,7 @@ public partial class MainWindow
         if (_coverFlow is null) return;
         RootGrid.Children.Remove(_coverFlow);
         _coverFlow = null;
+        Panel.SetZIndex(IpodCanvas, _ipodCanvasZBeforeCoverFlow);
         SidebarColumn.Width = _sidebarWidthBeforeCoverFlow;
         SidebarColumn.MinWidth = _sidebarMinWidthBeforeCoverFlow;
     }

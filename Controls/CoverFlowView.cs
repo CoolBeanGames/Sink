@@ -131,10 +131,14 @@ public sealed class CoverFlowView : UserControl
             Cursor = Cursors.Hand, Background = new SolidColorBrush(Color.FromRgb(0x6B, 0x4A, 0x2E)), Foreground = Brushes.White,
             FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, Visibility = Visibility.Collapsed,
         };
-        _playButton.Click += (_, _) => { if (Current is { } c) PlayRequested?.Invoke(c.Album.Tracks, 0); };
+        _playButton.Click += (_, _) => { if (Current is { } c) PlayWithDisc(c, 0); };
         footer.Children.Add(_playButton);
         Grid.SetRow(footer, 2);
         root.Children.Add(footer);
+
+        // Overlay for the flying CD, above everything and never in the way of clicks.
+        Grid.SetRowSpan(_effects, 3);
+        root.Children.Add(_effects);
 
         Content = root;
         ApplyFilter();
@@ -203,7 +207,7 @@ public sealed class CoverFlowView : UserControl
                      + (Vector)Blend(mesh.TextureCoordinates[hit.VertexIndex2], hit.VertexWeight2)
                      + (Vector)Blend(mesh.TextureCoordinates[hit.VertexIndex3], hit.VertexWeight3);
             var row = info.Case.RowAt(uv.Y * BackHeight);
-            if (row >= 0) { PlayRequested?.Invoke(info.Case.Album.Tracks, row); return; }
+            if (row >= 0) { PlayWithDisc(info.Case, row); return; }
         }
         ToggleFlip();
     }
@@ -258,6 +262,135 @@ public sealed class CoverFlowView : UserControl
 
     // ---- animation --------------------------------------------------------
 
+    // Camera at rest, and pushed in while a case is flipped: closer, a little
+    // lower and off to the right, still looking at the flipped case, so the
+    // flip reads as a move rather than just a turn.
+    private static readonly Point3D RestCamera = new(0, 0.5, 7.6);
+    private static readonly Vector3D RestLook = new(0, -0.075, -1);
+    private static readonly Point3D FlipCamera = new(0.45, 0.32, 6.1);
+    private static readonly Vector3D FlipLook = new(-0.095, -0.02, -1);
+
+    private void UpdateCamera()
+    {
+        if (_viewport.Camera is not PerspectiveCamera camera) return;
+        var t = _flipAmount * _flipAmount * (3 - 2 * _flipAmount); // smoothstep
+        camera.Position = RestCamera + (FlipCamera - RestCamera) * t;
+        camera.LookDirection = RestLook + (FlipLook - RestLook) * t;
+    }
+
+    // ---- play: a CD slides out of the case and flies to the record ------
+
+    private readonly Canvas _effects = new() { IsHitTestVisible = false, ClipToBounds = true };
+
+    /// <summary>
+    /// Plays <paramref name="index"/> of the case's album — but first a CD
+    /// printed with the album art slides out of the case and flies, spinning
+    /// and growing, into the bottom-right corner where Sink's record turntable
+    /// sits; playback starts as it lands, which is when the record appears.
+    /// </summary>
+    private void PlayWithDisc(CaseVisual c, int index)
+    {
+        var tracks = c.Album.Tracks;
+        if (index < 0 || index >= tracks.Count) return;
+        if (!TryProject(c, out var centre, out var radius))
+        {
+            PlayRequested?.Invoke(tracks, index);
+            return;
+        }
+
+        var size = radius * 2;
+        var disc = Disc(c.Album, size);
+        var move = new TranslateTransform(centre.X - radius, centre.Y - radius);
+        var spin = new RotateTransform(0, radius, radius);
+        var scale = new ScaleTransform(1, 1, radius, radius);
+        var transforms = new TransformGroup();
+        transforms.Children.Add(spin);
+        transforms.Children.Add(scale);
+        transforms.Children.Add(move);
+        disc.RenderTransform = transforms;
+        _effects.Children.Add(disc);
+
+        // 1) slide out of the case, sideways, like pulling it from the tray
+        var slide = TimeSpan.FromMilliseconds(380);
+        var ease = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut };
+        var outX = centre.X - radius + radius * 1.15;
+        disc.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(0.2, 1, TimeSpan.FromMilliseconds(160)));
+
+        // 2) fly into the corner — the record's centre — spinning, sized like the record (300 px)
+        var fly = TimeSpan.FromMilliseconds(760);
+        var flyEase = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseInOut };
+        var target = new Point(ActualWidth, ActualHeight);
+        var endScale = 300 / size;
+        var start = slide;
+        var y = new System.Windows.Media.Animation.DoubleAnimation(target.Y - radius, fly) { BeginTime = start, EasingFunction = flyEase };
+        var sequenceX = new System.Windows.Media.Animation.DoubleAnimationUsingKeyFrames();
+        sequenceX.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(outX, System.Windows.Media.Animation.KeyTime.FromTimeSpan(slide), ease));
+        sequenceX.KeyFrames.Add(new System.Windows.Media.Animation.EasingDoubleKeyFrame(target.X - radius, System.Windows.Media.Animation.KeyTime.FromTimeSpan(slide + fly), flyEase));
+        move.BeginAnimation(TranslateTransform.XProperty, sequenceX);
+        move.BeginAnimation(TranslateTransform.YProperty, y);
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty, new System.Windows.Media.Animation.DoubleAnimation(endScale, fly) { BeginTime = start, EasingFunction = flyEase });
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty, new System.Windows.Media.Animation.DoubleAnimation(endScale, fly) { BeginTime = start, EasingFunction = flyEase });
+        spin.BeginAnimation(RotateTransform.AngleProperty, new System.Windows.Media.Animation.DoubleAnimation(0, 720, slide + fly) { EasingFunction = flyEase });
+
+        // 3) land: start playing (the record slides in underneath) and fade the disc away
+        var land = new System.Windows.Threading.DispatcherTimer { Interval = slide + fly };
+        land.Tick += (_, _) =>
+        {
+            land.Stop();
+            PlayRequested?.Invoke(tracks, index);
+            var fade = new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(420)) { BeginTime = TimeSpan.FromMilliseconds(200) };
+            fade.Completed += (_, _) => _effects.Children.Remove(disc);
+            disc.BeginAnimation(OpacityProperty, fade);
+        };
+        land.Start();
+    }
+
+    /// <summary>Where the case's centre lands on screen, and how big a CD inside it looks.</summary>
+    private bool TryProject(CaseVisual c, out Point centre, out double radius)
+    {
+        centre = default;
+        radius = 0;
+        if (c.Visual.TransformToAncestor(_viewport) is not { } toViewport) return false;
+        if (!toViewport.TryTransform(new Point3D(0, 0, 0), out var mid) || !toViewport.TryTransform(new Point3D(0, H * 0.46, 0), out var top)) return false;
+        centre = _viewport.TranslatePoint(mid, _effects);
+        radius = Math.Max(20, Math.Abs(mid.Y - top.Y));
+        return true;
+    }
+
+    /// <summary>A CD: silver with a faint rainbow sheen, the album art printed on it, and a clear centre ring and hole.</summary>
+    private static FrameworkElement Disc(CoverFlowAlbum album, double size)
+    {
+        var grid = new Grid { Width = size, Height = size };
+        var silver = new RadialGradientBrush { GradientOrigin = new Point(0.35, 0.3) };
+        silver.GradientStops.Add(new GradientStop(Color.FromRgb(0xF4, 0xF5, 0xF7), 0));
+        silver.GradientStops.Add(new GradientStop(Color.FromRgb(0xC6, 0xCA, 0xD1), 0.75));
+        silver.GradientStops.Add(new GradientStop(Color.FromRgb(0x9A, 0x9F, 0xA8), 1));
+        grid.Children.Add(new System.Windows.Shapes.Ellipse { Fill = silver, Stroke = new SolidColorBrush(Color.FromArgb(0x60, 0x00, 0x00, 0x00)), StrokeThickness = 1 });
+        var sheen = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1), Opacity = 0.35 };
+        foreach (var (colour, offset) in new[] { (Colors.Transparent, 0.2), (Color.FromRgb(0xFF, 0x7A, 0xC8), 0.38), (Color.FromRgb(0x7A, 0xD8, 0xFF), 0.5), (Color.FromRgb(0xC8, 0xFF, 0x7A), 0.62), (Colors.Transparent, 0.8) })
+            sheen.GradientStops.Add(new GradientStop(colour, offset));
+        grid.Children.Add(new System.Windows.Shapes.Ellipse { Fill = sheen });
+        if (album.ArtPath is { } path && File.Exists(path))
+        {
+            try
+            {
+                var art = new BitmapImage();
+                art.BeginInit();
+                art.CacheOption = BitmapCacheOption.OnLoad;
+                art.DecodePixelWidth = 400;
+                art.UriSource = new Uri(path);
+                art.EndInit();
+                art.Freeze();
+                grid.Children.Add(new System.Windows.Shapes.Ellipse { Margin = new Thickness(size * 0.06), Fill = new ImageBrush(art) { Stretch = Stretch.UniformToFill } });
+            }
+            catch { }
+        }
+        grid.Children.Add(new System.Windows.Shapes.Ellipse { Width = size * 0.3, Height = size * 0.3, Fill = new SolidColorBrush(Color.FromArgb(0xE0, 0xDA, 0xDD, 0xE2)) });
+        grid.Children.Add(new System.Windows.Shapes.Ellipse { Width = size * 0.11, Height = size * 0.11, Fill = new SolidColorBrush(Color.FromRgb(0xE9, 0xE2, 0xD6)), Stroke = new SolidColorBrush(Color.FromArgb(0x50, 0, 0, 0)) });
+        grid.Effect = new System.Windows.Media.Effects.DropShadowEffect { BlurRadius = 18, ShadowDepth = 4, Opacity = 0.35 };
+        return grid;
+    }
+
     private void OnFrame(object? sender, EventArgs e)
     {
         var now = ((RenderingEventArgs)e).RenderingTime;
@@ -272,6 +405,7 @@ public sealed class CoverFlowView : UserControl
         var previousFlip = _flipAmount;
         _flipAmount += ((_flipped == _target ? 1 : 0) - _flipAmount) * (1 - Math.Exp(-dt * 7));
         if (Math.Abs(previous - _position) < 1e-6 && Math.Abs(previousFlip - _flipAmount) < 1e-5) return;
+        UpdateCamera();
 
         // Only cases near the centre move; the rest just keep sliding along the shelf.
         for (var i = 0; i < _cases.Count; i++)
