@@ -80,11 +80,14 @@ public static partial class StreamripService
                         throw new InvalidOperationException(StreamripError(stderr, stdout)
                                                             ?? "Streamrip did not produce an audio file");
 
+                    // A user-chosen cover wins; otherwise keep the album's own
+                    // cover from Streamrip across the format conversion.
+                    var cover = artBytes ?? (options.EmbedAlbumArt ? ReadStreamripCover(source) : null);
                     var converted = await ConvertToRequestedFormatAsync(source, options, token).ConfigureAwait(false);
                     var (artist, album, genre) = EffectiveMetadata(node, track);
                     var trackNo = track.TrackNumber > 0 ? track.TrackNumber
                         : options.NumberTracks && isCollection ? track.Index : 0;
-                    if (options.WriteMetadata || artBytes is { Length: > 0 } || !options.EmbedAlbumArt)
+                    if (options.WriteMetadata || cover is { Length: > 0 } || !options.EmbedAlbumArt)
                     {
                         DownloadService.ApplyTags(
                             converted,
@@ -93,7 +96,7 @@ public static partial class StreamripService
                             options.WriteMetadata ? genre : "",
                             options.WriteMetadata ? track.Title : null,
                             options.WriteMetadata ? trackNo : 0,
-                            artBytes,
+                            cover,
                             clearArtwork: !options.EmbedAlbumArt);
                     }
 
@@ -171,10 +174,36 @@ public static partial class StreamripService
             DownloadService.FirstReal(node.Genre, node.Parent?.Genre) ?? "Unknown");
     }
 
+    /// <summary>
+    /// Streamrip's Deezer quality: 0 = MP3 128, 1 = MP3 320, 2 = CD FLAC.
+    /// Only an MP3 target downloads MP3; every other format starts from the
+    /// lossless FLAC and converts from that. This used to ask for MP3 320 no
+    /// matter what, so "FLAC" downloads were MP3s re-wrapped as (24-bit,
+    /// oversized) FLAC files — still lossy.
+    /// </summary>
     private static int StreamripQuality(DownloadOptions options)
     {
-        if (options.Quality <= 0) return 1;
-        return options.Quality >= 320 ? 1 : 0;
+        if (options.Format != AudioFormat.Mp3) return 2;
+        return options.Quality <= 0 || options.Quality >= 320 ? 1 : 0;
+    }
+
+    /// <summary>
+    /// The cover Streamrip embedded (or saved next to the file as cover.jpg),
+    /// read before any conversion so it can be written back afterwards —
+    /// ffmpeg's audio-only conversion drops it.
+    /// </summary>
+    private static byte[]? ReadStreamripCover(string source)
+    {
+        try
+        {
+            using var file = TagLib.File.Create(source);
+            if (file.Tag.Pictures.FirstOrDefault(p => p.Data?.Data?.Length > 0) is { } picture)
+                return picture.Data.Data;
+        }
+        catch (Exception e) when (e is not OutOfMemoryException) { }
+        var saved = Directory.EnumerateFiles(Path.GetDirectoryName(source)!, "cover.jpg", SearchOption.AllDirectories).FirstOrDefault();
+        try { return saved is null ? null : File.ReadAllBytes(saved); }
+        catch (IOException) { return null; }
     }
 
     private static async Task<string> ConvertToRequestedFormatAsync(
