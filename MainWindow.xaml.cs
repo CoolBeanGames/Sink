@@ -2154,6 +2154,7 @@ public partial class MainWindow : Window
             menu.Items.Add(Item("Sync to iPod", () => SyncTracksToIpod(tracks)));
             menu.Items.Add(Item("Download high quality", () => DownloadHighQuality(tracks)));
             menu.Items.Add(Item("Check quality", () => CheckQuality(tracks)));
+            menu.Items.Add(Item("Search artwork online…", () => SearchTrackArtwork(tracks)));
             if (tracks.Count == 1 && tracks[0].FilePath is { } filePath) menu.Items.Add(Item("Show in File Explorer", () => ShowInExplorer(filePath)));
             menu.Items.Add(ExcludeFromShuffleItem(tracks));
         }
@@ -2186,7 +2187,10 @@ public partial class MainWindow : Window
             menu.Items.Add(Item("Trim titles…", () => TrimLibraryTitles(tracks)));
         }
         if (kind == LibraryCategory.Albums && single)
+        {
             menu.Items.Add(Item("Crop album art", () => CropAlbumArt(cards[0].Name, tracks)));
+            menu.Items.Add(Item("Search artwork online…", () => SearchAlbumArtwork(cards[0].Name, tracks)));
+        }
         if (kind == LibraryCategory.Albums)
             menu.Items.Add(Item(single ? "Download album art" : $"Download album art for {cards.Count} albums",
                 () => DownloadAlbumArtFor(tracks)));
@@ -2446,6 +2450,42 @@ public partial class MainWindow : Window
         var dialog = new Dialogs.ArtworkSearchWindow(name, query) { Owner = this };
         if (dialog.ShowDialog() != true || dialog.ImageBytes is not { } data) return;
         ApplyGroupArtwork(kindKey, name, data);
+    }
+
+    /// <summary>Right-click an album ▸ "Search artwork online…": the pick becomes the cover of every track on the album.</summary>
+    private void SearchAlbumArtwork(string album, IReadOnlyList<Track> tracks)
+    {
+        var artist = tracks.Select(t => t.Artist).FirstOrDefault(a => !string.IsNullOrWhiteSpace(a)) ?? "";
+        var dialog = new Dialogs.ArtworkSearchWindow(album, $"{album} {artist} album cover".Trim()) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.ImageBytes is not { } data) return;
+        ApplyTrackArtwork($"{album}|{artist}", album, tracks, data);
+    }
+
+    /// <summary>
+    /// Right-click track(s) ▸ "Search artwork online…": the pick becomes the
+    /// cover of just the selected tracks (a single on a compilation, say),
+    /// saved under its own key so the rest of the album keeps its cover.
+    /// </summary>
+    private void SearchTrackArtwork(IReadOnlyList<Track> tracks)
+    {
+        if (tracks.Count == 0) return;
+        var first = tracks[0];
+        var name = tracks.Count == 1 ? first.Title : $"{tracks.Count} tracks";
+        var dialog = new Dialogs.ArtworkSearchWindow(name, $"{first.Title} {first.Artist} single cover") { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.ImageBytes is not { } data) return;
+        ApplyTrackArtwork($"track:{first.Id}", name, tracks, data);
+    }
+
+    private void ApplyTrackArtwork(string key, string name, IReadOnlyList<Track> tracks, byte[] data)
+    {
+        var saved = Artwork.SaveOverride(key, data);
+        if (saved is null) { PlaybackStatus.Text = $"Couldn't use that image for {name}"; return; }
+        foreach (var track in tracks) track.ArtworkPath = saved;
+        _artCache.Clear(); _greyArtCache.Clear();
+        SaveLibrary();
+        RenderLibrary();
+        if (_nowPlaying is { } playing && tracks.Contains(playing)) SetNowPlayingArt(saved);
+        PlaybackStatus.Text = $"Updated artwork for {name}";
     }
 
     private void ApplyGroupArtwork(string kindKey, string name, byte[] data)
