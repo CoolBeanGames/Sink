@@ -29,6 +29,80 @@ public static class DeezerService
         return client;
     }
 
+    /// <summary>
+    /// Finds the Deezer track matching a library track, for "Download high
+    /// quality". Tries a field-scoped search, then a plain one. A candidate
+    /// must match the title (ignoring punctuation, and bracketed extras like
+    /// "(Explicit)" or "(feat. …)") and the artist; the album and a duration
+    /// within 5 s break ties, so a live or remix version isn't picked over
+    /// the studio one. Returns the track's link, or null.
+    /// </summary>
+    public static async Task<string?> FindTrackUrlAsync(string title, string artist, string album, TimeSpan duration, CancellationToken token = default)
+    {
+        var queries = new[]
+        {
+            $"artist:\"{artist}\" track:\"{title}\"",
+            $"{artist} {title}",
+        };
+        foreach (var query in queries)
+        {
+            JsonElement[] results;
+            try
+            {
+                var json = await Http.GetStringAsync($"{ApiBase}/search/track?limit=25&q={Uri.EscapeDataString(query)}", token).ConfigureAwait(false);
+                using var doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array) continue;
+                results = data.EnumerateArray().Select(e => e.Clone()).ToArray();
+            }
+            catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException) { continue; }
+
+            var best = results
+                .Select(r => (Result: r, Score: MatchScore(r, title, artist, album, duration)))
+                .Where(x => x.Score > 0)
+                .OrderByDescending(x => x.Score)
+                .FirstOrDefault();
+            if (best.Score > 0 && best.Result.TryGetProperty("link", out var link)) return link.GetString();
+        }
+        return null;
+    }
+
+    private static int MatchScore(JsonElement r, string title, string artist, string album, TimeSpan duration)
+    {
+        string Str(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+        var rTitle = Str(r, "title");
+        var rArtist = r.TryGetProperty("artist", out var a) ? Str(a, "name") : "";
+        var rAlbum = r.TryGetProperty("album", out var al) ? Str(al, "title") : "";
+        var titleMatch = Key(rTitle) == Key(title) ? 2 : Key(StripExtras(rTitle)) == Key(StripExtras(title)) ? 1 : 0;
+        if (titleMatch == 0) return 0;
+        // A different recording of the same song (live, remix, acoustic...)
+        // only counts when the library track is that version too.
+        foreach (var marker in VersionMarkers)
+        {
+            var candidateHas = HasWord(rTitle, marker) || HasWord(rAlbum, marker);
+            var libraryHas = HasWord(title, marker) || HasWord(album, marker);
+            if (candidateHas && !libraryHas) return 0;
+        }
+        var wantArtist = Key(artist);
+        var gotArtist = Key(rArtist);
+        if (wantArtist.Length == 0 || gotArtist.Length == 0 || !(gotArtist.Contains(wantArtist) || wantArtist.Contains(gotArtist))) return 0;
+        var score = 10 + titleMatch;
+        if (album.Length > 0 && Key(StripExtras(rAlbum)) == Key(StripExtras(album))) score += 5;
+        if (duration > TimeSpan.Zero && r.TryGetProperty("duration", out var d) && d.TryGetInt32(out var seconds)
+            && Math.Abs(seconds - duration.TotalSeconds) <= 5) score += 3;
+        return score;
+    }
+
+    private static readonly string[] VersionMarkers =
+        ["live", "remix", "acoustic", "instrumental", "karaoke", "demo", "sped up", "slowed", "reverb", "cover", "remaster", "unplugged"];
+
+    private static bool HasWord(string value, string word) =>
+        Regex.IsMatch(value, $@"\b{Regex.Escape(word)}\b", RegexOptions.IgnoreCase);
+
+    private static string StripExtras(string value) => Regex.Replace(value, @"\s*[\(\[][^\)\]]*[\)\]]", "");
+
+    private static string Key(string value) =>
+        new string(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+
     public static bool IsDeezerLink(string value)
     {
         if (!Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri)) return false;

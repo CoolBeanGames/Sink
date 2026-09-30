@@ -171,6 +171,13 @@ public sealed class DownloadNode : INotifyPropertyChanged, ITitleTrimmable
     public bool HasArtworkOverride => !string.IsNullOrWhiteSpace(_artworkOverride);
 
     /// <summary>
+    /// Set on a "Download high quality" item: the library track this download
+    /// replaces in place (same id, plays, playlists) instead of importing a
+    /// new one. Skips the "already in library" check for the same reason.
+    /// </summary>
+    public Guid? ReplacesTrackId { get; set; }
+
+    /// <summary>
     /// The cover to embed when downloading this node: its own override, else
     /// its album's. Never an artist-level (or playlist-container) image: an
     /// artist's photo is not an album cover, and inheriting it used to stamp

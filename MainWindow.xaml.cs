@@ -2147,6 +2147,7 @@ public partial class MainWindow : Window
         else
         {
             menu.Items.Add(Item("Sync to iPod", () => SyncTracksToIpod(tracks)));
+            menu.Items.Add(Item("Download high quality", () => DownloadHighQuality(tracks)));
             menu.Items.Add(ExcludeFromShuffleItem(tracks));
         }
         menu.Items.Add(new Separator());
@@ -2200,6 +2201,7 @@ public partial class MainWindow : Window
         else
         {
             menu.Items.Add(Item("Sync to iPod", () => SyncTracksToIpod(tracks)));
+            menu.Items.Add(Item("Download high quality", () => DownloadHighQuality(tracks)));
             menu.Items.Add(ExcludeFromShuffleItem(tracks));
         }
         menu.Items.Add(new Separator());

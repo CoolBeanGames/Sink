@@ -27,6 +27,7 @@ public sealed class DownloadNodeData
     /// "mixed playlist" flag, silently reverting every track back to the shared album Artist/Album/Genre
     /// on retry instead of each track's own edited values.</summary>
     public bool IsMixedPlaylist { get; set; }
+    public Guid? ReplacesTrackId { get; set; }
     public List<DownloadNodeData> Children { get; set; } = [];
 }
 
@@ -91,6 +92,7 @@ public static class DownloadQueueStore
         Scanned = node.Scanned,
         Done = node.State == DownloadState.Done,
         IsMixedPlaylist = node.IsMixedPlaylist,
+        ReplacesTrackId = node.ReplacesTrackId,
         Children = node.Children.Select(ToData).ToList(),
     };
 
@@ -112,6 +114,7 @@ public static class DownloadQueueStore
             Index = data.Index,
             ScannedTitle = data.ScannedTitle,
             Scanned = data.Scanned,
+            ReplacesTrackId = data.ReplacesTrackId,
         };
         foreach (var child in data.Children) node.Children.Add(FromData(child));
         return node;

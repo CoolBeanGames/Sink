@@ -1680,7 +1680,7 @@ public partial class MainWindow
                 // re-fetching it — matched the same way tags actually get
                 // written, so this lines up with what a real duplicate means
                 // here (same artist, same album, same title).
-                if (node.Kind == DownloadKind.Single)
+                if (node.Kind == DownloadKind.Single && node.ReplacesTrackId is null)
                 {
                     if (FindInLibrary(node.Artist, node.Album, node.Title) is { } existingSingle)
                     {
@@ -1812,6 +1812,13 @@ public partial class MainWindow
                     node.StatusText = "Importing…";
                     var progressiveTrackLists = await Task.WhenAll(pendingImports);
                     var remainder = paths.Where(p => alreadyImported.Add(p)).ToList(); // safety net
+                    foreach (var p in remainder.ToList())
+                    {
+                        if (DownloadService.TakeOwner(p)?.ReplacesTrackId is not { } replaces
+                            || _tracks.FirstOrDefault(t => t.Id == replaces) is not { } existing) continue;
+                        ReplaceTrackFile(existing, p, DownloadService.TakeOriginal(p));
+                        remainder.Remove(p);
+                    }
                     var remainderOriginals = remainder.Select(DownloadService.TakeOriginal).ToList();
                     var tracks = remainder.Count > 0 ? await Task.Run(() => MusicImporter.Import(remainder)) : [];
                     if (tracks.Count == remainder.Count)
@@ -1910,7 +1917,13 @@ public partial class MainWindow
         await _downloadImportGate.WaitAsync();
         try
         {
+            var owner = DownloadService.TakeOwner(path);
             var original = DownloadService.TakeOriginal(path);
+            if (owner?.ReplacesTrackId is { } replaces && _tracks.FirstOrDefault(t => t.Id == replaces) is { } existing)
+            {
+                ReplaceTrackFile(existing, path, original);
+                return [];
+            }
             var tracks = await Task.Run(() => MusicImporter.Import([path]));
             if (original is not null && tracks.Count == 1) tracks[0].OriginalPath = original;
             foreach (var track in tracks) _tracks.Add(track);

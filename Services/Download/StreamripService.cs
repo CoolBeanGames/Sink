@@ -126,6 +126,7 @@ public static partial class StreamripService
                         DownloadService.Sanitize(stem) + Path.GetExtension(converted)));
                     File.Move(converted, finalPath, overwrite: false);
                     if (original is not null) DownloadService.RegisterOriginal(finalPath, original);
+                    DownloadService.RegisterOwner(finalPath, track);
                     finished.Add(finalPath);
                     onTrackFile?.Report(finalPath);
                     if (track.Kind == DownloadKind.Track)

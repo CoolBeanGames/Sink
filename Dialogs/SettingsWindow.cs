@@ -31,6 +31,7 @@ public sealed class SettingsWindow : SinkDialog
     private readonly Action _export;
     private readonly Action _import;
     private readonly Func<IProgress<LibraryMaintenanceProgress>, Task<string>> _organize;
+    private readonly Action? _upgradeLibrary;
     private readonly List<Button> _actionButtons = [];
     private readonly TextBlock _maintenanceStatus = new()
     {
@@ -54,8 +55,10 @@ public sealed class SettingsWindow : SinkDialog
         Func<IProgress<LibraryMaintenanceProgress>, Task<int>> refreshLibrary,
         Action exportLibrary,
         Action importLibrary,
-        Func<IProgress<LibraryMaintenanceProgress>, Task<string>> organizeLibrary)
+        Func<IProgress<LibraryMaintenanceProgress>, Task<string>> organizeLibrary,
+        Action? upgradeLibrary = null)
     {
+        _upgradeLibrary = upgradeLibrary;
         _refresh = refreshLibrary;
         _export = exportLibrary;
         _import = importLibrary;
@@ -214,6 +217,17 @@ public sealed class SettingsWindow : SinkDialog
             await RunMaintenanceAsync("Organizing library…", "Organize library", _organize);
         });
         actions.Children.Add(organizeButton);
+        if (_upgradeLibrary is not null)
+            actions.Children.Add(SecondaryButton("Download high quality for whole library", (_, _) =>
+            {
+                if (MessageBox.Show(this,
+                        "Check every track and download a real lossless copy of anything that needs one (fake FLACs, MP3s), " +
+                        "following the Keep high quality setting. Replaced files are deleted once their new copy has arrived.\n\n" +
+                        "Progress shows in the main window's status bar and on the Download page.",
+                        "Download high quality", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+                _upgradeLibrary();
+                Close();
+            }));
         actions.Children.Add(SecondaryButton("Open logs…", (_, _) => Log.OpenFolder()));
         for (var i = 0; i < actions.Children.Count; i++)
             actions.Children[i].SetValue(MarginProperty, new Thickness(i == 0 ? 0 : 8, 0, 0, 8));

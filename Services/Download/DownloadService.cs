@@ -666,6 +666,16 @@ public static partial class DownloadService
     public static string? TakeOriginal(string libraryFile) =>
         Originals.TryRemove(Path.GetFullPath(libraryFile), out var original) ? original : null;
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, DownloadNode> Owners =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Remembers which queue item produced a just-downloaded file, so the import can tell a replacement from a new track.</summary>
+    internal static void RegisterOwner(string libraryFile, DownloadNode node) =>
+        Owners[Path.GetFullPath(libraryFile)] = node;
+
+    public static DownloadNode? TakeOwner(string libraryFile) =>
+        Owners.TryRemove(Path.GetFullPath(libraryFile), out var node) ? node : null;
+
     internal static string UniquePath(string path)
     {
         if (!File.Exists(path)) return path;

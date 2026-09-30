@@ -13,7 +13,8 @@ public partial class MainWindow
     private void Settings_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new SettingsWindow(
-            AppSettings.Current.Clone(), RefreshLibraryAsync, ExportLibrary, ImportLibrary, OrganizeLibraryAsync)
+            AppSettings.Current.Clone(), RefreshLibraryAsync, ExportLibrary, ImportLibrary, OrganizeLibraryAsync,
+            () => DownloadHighQuality(_tracks.ToList()))
             { Owner = this };
         if (dialog.ShowDialog() != true || dialog.Result is null) return;
         dialog.Result.Save();
