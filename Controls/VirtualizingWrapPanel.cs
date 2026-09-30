@@ -99,6 +99,14 @@ public sealed class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
     protected override void OnItemsChanged(object sender, ItemsChangedEventArgs args)
     {
         base.OnItemsChanged(sender, args);
+        // The generator has already dropped these items' containers; their
+        // UI elements must leave the children collection too, or they linger
+        // as stale cards the generator no longer knows about.
+        if (args.Action is System.Collections.Specialized.NotifyCollectionChangedAction.Remove
+            or System.Collections.Specialized.NotifyCollectionChangedAction.Replace
+            or System.Collections.Specialized.NotifyCollectionChangedAction.Move
+            && args.ItemUICount > 0)
+            RemoveInternalChildRange(args.Position.Index, args.ItemUICount);
         InvalidateMeasure();
     }
 
@@ -129,7 +137,16 @@ public sealed class VirtualizingWrapPanel : VirtualizingPanel, IScrollInfo
             for (var itemIndex = firstIndex; itemIndex <= lastIndex; itemIndex++, childIndex++)
             {
                 if (generator.GenerateNext(out var newlyRealized) is not UIElement child) continue;
-                if (newlyRealized)
+                // A container handed back from the recycle pool reports
+                // newlyRealized = false, exactly like one that's already
+                // realized in place — but it isn't in the children collection
+                // (CleanupItems removed it). Treating every "not new" container
+                // as already present left recycled ones out, so each scroll
+                // lost a row of cards until the grid was empty, and the
+                // generator's positions drifted from the children so the rest
+                // were arranged in the wrong rows.
+                var inPlace = !newlyRealized && childIndex < InternalChildren.Count && ReferenceEquals(InternalChildren[childIndex], child);
+                if (!inPlace)
                 {
                     if (childIndex >= InternalChildren.Count) AddInternalChild(child);
                     else InsertInternalChild(childIndex, child);
