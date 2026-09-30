@@ -39,7 +39,7 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
-        <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#12151C"/><Setter Property="Foreground" Value="#747B8A"/><Setter Property="BorderBrush" Value="#262C38"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="Padding" Value="12,10"/><Setter Property="FontSize" Value="10"/></Style>
+        <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#B312151C"/><Setter Property="Foreground" Value="#747B8A"/><Setter Property="BorderBrush" Value="#262C38"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="Padding" Value="12,10"/><Setter Property="FontSize" Value="10"/></Style>
         <!-- VerticalContentAlignment=Center matters for a plain DataGridTextColumn
              (e.g. TIME) whose auto-generated TextBlock has no alignment of its
              own — the template-column fields elsewhere center themselves via
@@ -47,7 +47,7 @@
              DataGridCell default (effectively top-aligned), the only column
              visibly out of line with the rest of the row. -->
         <Style TargetType="DataGridCell"><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="12,9"/><Setter Property="Foreground" Value="#BFC4CE"/><Setter Property="Background" Value="Transparent"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/><Setter Property="VerticalContentAlignment" Value="Center"/></Style>
-        <Style TargetType="DataGridRow"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="#20252F"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="MinHeight" Value="48"/><Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#1B1F28"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#2B2850"/><Setter Property="Foreground" Value="#F4F6FA"/></Trigger></Style.Triggers></Style>
+        <Style TargetType="DataGridRow"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="#20252F"/><Setter Property="BorderThickness" Value="0,0,0,1"/><Setter Property="MinHeight" Value="48"/><Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#CC1B1F28"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#D92B2850"/><Setter Property="Foreground" Value="#F4F6FA"/></Trigger></Style.Triggers></Style>
         <!-- Ctrl+click briefly begins editing a single TracksGrid cell (task:
              inline retag anywhere a song list is shown) — without this the
              editor falls back to a plain white WPF TextBox that clashes with
@@ -319,7 +319,7 @@
                     </DataTemplate></ListBox.ItemTemplate>
                 </ListBox>
             </Grid>
-            <Border x:Name="TracksBorder" Grid.Row="1" Margin="0,28,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#12151C" Visibility="Collapsed">
+            <Border x:Name="TracksBorder" Grid.Row="1" Margin="0,28,0,0" BorderBrush="#262C38" BorderThickness="1" CornerRadius="12" Background="#5912151C" Visibility="Collapsed">
                 <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                 <Border x:Name="SelectionBar" Visibility="Collapsed" Background="Transparent" BorderBrush="#262C38" BorderThickness="0,0,0,1" Padding="15,9"><DockPanel><Button Content="Clear" DockPanel.Dock="Right" Click="ClearSelection_Click" Background="Transparent" Foreground="#9D91FF" BorderThickness="0"/><TextBlock x:Name="SelectionText" Foreground="#7D8493" FontSize="11" VerticalAlignment="Center"/></DockPanel></Border>
                 <DataGrid x:Name="TracksGrid" Grid.Row="1" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="None" Background="Transparent" BorderThickness="0" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow" VirtualizingPanel.ScrollUnit="Pixel" SelectionChanged="TracksGrid_SelectionChanged" MouseDoubleClick="TracksGrid_MouseDoubleClick" PreviewMouseLeftButtonDown="TracksGrid_PreviewMouseLeftButtonDown" PreviewMouseMove="TracksGrid_PreviewMouseMove" ContextMenuOpening="TracksGrid_ContextMenuOpening" CellEditEnding="TracksGrid_CellEditEnding">
