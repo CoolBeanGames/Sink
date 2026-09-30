@@ -23,6 +23,9 @@ public sealed class SettingsWindow : SinkDialog
     private readonly TextBox _cookieFile = Field();
     private readonly UIElement _cookieFileRow;
     private readonly TextBox _deezerArl = Field();
+    private readonly CheckBox _keepHighQuality = new() { Content = "Keep high quality", Foreground = Hex("#C7CCD6") };
+    private readonly TextBox _highQuality = Field();
+    private readonly AppSettings _initial;
 
     private readonly Func<IProgress<LibraryMaintenanceProgress>, Task<int>> _refresh;
     private readonly Action _export;
@@ -62,7 +65,10 @@ public sealed class SettingsWindow : SinkDialog
         SizeToContent = SizeToContent.Height;
         Title = "Settings";
 
+        _initial = settings;
         _library.Text = settings.LibraryLocation;
+        _keepHighQuality.IsChecked = settings.KeepHighQuality;
+        _highQuality.Text = settings.HighQualityRoot;
         _podcasts.Text = settings.PodcastLocation;
         _syncOnConnect.IsChecked = settings.SyncOnConnect;
         _importMode.Items.Add("Reference — leave files where they are");
@@ -121,6 +127,17 @@ public sealed class SettingsWindow : SinkDialog
 
         body.Children.Add(FolderRow("Library folder", "Downloaded and copied/moved tracks live here.", _library));
         body.Children.Add(FolderRow("Podcast folder", "Downloaded podcast episodes live here.", _podcasts));
+
+        _keepHighQuality.Margin = new Thickness(0, 18, 0, 0);
+        body.Children.Add(_keepHighQuality);
+        body.Children.Add(new TextBlock
+        {
+            Text = "Deezer downloads are kept as real FLAC in the high-quality folder, and your library copy is converted from that into " +
+                   "the format picked on the Download page. With FLAC picked, the library file already is the FLAC, so nothing is stored twice. " +
+                   "\"Download high quality\" (right-click an album, artist, genre or track) fetches a real FLAC for anything that doesn't have one yet.",
+            Foreground = Hex("#6E7584"), FontSize = 11, Margin = new Thickness(0, 5, 0, 0), TextWrapping = TextWrapping.Wrap,
+        });
+        body.Children.Add(FolderRow("High-quality folder", "Where FLAC originals are kept.", _highQuality));
 
         body.Children.Add(Label("Import mode"));
         body.Children.Add(_importMode);
@@ -285,15 +302,22 @@ public sealed class SettingsWindow : SinkDialog
     private void Save_Click(object sender, RoutedEventArgs e)
     {
         var cookieChoice = CookieChoices[Math.Max(0, _youTubeCookies.SelectedIndex)];
-        Result = new AppSettings
-        {
-            LibraryLocation = _library.Text.Trim(),
-            PodcastLocation = _podcasts.Text.Trim(),
-            SyncOnConnect = _syncOnConnect.IsChecked == true,
-            ImportMode = (ImportMode)Math.Max(0, _importMode.SelectedIndex),
-            YouTubeCookies = cookieChoice,
-            CookieFilePath = _cookieFile.Text.Trim(),
-        };
+        // Start from the settings this dialog was opened with, so values it
+        // doesn't show (download options, sidebar width) aren't reset to
+        // their defaults on Save.
+        Result = _initial.Clone();
+        Result.LibraryLocation = _library.Text.Trim();
+        Result.PodcastLocation = _podcasts.Text.Trim();
+        Result.SyncOnConnect = _syncOnConnect.IsChecked == true;
+        Result.ImportMode = (ImportMode)Math.Max(0, _importMode.SelectedIndex);
+        Result.YouTubeCookies = cookieChoice;
+        Result.CookieFilePath = _cookieFile.Text.Trim();
+        Result.KeepHighQuality = _keepHighQuality.IsChecked == true;
+        // Stored blank while it's still the default, so it keeps following
+        // the library folder if that moves.
+        var hq = _highQuality.Text.Trim();
+        var defaultHq = new AppSettings { LibraryLocation = Result.LibraryLocation }.HighQualityRoot;
+        Result.HighQualityLocation = string.Equals(hq, defaultHq, StringComparison.OrdinalIgnoreCase) ? "" : hq;
         // A cookie failure earlier this session (e.g. Chrome's DPAPI-encrypted
         // store) latches "give up on cookies" for the rest of the process —
         // otherwise switching to a browser that actually works, like Firefox,

@@ -57,6 +57,27 @@ public sealed class AppSettings
     /// </summary>
     public string CookieFilePath { get; set; } = "";
 
+    /// <summary>
+    /// Keep a real FLAC of every Deezer download in <see cref="HighQualityRoot"/>
+    /// and convert the library copy from it into the chosen format.
+    /// </summary>
+    public bool KeepHighQuality { get; set; }
+
+    /// <summary>Where high-quality originals live; blank means "Original" next to the library folder.</summary>
+    public string HighQualityLocation { get; set; } = "";
+
+    /// <summary>The effective high-quality folder: e.g. Z:\Sink\Music → Z:\Sink\Original.</summary>
+    [JsonIgnore]
+    public string HighQualityRoot
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(HighQualityLocation)) return HighQualityLocation;
+            var library = LibraryLocation.TrimEnd('\\', '/');
+            return Path.Combine(Path.GetDirectoryName(library) ?? library, "Original");
+        }
+    }
+
     public double SidebarWidth { get; set; } = 238;
     public int OptFormatIndex { get; set; } = 0;
     public int OptQualityIndex { get; set; } = 0;
@@ -101,6 +122,8 @@ public sealed class AppSettings
         ImportMode = ImportMode,
         YouTubeCookies = YouTubeCookies,
         CookieFilePath = CookieFilePath,
+        KeepHighQuality = KeepHighQuality,
+        HighQualityLocation = HighQualityLocation,
         SidebarWidth = SidebarWidth,
         OptFormatIndex = OptFormatIndex,
         OptQualityIndex = OptQualityIndex,

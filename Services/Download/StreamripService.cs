@@ -83,10 +83,28 @@ public static partial class StreamripService
                     // A user-chosen cover wins; otherwise keep the album's own
                     // cover from Streamrip across the format conversion.
                     var cover = artBytes ?? (options.EmbedAlbumArt ? ReadStreamripCover(source) : null);
-                    var converted = await ConvertToRequestedFormatAsync(source, options, token).ConfigureAwait(false);
                     var (artist, album, genre) = EffectiveMetadata(node, track);
                     var trackNo = track.TrackNumber > 0 ? track.TrackNumber
                         : options.NumberTracks && isCollection ? track.Index : 0;
+                    var stem = isCollection
+                        ? $"{Math.Max(1, track.Index):000} - {track.Title}"
+                        : $"{artist} - {track.Title}";
+                    // "Keep high quality": the real FLAC is kept in the
+                    // high-quality folder before the library copy is
+                    // converted from it. With FLAC as the library format the
+                    // library file already is that FLAC, so no second copy.
+                    string? original = null;
+                    if (options.KeepOriginal && options.Format != AudioFormat.Flac
+                        && string.Equals(Path.GetExtension(source), ".flac", StringComparison.OrdinalIgnoreCase)
+                        && !string.IsNullOrWhiteSpace(options.OriginalRoot))
+                    {
+                        var originalDirectory = MusicImporter.ArtistAlbumDir(options.OriginalRoot, artist, album);
+                        Directory.CreateDirectory(originalDirectory);
+                        original = DownloadService.UniquePath(Path.Combine(originalDirectory, DownloadService.Sanitize(stem) + ".flac"));
+                        File.Copy(source, original);
+                        DownloadService.ApplyTags(original, artist, album, genre, track.Title, trackNo, cover);
+                    }
+                    var converted = await ConvertToRequestedFormatAsync(source, options, token).ConfigureAwait(false);
                     if (options.WriteMetadata || cover is { Length: > 0 } || !options.EmbedAlbumArt)
                     {
                         DownloadService.ApplyTags(
@@ -103,13 +121,11 @@ public static partial class StreamripService
                     var destinationDirectory = MusicImporter.ArtistAlbumDir(
                         DownloadService.DownloadsDirectory, artist, album);
                     Directory.CreateDirectory(destinationDirectory);
-                    var stem = isCollection
-                        ? $"{Math.Max(1, track.Index):000} - {track.Title}"
-                        : $"{artist} - {track.Title}";
                     var finalPath = DownloadService.UniquePath(Path.Combine(
                         destinationDirectory,
                         DownloadService.Sanitize(stem) + Path.GetExtension(converted)));
                     File.Move(converted, finalPath, overwrite: false);
+                    if (original is not null) DownloadService.RegisterOriginal(finalPath, original);
                     finished.Add(finalPath);
                     onTrackFile?.Report(finalPath);
                     if (track.Kind == DownloadKind.Track)
@@ -183,7 +199,7 @@ public static partial class StreamripService
     /// </summary>
     private static int StreamripQuality(DownloadOptions options)
     {
-        if (options.Format != AudioFormat.Mp3) return 2;
+        if (options.Format != AudioFormat.Mp3 || options.KeepOriginal) return 2;
         return options.Quality <= 0 || options.Quality >= 320 ? 1 : 0;
     }
 

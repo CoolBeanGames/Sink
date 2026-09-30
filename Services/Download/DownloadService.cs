@@ -655,6 +655,17 @@ public static partial class DownloadService
         return name.Length > 120 ? name[..120] : name;
     }
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> Originals =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Remembers the high-quality original kept for a just-downloaded library file, for the import to attach to its track.</summary>
+    internal static void RegisterOriginal(string libraryFile, string original) =>
+        Originals[Path.GetFullPath(libraryFile)] = original;
+
+    /// <summary>The original registered for <paramref name="libraryFile"/>, if any (removes it).</summary>
+    public static string? TakeOriginal(string libraryFile) =>
+        Originals.TryRemove(Path.GetFullPath(libraryFile), out var original) ? original : null;
+
     internal static string UniquePath(string path)
     {
         if (!File.Exists(path)) return path;

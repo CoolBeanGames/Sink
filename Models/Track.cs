@@ -11,6 +11,13 @@ public sealed class Track : ITitleTrimmable
     public required string Genre { get; set; }
     public required string FileName { get; set; }
     public string? FilePath { get; set; }
+
+    /// <summary>
+    /// The real-FLAC original kept in the high-quality folder when the
+    /// library copy is in another format ("Keep high quality"). Null when the
+    /// library file itself is the high-quality copy, or none was kept.
+    /// </summary>
+    public string? OriginalPath { get; set; }
     public int TrackNumber { get; set; }
     public int Year { get; set; }
     public TimeSpan Duration { get; init; }

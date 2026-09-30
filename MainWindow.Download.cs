@@ -1258,6 +1258,8 @@ public partial class MainWindow
             _ => AudioFormat.Mp3
         },
         Quality = (OptQuality.SelectedItem as ComboBoxItem)?.Tag is string tag && int.TryParse(tag, out var q) ? q : 0,
+        KeepOriginal = AppSettings.Current.KeepHighQuality,
+        OriginalRoot = AppSettings.Current.HighQualityRoot,
     };
 
     // ---- Preview (double-click a track) -------------------------------
@@ -1810,7 +1812,10 @@ public partial class MainWindow
                     node.StatusText = "Importing…";
                     var progressiveTrackLists = await Task.WhenAll(pendingImports);
                     var remainder = paths.Where(p => alreadyImported.Add(p)).ToList(); // safety net
+                    var remainderOriginals = remainder.Select(DownloadService.TakeOriginal).ToList();
                     var tracks = remainder.Count > 0 ? await Task.Run(() => MusicImporter.Import(remainder)) : [];
+                    if (tracks.Count == remainder.Count)
+                        for (var t = 0; t < tracks.Count; t++) tracks[t].OriginalPath ??= remainderOriginals[t];
                     foreach (var track in tracks) _tracks.Add(track);
                     var allNewTracks = progressiveTrackLists.SelectMany(l => l).Concat(tracks).ToList();
                     imported += allNewTracks.Count;
@@ -1905,7 +1910,9 @@ public partial class MainWindow
         await _downloadImportGate.WaitAsync();
         try
         {
+            var original = DownloadService.TakeOriginal(path);
             var tracks = await Task.Run(() => MusicImporter.Import([path]));
+            if (original is not null && tracks.Count == 1) tracks[0].OriginalPath = original;
             foreach (var track in tracks) _tracks.Add(track);
             // A large album can finalize tracks much faster than tag/artwork
             // import completes. Serializing that disk-heavy work avoids a burst

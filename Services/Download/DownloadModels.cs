@@ -392,6 +392,10 @@ public sealed class DownloadOptions
     /// <summary>Audio bitrate in kbps, or 0 for "best available".</summary>
     public int Quality { get; set; } = 0;
 
+    /// <summary>Keep a real-FLAC original under <see cref="OriginalRoot"/> when the library copy is another format ("Keep high quality").</summary>
+    public bool KeepOriginal { get; set; }
+    public string OriginalRoot { get; set; } = "";
+
     public string FormatExtension => Format switch
     {
         AudioFormat.Mp3 => "mp3",
