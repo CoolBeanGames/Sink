@@ -37,7 +37,7 @@ public static partial class StreamripService
         if (selected.Any(t => string.IsNullOrWhiteSpace(t.Url)))
             throw new InvalidOperationException("This saved Deezer item is missing its track links; remove it and add the Deezer link again");
 
-        var artOverride = node.ArtworkOverride ?? node.Parent?.ArtworkOverride;
+        var artOverride = node.CoverArtForDownload;
         var artBytes = string.IsNullOrWhiteSpace(artOverride) ? null : Artwork.SquareCropBytes(artOverride);
         var finished = new List<string>();
         var failures = new List<string>();

@@ -170,6 +170,18 @@ public sealed class DownloadNode : INotifyPropertyChanged, ITitleTrimmable
 
     public bool HasArtworkOverride => !string.IsNullOrWhiteSpace(_artworkOverride);
 
+    /// <summary>
+    /// The cover to embed when downloading this node: its own override, else
+    /// its album's. Never an artist-level (or playlist-container) image: an
+    /// artist's photo is not an album cover, and inheriting it used to stamp
+    /// the same artist picture onto every album of an artist download.
+    /// </summary>
+    public string? CoverArtForDownload =>
+        Kind == DownloadKind.Artist ? null
+        : HasArtworkOverride ? _artworkOverride
+        : Parent is { Kind: not DownloadKind.Artist, HasArtworkOverride: true } parent ? parent.ArtworkOverride
+        : null;
+
     // Which secondary fields this kind exposes.
     public bool IsTrack => Kind == DownloadKind.Track;
     public bool ShowTrackNumber => Kind is DownloadKind.Track or DownloadKind.Single;

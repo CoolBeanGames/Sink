@@ -2136,10 +2136,12 @@ public partial class MainWindow : Window
             menu.Items.Add(Item("Trim titles…", () => TrimLibraryTitles(tracks)));
         }
         if (kind == LibraryCategory.Albums && single)
-        {
             menu.Items.Add(Item("Crop album art", () => CropAlbumArt(cards[0].Name, tracks)));
-            menu.Items.Add(Item("Download album art", () => DownloadAlbumArt(cards[0].Name, tracks)));
-        }
+        if (kind == LibraryCategory.Albums)
+            menu.Items.Add(Item(single ? "Download album art" : $"Download album art for {cards.Count} albums",
+                () => DownloadAlbumArtFor(tracks)));
+        if (kind == LibraryCategory.Artists)
+            menu.Items.Add(Item("Download album art for all albums", () => DownloadAlbumArtFor(tracks)));
         if (kind == LibraryCategory.Genres && single)
         {
             menu.Items.Add(Item("Set genre artwork…", () => SetGroupArtwork("genre", cards[0].Name)));
@@ -2326,22 +2328,39 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Searches online for the album's cover art and applies it to every track in the album, same as a manual crop. Does nothing but report it when no match is found.</summary>
-    private async void DownloadAlbumArt(string album, IReadOnlyList<Track> tracks)
+    /// <summary>
+    /// Looks up and applies real cover art for every album among
+    /// <paramref name="tracks"/> — one album, a multi-selection, or all of an
+    /// artist's albums. Repairs the covers an artist-discography download
+    /// stamped with the artist's photo. An album with no confident match
+    /// (see <see cref="Artwork.SearchAndDownloadAlbumArt"/>) keeps its art.
+    /// </summary>
+    private async void DownloadAlbumArtFor(IReadOnlyList<Track> tracks)
     {
-        var artist = tracks.Select(t => t.Artist).FirstOrDefault() ?? "";
-        var key = $"{album}|{artist}";
-        PlaybackStatus.Text = $"Searching for cover art for {album}…";
-        var path = await Task.Run(() => Artwork.SearchAndDownloadAlbumArt(album, artist, key));
-        if (path is null)
+        var albums = tracks.Where(t => !string.IsNullOrWhiteSpace(t.Album))
+            .GroupBy(t => (t.Album, t.Artist)).ToList();
+        if (albums.Count == 0) return;
+        int found = 0, missed = 0;
+        for (var i = 0; i < albums.Count; i++)
         {
-            PlaybackStatus.Text = $"No cover art found for {album}";
-            return;
+            var (album, artist) = albums[i].Key;
+            PlaybackStatus.Text = albums.Count == 1
+                ? $"Searching for cover art for {album}…"
+                : $"({i + 1}/{albums.Count}) Searching for cover art for {album}…";
+            var path = await Task.Run(() => Artwork.SearchAndDownloadAlbumArt(album, artist, $"{album}|{artist}"));
+            if (path is null) { missed++; continue; }
+            foreach (var track in albums[i]) track.ArtworkPath = path;
+            found++;
         }
-        foreach (var track in tracks) track.ArtworkPath = path;
-        _artCache.Clear();
-        SaveLibrary();
-        RenderLibrary();
-        PlaybackStatus.Text = $"Downloaded cover art for {album}";
+        if (found > 0)
+        {
+            _artCache.Clear();
+            SaveLibrary();
+            RenderLibrary();
+        }
+        PlaybackStatus.Text = albums.Count == 1
+            ? found == 1 ? $"Downloaded cover art for {albums[0].Key.Album}" : $"No cover art found for {albums[0].Key.Album}"
+            : $"Downloaded cover art for {found} of {albums.Count} albums" + (missed > 0 ? $" — {missed} had no confident match" : "");
     }
 
     /// <summary>

@@ -97,34 +97,82 @@ public static class Artwork
     }
 
     /// <summary>
-    /// Searches the iTunes Search API (public, no key required) for an
-    /// album's cover art by album+artist name and downloads the highest
-    /// resolution version offered, cached under the given key. iTunes cover
-    /// art is always already square. Blocking — call from a worker thread.
-    /// Returns null when nothing matched or the request failed; never throws.
+    /// Finds an album's real cover by album+artist name and caches it under
+    /// the given key. Tries Deezer first (it carries far more of the catalog
+    /// Sink downloads from — most of bbno$'s singles aren't on iTunes at all),
+    /// then the iTunes Search API. Both covers are already square. Blocking —
+    /// call from a worker thread. Returns null when nothing confidently
+    /// matched or the requests failed; never throws.
     /// </summary>
     public static string? SearchAndDownloadAlbumArt(string album, string artist, string key)
     {
         if (string.IsNullOrWhiteSpace(album)) return null;
+        var url = FindCoverUrl(album, artist, "https://api.deezer.com/search/album?limit=10&q=",
+                      "data", r => Prop(r, "title"), r => r.TryGetProperty("artist", out var a) ? Prop(a, "name") : null,
+                      r => Prop(r, "cover_xl"))
+                  ?? FindCoverUrl(album, artist, "https://itunes.apple.com/search?entity=album&limit=10&term=",
+                      "results", r => Prop(r, "collectionName"), r => Prop(r, "artistName"),
+                      r => Prop(r, "artworkUrl100")?.Replace("100x100bb", "1200x1200bb"), itunes: true);
+        if (url is null) return null;
+        try { return SaveOverride(key, Http.GetByteArrayAsync(url).GetAwaiter().GetResult()); }
+        catch (Exception e) when (e is not OutOfMemoryException) { return null; }
+    }
+
+    private static readonly object ItunesPace = new();
+    private static DateTime _lastItunesCall = DateTime.MinValue;
+
+    /// <summary>
+    /// One catalog lookup. A result counts when it's by the same artist, or —
+    /// for collaborations another artist is credited first on — when its
+    /// title is an exact, distinctive (10+ letters) match; a short title like
+    /// "two" must not grab a stranger's cover. Exact titles win over partial.
+    /// </summary>
+    private static string? FindCoverUrl(string album, string artist, string searchPrefix, string listName,
+        Func<JsonElement, string?> title, Func<JsonElement, string?> artistOf, Func<JsonElement, string?> cover, bool itunes = false)
+    {
         try
         {
-            var term = Uri.EscapeDataString($"{album} {artist}".Trim());
-            var searchUrl = $"https://itunes.apple.com/search?term={term}&entity=album&limit=1";
-            var json = Http.GetStringAsync(searchUrl).GetAwaiter().GetResult();
+            if (itunes)
+            {
+                // Apple rate-limits the Search API to about 20 calls a minute;
+                // a bulk cover repair would otherwise get blocked partway.
+                lock (ItunesPace)
+                {
+                    var wait = _lastItunesCall.AddSeconds(3.1) - DateTime.UtcNow;
+                    if (wait > TimeSpan.Zero) Thread.Sleep(wait);
+                    _lastItunesCall = DateTime.UtcNow;
+                }
+            }
+            var json = Http.GetStringAsync(searchPrefix + Uri.EscapeDataString($"{album} {artist}".Trim())).GetAwaiter().GetResult();
             using var doc = JsonDocument.Parse(json);
-            var results = doc.RootElement.GetProperty("results");
-            if (results.GetArrayLength() == 0) return null;
-            var artworkUrl = results[0].GetProperty("artworkUrl100").GetString();
-            if (string.IsNullOrWhiteSpace(artworkUrl)) return null;
-            var bigUrl = artworkUrl.Replace("100x100bb", "1200x1200bb");
-            var data = Http.GetByteArrayAsync(bigUrl).GetAwaiter().GetResult();
-            return SaveOverride(key, data);
+            if (!doc.RootElement.TryGetProperty(listName, out var list) || list.ValueKind != JsonValueKind.Array) return null;
+            var wanted = Normalize(album);
+            var results = list.EnumerateArray().ToList();
+            var byArtist = results.Where(r => string.IsNullOrWhiteSpace(artist) || SameArtist(artistOf(r), artist)).ToList();
+            var pick = byArtist.FirstOrDefault(r => Normalize(title(r)) == wanted);
+            if (pick.ValueKind == JsonValueKind.Undefined && wanted.Length >= 10)
+                pick = results.FirstOrDefault(r => Normalize(title(r)) == wanted);
+            if (pick.ValueKind == JsonValueKind.Undefined && byArtist.Count > 0) pick = byArtist[0];
+            if (pick.ValueKind == JsonValueKind.Undefined) return null;
+            var url = cover(pick);
+            return string.IsNullOrWhiteSpace(url) ? null : url;
         }
-        catch (Exception e) when (e is not OutOfMemoryException)
-        {
-            return null;
-        }
+        catch (Exception e) when (e is not OutOfMemoryException) { return null; }
     }
+
+    private static string? Prop(JsonElement e, string name) =>
+        e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+
+    private static bool SameArtist(string? found, string wanted)
+    {
+        var a = Normalize(found);
+        var b = Normalize(wanted);
+        return a.Length > 0 && b.Length > 0 && (a == b || a.Contains(b) || b.Contains(a));
+    }
+
+    /// <summary>Lower-cased letters and digits only, so "bbno$" / "BBNO$" / "bbno" and "Mr. Miyagi" / "Mr.Miyagi" compare equal.</summary>
+    private static string Normalize(string? value) =>
+        new string((value ?? "").Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 
     /// <summary>
     /// Force-saves image bytes under a key, overwriting any existing cached

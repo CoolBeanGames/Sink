@@ -266,7 +266,7 @@ public static partial class DownloadService
             "-o", Path.Combine(workDir, isPlaylist ? "%(playlist_index)03d - %(title)s.%(ext)s" : "%(title)s.%(ext)s"),
         };
         // A user-supplied cover replaces whatever yt-dlp would embed.
-        var artOverride = node.ArtworkOverride ?? node.Parent?.ArtworkOverride;
+        var artOverride = node.CoverArtForDownload;
         var artBytes = string.IsNullOrWhiteSpace(artOverride) ? null : Artwork.SquareCropBytes(artOverride);
 
         if (partial) { args.Add("--playlist-items"); args.Add(string.Join(",", chosen.Select(t => t.Index))); }

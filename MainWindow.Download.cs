@@ -488,11 +488,20 @@ public partial class MainWindow
     private static void ApplySearchMetadata(
         DownloadNode node, MusicSearchResult result, string? artwork)
     {
-        node.ArtworkOverride = artwork;
+        if (result.Kind != MusicSearchResultKind.Artist) node.ArtworkOverride = artwork;
         node.Genre = string.IsNullOrWhiteSpace(result.Genre) ? "Unknown" : result.Genre.Trim();
         if (result.Kind == MusicSearchResultKind.Artist)
         {
             node.Artist = string.IsNullOrWhiteSpace(result.Title) ? node.Artist : result.Title.Trim();
+            // An artist result's picture is a photo of the artist, not a cover:
+            // it becomes the library's artist artwork (unless one is already
+            // set) instead of being embedded into every album.
+            if (!string.IsNullOrWhiteSpace(artwork) && File.Exists(artwork)
+                && Artwork.CachedPath($"artist:{node.Artist}") is null)
+            {
+                try { Artwork.SaveOverride($"artist:{node.Artist}", File.ReadAllBytes(artwork)); }
+                catch (IOException) { }
+            }
         }
         else if (result.Kind == MusicSearchResultKind.Album)
         {
