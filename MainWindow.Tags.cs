@@ -271,7 +271,7 @@ public partial class MainWindow
             var path = Artwork.Save($"track:{track.Id}", bytes, "image/jpeg");
             if (path is not null) track.ArtworkPath = path;
         }
-        _artCache.Clear();
+        _artCache.Clear(); _greyArtCache.Clear();
         SaveLibrary();
         RenderLibrary();
         PlaybackStatus.Text = $"Cover art set for {tracks.Count} track{(tracks.Count == 1 ? "" : "s")}";
@@ -293,7 +293,7 @@ public partial class MainWindow
             }
         }
         if (cropped == 0) { PlaybackStatus.Text = "No cover art to crop"; return; }
-        _artCache.Clear();
+        _artCache.Clear(); _greyArtCache.Clear();
         SaveLibrary();
         RenderLibrary();
         PlaybackStatus.Text = $"Cropped cover art for {cropped} track{(cropped == 1 ? "" : "s")}";

@@ -128,6 +128,7 @@ public sealed class MetadataWindow : SinkDialog
         var bitmap = new BitmapImage();
         bitmap.BeginInit();
         bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache; // the file may have just been overwritten
         bitmap.UriSource = new Uri(_pendingArtPath, UriKind.Absolute);
         bitmap.EndInit();
         bitmap.Freeze();

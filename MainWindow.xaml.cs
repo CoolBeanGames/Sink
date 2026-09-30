@@ -300,7 +300,7 @@ public partial class MainWindow : Window
             PlaybackStatus.Text = $"{missing.Count} track{(missing.Count == 1 ? "" : "s")} can't be found — marked in red";
         if (changed)
         {
-            _artCache.Clear();
+            _artCache.Clear(); _greyArtCache.Clear();
             RenderLibrary();
         }
     }
@@ -903,6 +903,10 @@ public partial class MainWindow : Window
         {
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
+            // WPF caches decoded images by URI across BitmapImage instances;
+            // cover tools overwrite the same file, so skip that cache or the
+            // old picture keeps showing after "Download album art" succeeds.
+            bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
             bitmap.UriSource = new Uri(path);
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
             bitmap.DecodePixelWidth = 320;
@@ -986,7 +990,8 @@ public partial class MainWindow : Window
             _mediaPlayer.Play();
         }
         PlayerTitle.Text = track.Title;
-        PlayerArtist.Text = track.Artist;
+        PlayerArtist.Text = $"{track.Artist} · {track.FormatText}";
+        PlayerArtist.ToolTip = track.FileTooltip;
         PlayerArtInitial.Text = string.IsNullOrEmpty(track.Album) ? "♫" : track.Album[..1].ToUpperInvariant();
         SetNowPlayingArt(track.ArtworkPath);
         PlaybackStatus.Text = $"▶  Playing {track.Title} — {track.Artist}";
@@ -1892,7 +1897,7 @@ public partial class MainWindow : Window
             saved = Artwork.SaveOverride($"{kind}:{card.Name}", fileBytes);
             if (saved is null) { PlaybackStatus.Text = $"Couldn't use that image for {card.Name}"; return; }
         }
-        _artCache.Clear();
+        _artCache.Clear(); _greyArtCache.Clear();
         RenderLibrary();
         PlaybackStatus.Text = $"Updated artwork for {card.Name}";
     }
@@ -2148,6 +2153,8 @@ public partial class MainWindow : Window
         {
             menu.Items.Add(Item("Sync to iPod", () => SyncTracksToIpod(tracks)));
             menu.Items.Add(Item("Download high quality", () => DownloadHighQuality(tracks)));
+            menu.Items.Add(Item("Check quality", () => CheckQuality(tracks)));
+            if (tracks.Count == 1 && tracks[0].FilePath is { } filePath) menu.Items.Add(Item("Show in File Explorer", () => ShowInExplorer(filePath)));
             menu.Items.Add(ExcludeFromShuffleItem(tracks));
         }
         menu.Items.Add(new Separator());
@@ -2322,7 +2329,7 @@ public partial class MainWindow : Window
     {
         var dialog = new MetadataWindow(tracks) { Owner = this };
         if (dialog.ShowDialog() != true) return;
-        _artCache.Clear();
+        _artCache.Clear(); _greyArtCache.Clear();
         SaveLibrary();
         RenderLibrary();
         PlaybackStatus.Text = $"Updated {tracks.Count} track{(tracks.Count == 1 ? "" : "s")}";
@@ -2365,7 +2372,7 @@ public partial class MainWindow : Window
         }
 
         foreach (var track in tracks) track.ArtworkPath = cropped;
-        _artCache.Clear();
+        _artCache.Clear(); _greyArtCache.Clear();
         SaveLibrary();
         RenderLibrary();
         PlaybackStatus.Text = $"Cropped album art for {album}";
@@ -2398,7 +2405,7 @@ public partial class MainWindow : Window
         }
         if (found > 0)
         {
-            _artCache.Clear();
+            _artCache.Clear(); _greyArtCache.Clear();
             SaveLibrary();
             RenderLibrary();
         }
@@ -2449,7 +2456,7 @@ public partial class MainWindow : Window
             PlaybackStatus.Text = $"Couldn't use that image for {name}";
             return;
         }
-        _artCache.Clear();
+        _artCache.Clear(); _greyArtCache.Clear();
         RenderLibrary();
         PlaybackStatus.Text = $"Updated artwork for {name}";
     }
