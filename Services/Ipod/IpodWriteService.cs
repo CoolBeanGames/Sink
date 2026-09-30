@@ -759,8 +759,8 @@ public static class IpodWriteService
 
     /// <summary>
     /// Copies one library track onto the device, converting it first when the
-    /// iPod can't play its format (FLAC and friends). Returns null â€” the track
-    /// is skipped â€” if that conversion fails; the temporary converted file is
+    /// iPod can't play its format (FLAC and friends). Returns null — the track
+    /// is skipped — if that conversion fails; the temporary converted file is
     /// deleted as soon as Clickwheel has copied it (Add copies immediately).
     /// </summary>
     private static CwTrack? AddTrack(IPod ipod, Track src, IpodTranscoder.Prefetcher prefetch,
@@ -776,7 +776,7 @@ public static class IpodWriteService
                 try { temp = prefetch.Take(file); }
                 catch (InvalidOperationException ex)
                 {
-                    Log.Warn($"iPod sync: skipped {file} â€” {ex.Message}");
+                    Log.Warn($"iPod sync: skipped {file} — {ex.Message}");
                     return null;
                 }
                 progress?.Report((index, total, $"Copying {src.Title}"));
