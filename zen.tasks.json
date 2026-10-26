@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "projectId": "2fe841d9532447b7b9eaf5db78bbadde",
   "name": "Sink",
-  "nextCardIndex": 238,
-  "latestExePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
-  "latestReleasePath": "bin\\Release\\net10.0-windows\\win-x64\\publish\\Sink.exe",
+  "nextCardIndex": 269,
+  "latestExePath": "builds\\Sink-v1.0.52\\Sink.exe",
+  "latestReleasePath": "builds\\Sink-v1.0.52\\Sink.exe",
   "tagCatalog": [
     {
       "name": "bug",
@@ -241,6 +241,10 @@
     {
       "name": "animations",
       "color": "#9A6334"
+    },
+    {
+      "name": "performance",
+      "color": "#57742F"
     }
   ],
   "customCardTypes": [
@@ -250,9 +254,9 @@
       "instructions": "this defines a new feature, the description details what the feature should actually do.",
       "cardColor": "#B99473",
       "outlineColor": "#2A303D",
-      "headerTextColor": "#0E1117",
-      "mainTextColor": "#1D222C",
-      "textBoxColor": "#F4F6FA",
+      "headerTextColor": "#8992A5",
+      "mainTextColor": "#F4F6FA",
+      "textBoxColor": "#0E1117",
       "outlineWidth": 1,
       "shrinkExpandedToContent": false,
       "shrinkCompactToContent": false,
@@ -263,7 +267,7 @@
           "type": "text",
           "defaultValue": "enter feature description",
           "options": [],
-          "showOnExpanded": false,
+          "showOnExpanded": true,
           "showOnCollapsed": false,
           "x": 12,
           "y": 60,
@@ -437,7 +441,7 @@
           "type": "list",
           "defaultValue": "List item\nAnother item",
           "options": [],
-          "showOnExpanded": false,
+          "showOnExpanded": true,
           "showOnCollapsed": false,
           "x": 12,
           "y": 240,
@@ -557,6 +561,396 @@
       ]
     }
   ],
+  "clusters": [],
+  "signatures": [
+    {
+      "id": "5f35b8ce445a4e0784c94b9343630f5b",
+      "message": "Download queue fills its card and scrolls fully (no clipped rows)",
+      "taskId": "2914676bf9a94b66a4c7d69d1138506d",
+      "agent": "Claude",
+      "signedAt": "2026-09-28T19:56:23-05:00"
+    },
+    {
+      "id": "6ec382a07413476e8439a127347c7175",
+      "message": "Same-term search reopens cached results at the saved scroll position",
+      "taskId": "fad447ad90824a5082d8689157c0564c",
+      "agent": "Claude",
+      "signedAt": "2026-09-28T19:57:45-05:00"
+    },
+    {
+      "id": "9ac5b05ec66f4b72b90d613740de9345",
+      "message": "Listen events snapshot metadata so Reflect survives library deletes",
+      "taskId": "5758710a05c3471688f0cc7f08ee8bf9",
+      "agent": "Claude",
+      "signedAt": "2026-09-28T20:00:17-05:00"
+    },
+    {
+      "id": "37d5c5c0fb314f97825bf20e0833c23d",
+      "message": "Sidebar library size label; released v1.0.38",
+      "taskId": "8d49f86730844f4299cbba0a96205752",
+      "agent": "Claude",
+      "signedAt": "2026-09-28T20:03:13-05:00"
+    },
+    {
+      "id": "5e76494376de4c9fb8a477fab03f1b03",
+      "message": "Autocomplete merges download-queue metadata; search boxes autocomplete; released v1.0.39",
+      "taskId": "73bcc4c0bd284fe4b4da6cdafadad72e",
+      "agent": "Claude",
+      "signedAt": "2026-09-28T20:21:05-05:00"
+    },
+    {
+      "id": "9f6ec2a3f22141768cfcdf53398b94f0",
+      "message": "Prefix-narrowing autocomplete on all search/edit boxes; live library size; released v1.0.40",
+      "taskId": "f5248c3d64644003914b8c79ac39affe",
+      "agent": "Claude",
+      "signedAt": "2026-09-28T20:34:58-05:00"
+    },
+    {
+      "id": "41006c12108b488787608fc7d01c72e0",
+      "message": "FLAC/unplayable formats converted to ALAC/AAC during iPod sync; released v1.0.42",
+      "taskId": "b5ad64b209824d63bde0f891a9479fc9",
+      "agent": "Claude",
+      "signedAt": "2026-09-29T07:05:07-05:00"
+    },
+    {
+      "id": "8f4bc7ff5afc4c2b87d030bac41b3d8c",
+      "message": "iPod music views exclude podcast episodes; released v1.0.42",
+      "taskId": "598e1711deea45008b0c3c6163dbeb60",
+      "agent": "Claude",
+      "signedAt": "2026-09-29T07:05:09-05:00"
+    },
+    {
+      "id": "de3e5bfdafd04869819da0037f40f20e",
+      "message": "Album/track catalog search shortcuts, detailed download status, combined sync %; released v1.0.43",
+      "taskId": "0c6f2d36f63e4059a42f4021e357a7ea",
+      "agent": "Claude",
+      "signedAt": "2026-09-30T00:16:51-05:00"
+    },
+    {
+      "id": "ed90bf2823ab4deb96bd1430ded5a179",
+      "message": "Fixed virtualized grid recycling (cards vanishing/misplaced); artist photos no longer embedded as album covers; bulk cover repair via Deezer/iTunes; released v1.0.44",
+      "taskId": "9149c0b744a245f19894e7e8f49ae325",
+      "agent": "Claude",
+      "signedAt": "2026-09-30T00:29:21-05:00"
+    },
+    {
+      "id": "1740df6dbe68415398fddb0bdcb850ce",
+      "message": "Deezer downloads fetch real FLAC and keep the album cover through conversion; released v1.0.45",
+      "taskId": "f640e46635434db5a38578c39fdfb974",
+      "agent": "Claude",
+      "signedAt": "2026-09-30T00:42:48-05:00"
+    },
+    {
+      "id": "266750d7f32940b2a459c1f83aac0df5",
+      "message": "Spectral fake-FLAC detector (AudioQuality)",
+      "taskId": "daf8f35052c34912901aef627b0c858e",
+      "agent": "Claude",
+      "signedAt": "2026-09-30T00:56:04-05:00"
+    },
+    {
+      "id": "f2f28a8b78cb41b7b5a0f95bb14177a9",
+      "message": "Startup missing-file scan with red lights and greyscale art",
+      "taskId": "717ec5bb3efc45dbba811110888e1b92",
+      "agent": "Claude",
+      "signedAt": "2026-09-30T00:57:08-05:00"
+    },
+    {
+      "id": "54737f7f23994b53b4bbe3c403e3c9ea",
+      "message": "Keep high quality setting with FLAC originals folder",
+      "taskId": "0e96a54c6a0e4720a083ab30884e1561",
+      "agent": "Claude",
+      "signedAt": "2026-09-30T00:58:37-05:00"
+    },
+    {
+      "id": "6fb1a32df23b431a9aa0657acc5cbe20",
+      "message": "Download high quality (per selection and whole library) with in-place replacement; released v1.0.46",
+      "taskId": "17ed195b9fa54ab6903d90ede0711323",
+      "agent": "Claude",
+      "signedAt": "2026-09-30T01:04:10-05:00"
+    },
+    {
+      "id": "e0f2c05f0a97452cad39a18217f8eade",
+      "message": "Cover art refresh fix; FORMAT column, now-playing format, Check quality, Show in Explorer; released v1.0.47",
+      "taskId": "fb3fa2c00e514bcfaad2cfd900ccffd5",
+      "agent": "Claude",
+      "signedAt": "2026-09-30T01:14:55-05:00"
+    },
+    {
+      "id": "aaa2934ae033401097bd1353c59c9948",
+      "message": "Search artwork online for album cards and track rows; released v1.0.48",
+      "taskId": "3615b67c7eb943409c56224b28b1d1ed",
+      "agent": "Claude",
+      "signedAt": "2026-09-30T01:24:51-05:00"
+    },
+    {
+      "id": "7524db3fe58146c0a85b2b04735e9de4",
+      "message": "Now-playing artist backdrop and rotating album-art record label; released v1.0.49",
+      "taskId": "6b2a21a2e809488396c52059cc839aef",
+      "agent": "Claude",
+      "signedAt": "2026-09-30T01:28:29-05:00"
+    },
+    {
+      "id": "6beb7364ae104624a3a7fae2d618fe0a",
+      "message": "Translucent song list so the backdrop shows through; released v1.0.50",
+      "taskId": "cdf4b7e53a2d45fbb2f4485f35f95271",
+      "agent": "Claude",
+      "signedAt": "2026-09-30T01:33:01-05:00"
+    },
+    {
+      "id": "c6a8c5acaa3d44f1895f30b012a7160c",
+      "message": "Experimental Cover Flow shelf on coverflow branch (built to builds/Sink-coverflow)",
+      "taskId": "e478a31f252942878246ae3faefca3d1",
+      "agent": "Claude",
+      "signedAt": "2026-09-30T01:41:18-05:00"
+    },
+    {
+      "id": "802182c2f7b748258715699625ef3486",
+      "message": "Cover Flow framing fix and hinge bar (coverflow branch)",
+      "taskId": "a1731e4f0767439d8b838a36a00050e2",
+      "agent": "Claude",
+      "signedAt": "2026-09-30T01:54:30-05:00"
+    },
+    {
+      "id": "ea1bb501c1344ed58f682809ffeaf122",
+      "message": "Cover Flow camera push-in on flip and CD-to-record play animation (coverflow branch)",
+      "taskId": "4aa1bb50974449cd9710c62a65d03b4d",
+      "agent": "Claude",
+      "signedAt": "2026-09-30T01:57:44-05:00"
+    },
+    {
+      "id": "14365c169ae446fdba28fae3a0a168f0",
+      "message": "Cover Flow: single-disc play, shelf shadows, CD shadow and glare (coverflow branch)",
+      "taskId": "64ad3c2296ce40328b4c773efdafe27a",
+      "agent": "Claude",
+      "signedAt": "2026-09-30T02:11:23-05:00"
+    },
+    {
+      "id": "4d52d07c6d074bcb92786ec8ca9f501d",
+      "message": "Artwork size slider with list mode; released v1.0.51",
+      "taskId": "07f4eecc14444121a78a7a8378b69f4a",
+      "agent": "Claude",
+      "signedAt": "2026-09-30T02:14:46-05:00"
+    },
+    {
+      "id": "6f81816a68644102a5658be1c59cf034",
+      "message": "Merged Cover Flow into main; released v1.0.52",
+      "taskId": "64ad3c2296ce40328b4c773efdafe27a",
+      "agent": "Claude",
+      "signedAt": "2026-09-30T02:21:03-05:00"
+    }
+  ],
+  "appliedOperatorRequestIds": [
+    "397d9064eb2d4f229922518d02699efa",
+    "d8d34e1ff5254b42a1621d64bc95dd07",
+    "12eadd6523a94c80b62876109efa57fc",
+    "dbf35d32fa394d44923e48d12d0e9418",
+    "e495fdbabb7f48079026a2114e8e6b96",
+    "17a56305b5b643a1ba2ff5bfc1609c9d",
+    "bb7cbb2b56f74f8ebd9f9dac981d738a",
+    "a62aa667763e42028840c4c7fbfc23e4",
+    "b8dd92a376ba442a89259bdfe947fc85",
+    "b82ed219ca6e44138b63075956317aa6",
+    "92d5e0822dc74a1ca1b09aa83f3fc85a",
+    "9bc4eb46d3d84b6f80f9c0a367e31df6",
+    "c75f8d1a7ded480a969a472046518b61",
+    "0a23fcaffdec4758b913c98680e73700",
+    "7dabad161dc34264b80a9070f55ef2de",
+    "795701aedf8d4a85b2f9c4c66a17b0ed",
+    "00a4931736484b829737e40b068ce5e9",
+    "15f421680279417dabf9bbc75fff3696",
+    "ad408608b0274437921d828600b27107",
+    "1ba9f3272e4a48f2861c2ede977abe2b",
+    "026d34a5405e443e82f48724d1b00393",
+    "6a421b0e076041d6837c0754b767e556",
+    "5048782f5ed140aaade76b20b3a9227d",
+    "3b796634f1544b928cdf71e0c4ab3381",
+    "57a6cec1ae584e409128e0b25abac2dc",
+    "6d779107274640f7b77271d90e57808a",
+    "8f1e7ed7fc104ec8813a7e26f717dc63",
+    "3e6fa59eb08b4661ba9a6511757dce1b",
+    "34608aa877254b4699f6295afffd4aa2",
+    "971a34abad3f413d8d68a103e4bbfdb9",
+    "68cf802ad9284619baef44db458d7f89",
+    "6f6545769e704cb9a361745426eafce2",
+    "f326212a7490462baf236e95ad8d1051",
+    "9b100f447aa64c1b996eb717db9fdf97",
+    "6de020f325d54b66ba6dc7f1bdc5e5cd",
+    "734692f5744947a891d8db5ce39376d8",
+    "44bfbbf7e13c42969542085baa6ce99c",
+    "3e78e15b1713428a97e4553e79ec3e96",
+    "be6d86876ae14edc82bf43c4cecfb462",
+    "9fbc2c3a35e047d38629a98a59525810",
+    "21216d179b824f3aad13e57d53daf751",
+    "eb7b1b96f219472296a191fab1a51d9e",
+    "b3a2a47f563f4421b28ee22360258e99",
+    "2325ddef0f6a4b638bc595b031c1013a",
+    "3a8ff1074eee4769b5385412e44d7848",
+    "17d2491ae5e7449ead8ad3d6afcf3f4a",
+    "96a6ba2cda794e4bb03ea2d5c784866c",
+    "89f58122883c48388d053981f1062341",
+    "c51cca5e3b074771a95cffb9b257e5de",
+    "7e15b86be1d5415aacd18e8577f7e242",
+    "2b9dc08f408249c2b76f2cfd0d814af3",
+    "6c35e4265f9946c692f9af205c7a9992",
+    "28b850bb2cae40b2bd27a4f729ae018a",
+    "80227eeb439a43bea320a482a69b0d28",
+    "22129def8bde417d947990ff6213d522",
+    "42988553fbc4482d89b77b41ce5673fc",
+    "5eaefacdff524671aa6de8e7761b01d2",
+    "689da65c86c044f6896b62dffe505455",
+    "5816af1a594b4cdeb48f01f96289ad87",
+    "14060beda2ca487d961aa234028b48dc",
+    "e3c4042e78bd4544b143973c4c8e8f02",
+    "3be7251329144f42811d61b9fdde9011",
+    "3a38045a20874b5296698f26f10a82c2",
+    "3b105a17c22e4a2799afb5807b153822",
+    "b59166d8023b4e1c91b67d33f162731f",
+    "c7ec6849b5324d45b9753ed0d912e3ed",
+    "2fa1e37d656446269d3cf7a627c3b35b",
+    "ab220d9e69a842569bb744c496c1cb23",
+    "2ddb0f67a8ff4cafa645b15e9c064a7c",
+    "0998c7cdf6fe41918f7c2e6b98748ffc",
+    "86f91a54918f4cfbb509a8734322dd03",
+    "02e161c13e2b49bf81482a95c789bfc6",
+    "e2a25b8e658d4c3eb14cd2bfada17d5c",
+    "99b16e3b294042a08b1b0cad59bb9b3e",
+    "fb9f31ae9268456083659d5c61540385",
+    "9cd1d63c61ff4a8ea844c865351ce2df",
+    "5ff87e95f3004240a6cb21f093fd1028",
+    "74c8a8f6cc6c42ee8210c680e6bd97d4",
+    "a514f9f2b5714451a3403e8c3a9c1de0",
+    "d9a8bb35aaf94729802c61855c5cb1aa",
+    "cf5d5b2670914a0e8d9e06d687fee231",
+    "72e69cc4c4a64031a84ad5348bce877e",
+    "4c6cf30427cf4d2586a901d1c730d809",
+    "4375689911bc4e5597dc081059b86c01",
+    "82b2dea35f9b4bdd88c6db1c4e59197b",
+    "f432394acd0347c18f32966981c08d52",
+    "03e1cbb54b7d41fd81a92093362dfe81",
+    "908ee266911a4029ab31be174f40d45a",
+    "1436407139d34d35a3067ae3e19d8fbe",
+    "f59b1bf6f98d449e99d55dfc67b4af17",
+    "8b39131d822b40b99c3a09be3ae434c6",
+    "4518af7ca1b44a68bc3012f24242121d",
+    "8e39d1e4fac745bfa80142640c3e0c03",
+    "840cad0e03364c7e85f1f4c84969b840",
+    "1b852ccfb974435292473aaeb123923b",
+    "0bcd083c2eb6478582ca29e11b6d66ae",
+    "2feea00399bf494caad88a2145d49fc2",
+    "77d99589830d434f8cafbac7a7e8ae6b",
+    "9e994b1473e64cab91a55fcc1ee6f356",
+    "0208fa198ae4402aadc0a1cff7ea371d",
+    "92e640cb11b8499a806a841db042a7e4",
+    "a799b82f4aa6479bbf29f344183b9f87",
+    "fc02e64bfa4a46b9b131de95b252ec08",
+    "7fcb7cbd7c1443c3ae1497c01eb932f6",
+    "ee9a820d33d84468bd444c83fc398fc4",
+    "b020e359f77d40ffbb33c4b1b49691d0",
+    "c23e908e478e4cb7869884de90d215bc",
+    "5539795a4c3048e4a253558cf5db7c39",
+    "100753dd9d224d88b19900f6b28d9acf",
+    "559a84fb95d54f739a2e65bd468d9c0e",
+    "923b515ec2e74a39ba7862acd0e88ca4",
+    "f68cb024f62844e5a0b652870486fada",
+    "45f476d1ade243a09f8fbbe74b7681b2",
+    "09b85069679849a8b5b49da3c6328ca9",
+    "b6d11b2514914efc951fc1e3dd1dc714",
+    "e51ea3d74e3d48738d757d2f4737583e",
+    "202efa9af2e24a0191e33c1e7a95802a",
+    "1b37ba47d8904d9ba9e0ee1fbf3c1035",
+    "89106cc86e384d749cd774070ec147fc",
+    "f25a691a35df438caeecc554d4fe204a",
+    "5098358ce350434e801e8368b166dd8d",
+    "a6ff8b6acd6345c5848f50e55947be57",
+    "4c1e7545ba2440c59fcd2bdf25b5ab92",
+    "7f2dc5c839de49139c68da8fe6b99b1d",
+    "f19d5b7aae484e0caf1b07aac9828a57",
+    "fa7ce0067174438db9bd08c58a799992",
+    "326dcfdea6f54dff81c191b278c0904e",
+    "e316092532e8482eab1c87e7c9d2ee36",
+    "e9a4013fb5514d84806e7fc84721e092",
+    "7c7f1912822f44078b1670f9c7505c3c",
+    "6cb94d9b82de48d4b00c6205c5715b13",
+    "b697d434be0d41d8ba4e902636a8dcb8",
+    "2a68d12967334d528be22b37ad472d0b",
+    "d6f59c762b0448b0bd9a4a547316784c",
+    "9bb9aaaf5cd54bfaa247917a9f8f7654",
+    "5c53874f3e844e91bf00428c62a80144",
+    "b45ab6c6d957451dbe71dbe7883f154f",
+    "d0c6888ab6484c108234eebd536a2cde",
+    "57a73d834c7c446d9d769794e52be8b6",
+    "7d42881499a345d6accbde1601a090e8",
+    "a352d6ee410943f4b30e792f3adfe77c",
+    "86f78d9027a540b1aef99ab05f3a774c",
+    "e8e4ea68b20b425793a202354fa99687",
+    "490ac0ae0ae64fb380ab54fa25c167f5",
+    "bb5e40f97ab84653b8dc1ecb31af8eab",
+    "4002e4211c204d89a93ee2063f4c0756",
+    "05cc9cdb297443918fe46606fa679356",
+    "42ed60f7dc804742bbdd1a46e58ec1fb",
+    "68876302337c4f078b2754f107756ca1",
+    "d637d7716c434d3993bf69a295c5e9c2",
+    "c1fe9670f175409a9530733eb4580d93",
+    "729ef00151474fd1a2afbf2403d5bbe9",
+    "af083202a9a047fc96d6ba51d14bd857",
+    "818f40d713be4df19e0f08458fe6aad6",
+    "02ba52ef98db4aa3aa883b86a37effce",
+    "2d6a1d240b3c4a7e8942eca67ef5750d",
+    "8b41fa55ad0e42db9359d28a888587d7",
+    "80eefc0030784a72946720ca79417c0c",
+    "0c80aae3a4a64137ab4ddde0b4e58087",
+    "37ea8def8fb541ee81ccd8bbe52ff80a",
+    "8d3a9e47854d4587aa300b60c6827872",
+    "1ddfb4dbdaea4ff19190376563fd0f86",
+    "52b1b85935c646c1a74b5e3816e6bde8",
+    "ba957afa787d488eb9b283c1b1fd434b",
+    "2dc793076d5741eb89ad6b7bb1b72402",
+    "b143e7b0942b40a7b8398be604683ca1",
+    "04b41c13b0674baab866a0916685f9db",
+    "1dcaf4a43e4847afbfc8b5c1e797d9ea",
+    "ac6e5362fca44d42ac7991661dad6256",
+    "59d8f8053352457d9bcb3fdd61625f4d",
+    "dff20319a8494d0c98a5b1711f942e60",
+    "588d940c089c4f4b9749c0cfbc269c3e",
+    "aaf5742a852344cfa78f08a2c80704fd",
+    "aed522333c95434b8ed9f620f1b0e48c",
+    "a4cc8dbc933c46b6af6aafe47df89fd1",
+    "b7d788c47114493ba0898c8d10282955",
+    "9a3b00ab502647ec9ff1b1c600550076",
+    "9149eab80c3e4011b27a5fdccfd80d58",
+    "c2822988ab004fce86caf46bacfee031",
+    "e983b23880fa4253843169733163e16d",
+    "96129abc4ba04c9f80b435c398de3b97",
+    "7387aa85a8c64d2c8a2d1917abd1a434",
+    "e394a64f35f8412a8e7af26dc14e58ad",
+    "c0ca1954c83f497ead7a895f46cfebf6",
+    "e1fce051bd4a425c82fb95e82ba3e51e",
+    "a80d7cc02f214eb88efa3842c8ebd506",
+    "bc53a3b2132a4321add74815fca9701c",
+    "f667ec27572b4099a3f6f5bfde755a68",
+    "8662c45787b6477b87d618432e6c1776",
+    "00d6c497afc34a92a7abe3be7a7d55d1",
+    "e82e892844404c9cb9590d53d83cdaef",
+    "2c62a9de9bdd456d801a44417ff0ed91",
+    "870537fda1c14d6aae5f35940fb94a18",
+    "f4fd593d14c1440bbb809f1a10d1c26b",
+    "a5730d948f034454b36e09bef3e91da5",
+    "0aed087b92324f8696f2f0e4fc0eb2a9",
+    "6e7dddb1421c42ab913bc8bfe159544a",
+    "f5c7a8c69cc24508902e3b94f13ec5a4",
+    "0770a3c1179a4f7cae0c336e8897cdff",
+    "463f85c6b6874822bc6aaca4e00724d6",
+    "0f0327d43b624522a43460612e11e31c",
+    "8e885d3add0d43cdabab6682823e41c4",
+    "8b84aa1879f844c49e04595f2321130f",
+    "9d6e1c463b9342a694511d68cc996975",
+    "9e0440b788144084b68594ffc1bb421a",
+    "2ab489bcaff44c7ebefd77bf265847c4",
+    "e2ef3eb41012477ea5e23c9b99f7b829",
+    "aa19f0f6b65c4c9888deed3a49bdfff3",
+    "75c8cde1bac44728bd6b0cb1feb838bb",
+    "f6d68c7b8398491783e3a6d6b9319023"
+  ],
   "branches": [
     {
       "id": "main",
@@ -568,57 +962,49 @@
       "isLocked": false,
       "tasks": [
         {
-          "id": "c77e683c9a3b4776b32abece7c73d940",
-          "index": 214,
+          "id": "0ba5a86de68246e090000115aac0350d",
+          "index": 250,
           "kind": "task",
           "dueDate": null,
           "startedDate": null,
           "priority": null,
-          "title": "Add multi-service music search to Downloads",
-          "task": "Add a search box to the Downloads page that searches Spotify, YouTube, and Deezer. Show each result with Download, YT, Spotify, and Deezer actions. Download should choose the best available source in priority order Deezer, Spotify, then YouTube. Adding a result queues its link while allowing continued searching or returning to Downloads to start the queue. Selecting a result shows artwork and metadata in a lower details editor; users may override all populated metadata except track titles before queueing.",
+          "title": "Search Google Images for artist/genre artwork",
+          "task": "Add a right-click option on artist and genre cards to search for artwork online. It opens Google Image results for the name; selecting an image sets it as that artist\u0027s/genre\u0027s artwork (same override as \u0027Set artist/genre artwork\u2026\u0027). Google blocks non-browser requests, so results are shown in an embedded WebView2 browser.",
           "tags": [
-            "downloads",
-            "music",
             "ui",
-            "metadata",
-            "in progress"
+            "metadata"
           ],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [
             {
-              "id": "7c958678d9804128a5f7c1cc12fd8d43",
+              "id": "7cad8ae34e6f43ce938704ce3023bd66",
               "index": 1,
-              "text": "The Downloads page can search Spotify, YouTube, and Deezer and display unified results.",
+              "text": "Artist and genre right-click menus have a \u0027Search artwork online\u2026\u0027 option",
               "isDone": true
             },
             {
-              "id": "9b2073ebfda24e44a7c83dd7e6fe143f",
+              "id": "be37b506f48e459daec222d5a344535c",
               "index": 2,
-              "text": "Each result exposes Download, YT, Spotify, and Deezer actions; Download prefers Deezer, then Spotify, then YouTube.",
-              "isDone": true
+              "text": "It shows Google Image results for the name",
+              "isDone": false
             },
             {
-              "id": "e28c9a3df1cd43a9b24b4a57fe3c5158",
+              "id": "26f6bb01e77c4f99b2f269ef6ee83dd4",
               "index": 3,
-              "text": "Adding a result queues its chosen link without forcing downloads to start and the user can continue searching or return to the Downloads queue.",
-              "isDone": true
-            },
-            {
-              "id": "88f9329d3fbb45d995142868097c94fa",
-              "index": 4,
-              "text": "Selecting a result shows artwork and metadata below; all populated metadata except track titles can be overridden before queueing.",
-              "isDone": true
-            },
-            {
-              "id": "8ed4d7d0e2624a369a4dd6e7bfb4e3d4",
-              "index": 5,
-              "text": "The completed change is verified, committed, built as a release, and published as a GitHub release.",
+              "text": "Selecting an image sets it as that artist/genre\u0027s artwork",
               "isDone": false
             }
           ],
-          "notes": [],
+          "notes": [
+            {
+              "id": "20e41e8ec7dc412cb9616fefb3ac378c",
+              "text": "Implemented and released in v1.0.41 but not yet exercised against live Google results (headless Chrome gets a CAPTCHA; the in-app browser is interactive). Waiting on the user to try it: right-click an artist/genre \u003E Search artwork online..., pick an image, confirm the card art changes."
+            }
+          ],
           "flags": {
             "commit": true,
             "build": true,
@@ -627,10 +1013,10 @@
           },
           "isDone": false,
           "isLocked": false,
-          "isAwaitingFeedback": false,
+          "isAwaitingFeedback": true,
           "isCollapsed": false,
-          "createdAt": "2026-09-17T05:23:17.2038988+00:00",
-          "updatedAt": "2026-09-17T05:23:17.2040613+00:00"
+          "createdAt": "2026-09-29T01:38:22.7126572+00:00",
+          "updatedAt": "2026-09-29T01:41:55.5511875+00:00"
         }
       ]
     },
@@ -674,6 +1060,324 @@
       "isLocked": false,
       "tasks": [
         {
+          "id": "b6abc6ad93fb47d6bbe28abe1d7eedcb",
+          "index": 238,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Unsync played or locally removed podcast episodes from iPod",
+          "task": "Update iPod podcast synchronization so episodes are removed from the device when they are marked played in Sink or when their downloaded file has been deleted from the PC. Apply the reconciliation when an iPod is connected and on the next sync after local state changes. Preserve unplayed episodes that still have a local download and do not disturb unrelated music or podcast data.",
+          "tags": [
+            "bug",
+            "Podcasts",
+            "ipod",
+            "syncing"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "6422502fb3b648f2b6c322fff037a62a",
+              "index": 1,
+              "text": "Episodes already marked played when the iPod connects, and episodes marked played before a later sync, are excluded from the desired iPod podcast set and removed from the device.",
+              "isDone": true
+            },
+            {
+              "id": "2ded76f7d09a40e5baaed4d206de7eec",
+              "index": 2,
+              "text": "Episodes whose local downloaded file was deleted are excluded from the desired iPod podcast set and removed from the device on the next sync.",
+              "isDone": true
+            },
+            {
+              "id": "d23f6ef4f8614ecfbc20c1bbcd683aea",
+              "index": 3,
+              "text": "Unplayed episodes with an available local download and unrelated iPod media remain intact.",
+              "isDone": true
+            },
+            {
+              "id": "60de9c23d67248d29e02d6ba2eea3f5c",
+              "index": 4,
+              "text": "The behavior is covered by focused verification and the application builds successfully.",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-21T21:54:28.142539+00:00",
+          "updatedAt": "2026-09-21T22:05:25.6225701+00:00"
+        },
+        {
+          "id": "b5ad64b209824d63bde0f891a9479fc9",
+          "index": 251,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "FLAC tracks never sync to the iPod",
+          "task": "Sync skipped every .flac file (all 927 library tracks: \u00270 eligible track(s), 927 skipped\u0027) because only natively playable formats were accepted. The iPod (5G, supports Apple Lossless) should receive them converted.",
+          "tags": [
+            "bug"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "31e16571054b440da41110344307e476",
+              "index": 1,
+              "text": "FLAC and other unplayable formats are converted (ALAC for lossless, AAC for lossy) during sync",
+              "isDone": true
+            },
+            {
+              "id": "9910cc833dfe4f3cab13e6e6bbd4f06d",
+              "index": 2,
+              "text": "Already-synced converted tracks aren\u0027t re-converted on later syncs",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": true,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-29T12:03:58.0124863+00:00",
+          "updatedAt": "2026-09-29T12:05:08.9222589+00:00"
+        },
+        {
+          "id": "598e1711deea45008b0c3c6163dbeb60",
+          "index": 252,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "iPod podcast episodes listed as songs",
+          "task": "Sink\u0027s iPod Songs/Artists/Albums/Genres views listed every device track, including the 149 podcast episodes (correctly flagged on the device as MediaType=Podcast and in the Podcasts playlist).",
+          "tags": [
+            "bug"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "53c647e9356446a6a03d139aeb22e962",
+              "index": 1,
+              "text": "iPod music views exclude podcast episodes; they stay under the iPod Podcasts view",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": true,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-29T12:03:58.3196346+00:00",
+          "updatedAt": "2026-09-29T12:05:09.9648657+00:00"
+        },
+        {
+          "id": "9149c0b744a245f19894e7e8f49ae325",
+          "index": 254,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Album/artist grid loses cards, repeats artwork, empties on scroll",
+          "task": "Library says 237 albums but only ~21 cards show; which ones show changes randomly; scrolling can make all cards disappear; every bbno$ album shows the same artwork. Artists (37) also randomly disappear. Started after the card grid was virtualized (e434436).",
+          "tags": [
+            "bug"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "aabe05d93cb84d0385bc43ac292bdc71",
+              "index": 1,
+              "text": "Every album/artist card is shown and stays shown while scrolling",
+              "isDone": true
+            },
+            {
+              "id": "5b6f4a7b1f1a4e1f94c4b1791e473fde",
+              "index": 2,
+              "text": "Each card shows its own artwork",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": true,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-30T05:21:25.6276177+00:00",
+          "updatedAt": "2026-09-30T05:29:22.6224332+00:00"
+        },
+        {
+          "id": "f640e46635434db5a38578c39fdfb974",
+          "index": 255,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Deezer downloads lose album covers and are MP3s re-wrapped as FLAC",
+          "task": "Streamrip was always asked for MP3 320 (quality 1) even with FLAC selected; Sink converted it to FLAC with ffmpeg -vn, which dropped the embedded cover (v1.0.44 downloads have no art) and produced lossy 24-bit \u0027FLAC\u0027 files. Earlier builds hid the missing cover by overwriting it with the artist photo (Danny Gonzalez: all singles show the Slime cover, downloaded 2026-09-28 before the v1.0.44 fix).",
+          "tags": [
+            "bug"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "77ea3edcf4d94e63aae4dedc783835be",
+              "index": 1,
+              "text": "Non-MP3 targets download Deezer\u0027s real FLAC (quality 2)",
+              "isDone": true
+            },
+            {
+              "id": "bd34e54ab29547c7a97f0c6a5b0c8175",
+              "index": 2,
+              "text": "The album\u0027s own cover survives any format conversion",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": true,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-30T05:42:08.7197421+00:00",
+          "updatedAt": "2026-09-30T05:42:49.5785811+00:00"
+        },
+        {
+          "id": "fb3fa2c00e514bcfaad2cfd900ccffd5",
+          "index": 260,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Downloaded album art doesn\u0027t show until restart; no way to see a track\u0027s file format",
+          "task": "\u0027Download album art\u0027 reported success and wrote the correct cover (Danny Gonzalez \u0027Bump This\u0027), but the card kept showing the old Slime image: WPF\u0027s internal image cache is keyed by URI and the tool overwrites the same file. Also add visibility of which file/format playback uses.",
+          "tags": [
+            "bug"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "badaa05d65524b3d900fa23b8dd75b8d",
+              "index": 1,
+              "text": "Cover changes show immediately",
+              "isDone": true
+            },
+            {
+              "id": "d47e1d5b1a9e422eb470b0806cb7b264",
+              "index": 2,
+              "text": "Song lists and now-playing show the file format and quality; path on hover",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": true,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-30T06:14:05.5649679+00:00",
+          "updatedAt": "2026-09-30T06:14:56.4303618+00:00"
+        },
+        {
+          "id": "cdf4b7e53a2d45fbb2f4485f35f95271",
+          "index": 263,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Song list hides the now-playing backdrop",
+          "task": "The Songs/track list panel and its rows are opaque, so the artist backdrop (v1.0.49) is completely hidden behind it.",
+          "tags": [
+            "bug"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "c860a684f1cd423cb1aa17d041d6e51c",
+              "index": 1,
+              "text": "Track list lets the backdrop show through while staying readable",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": true,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-30T06:31:25.2643622+00:00",
+          "updatedAt": "2026-09-30T06:33:02.2103696+00:00"
+        },
+        {
           "id": "0359954583b943db8e365c6d454bf33a",
           "index": 215,
           "kind": "task",
@@ -684,6 +1388,8 @@
           "task": "Added button in Settings to extract Deezer ARL from Firefox",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -712,6 +1418,8 @@
           "task": "Added TrimLibraryTitles to TracksGrid and GroupsView",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -740,6 +1448,8 @@
           "task": "Updated Trim Titles window to use OrdinalIgnoreCase",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -768,6 +1478,8 @@
           "task": "Click-to-close curtain, inline search box, auto-close on tab change, pixel scrolling",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -796,6 +1508,8 @@
           "task": "Zero-pad current track number to prevent string jumping",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -824,6 +1538,8 @@
           "task": "Red YT, green Spotify, blue Deezer, grey disabled state",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -852,6 +1568,8 @@
           "task": "Replaced single search with 3 fields, added toggle filters for providers",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -880,6 +1598,8 @@
           "task": "Added a Thumb to the edge of MusicSearchOverlay to allow dragging it horizontally, clamped to its original width.",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -908,6 +1628,8 @@
           "task": "Added an empty setter to the KindLabel property to prevent TwoWay binding exceptions.",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -936,6 +1658,8 @@
           "task": "Added DataGrid.CommitEdit() calls before CollectionView.Refresh() to prevent exceptions during active edit transactions.",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -964,6 +1688,8 @@
           "task": "Added a check to see if the file already exists before starting a download in PodcastService.DownloadEpisodeAsync.",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -992,6 +1718,8 @@
           "task": "Patched StreamripToolManager to update dead e-cdns-proxy to new cdnt-stream.dzcdn.net endpoints. Confirmed the 403 Forbidden error is a widespread streamrip issue with Deezer\u0027s new DRM. Fixed a compilation error regarding TryDeleteDirectory.",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -1020,6 +1748,8 @@
           "task": "Patched Streamrip\u0027s URL parser to support the new link.deezer.com/s/ dynamic short URLs that Deezer is now generating.",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -1048,6 +1778,8 @@
           "task": "Changed Sink\u0027s default streamrip quality from 2 (FLAC) to 1 (320kbps MP3) to bypass Deezer\u0027s strict DRM which blocks FLAC downloads on free ARLs with a 403 Forbidden error.",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -1076,6 +1808,8 @@
           "task": "Removed strict advanced search field filters from Deezer API query so partial terms and album compilations can be properly resolved by Deezer\u0027s global search engine.",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -1104,6 +1838,8 @@
           "task": "Changed the score threshold to require an exact match (score 100) and ensured track field is empty before showing the album page view, otherwise providing a generic catalog of matching albums.",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -1132,6 +1868,8 @@
           "task": "Increased Deezer API limit from 16 to 50 to ensure heavily covered compilations (like Punk Goes Pop) don\u0027t get paginated out of the initial results, and increased Sink\u0027s UI limit from 20 to 50 albums.",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -1160,6 +1898,8 @@
           "task": "Added toggles for Artist, Album, and Track to filter the UI. Modified SearchDeezerTracksAsync to synthesize Artist and Album results from the track payload so they show up in generic searches.",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -1188,6 +1928,8 @@
           "task": "Increased Deezer API limits from 50 to 100, and sorted the generic lists locally by AlbumMatchScore to ensure precise matches float to the top of the paginated results.",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -1216,6 +1958,8 @@
           "task": "Renamed AlbumMatchScore to CalculateMatchScore. Created unified list of all catalog items and sorted them globally using points: 1000 for exact, 900 for StartsWith, 800 for EndsWith, 700 for Contains, and words-matched for the rest. Secondary sort applied to Enum.Kind for Artist -\u003E Album -\u003E Track preference.",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -1244,6 +1988,8 @@
           "task": "Added an internal MatchBonus field to MusicSearchResult to artificially boost synthesized artists and albums. Searching a track exactly will give its Artist 1100 pts and Album 1050 pts. Searching an album exactly gives its synthesized Artist 1100 pts. This perfectly ensures Artists/Albums correctly float above exact tracks when doing track-level searches.",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -1272,6 +2018,8 @@
           "task": "Updated CalculateMatchScore to accept distinct strings for track, album, and artist boxes instead of combining them into one blob and counting matched words. If a search result matches exactly the field you requested, it scores 1000 base points. Then the fuzzy word count is added on top. This ensures \u0027Graduation\u0027 by \u0027Kanye West\u0027 correctly scores 1002, matching exactly Album and 2 fuzzy words, popping it right up to the top. Also added a GridSplitter to make the sidebar resizable, and bound the Sidebar width and download settings to AppSettings to save state between sessions.",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -1300,6 +2048,8 @@
           "task": "Added extremely detailed score accumulation logging to CalculateMatchScore. When a search is run, every scored match logs a detailed breakdown of how it accumulated points (e.g., [Score] Album | Kanye West | Graduation =\u003E 1902 [AlbumTitle Exact (\u002B1000), ArtistName StartsWith (\u002B900), Words x2 (\u002B2)]) to the application log file so the user can see exactly why items are ordered the way they are.",
           "tags": [],
           "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
           "customTypeId": null,
           "customValues": {},
           "requirements": [],
@@ -1316,6 +2066,1297 @@
           "isCollapsed": false,
           "createdAt": "2026-09-18T10:10:21.9406384+00:00",
           "updatedAt": "2026-09-18T10:10:25.4793395+00:00"
+        },
+        {
+          "id": "c77e683c9a3b4776b32abece7c73d940",
+          "index": 214,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Add multi-service music search to Downloads",
+          "task": "Add a search box to the Downloads page that searches Spotify, YouTube, and Deezer. Show each result with Download, YT, Spotify, and Deezer actions. Download should choose the best available source in priority order Deezer, Spotify, then YouTube. Adding a result queues its link while allowing continued searching or returning to Downloads to start the queue. Selecting a result shows artwork and metadata in a lower details editor; users may override all populated metadata except track titles before queueing.",
+          "tags": [
+            "downloads",
+            "music",
+            "ui",
+            "metadata"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "7c958678d9804128a5f7c1cc12fd8d43",
+              "index": 1,
+              "text": "The Downloads page can search Spotify, YouTube, and Deezer and display unified results.",
+              "isDone": true
+            },
+            {
+              "id": "9b2073ebfda24e44a7c83dd7e6fe143f",
+              "index": 2,
+              "text": "Each result exposes Download, YT, Spotify, and Deezer actions; Download prefers Deezer, then Spotify, then YouTube.",
+              "isDone": true
+            },
+            {
+              "id": "e28c9a3df1cd43a9b24b4a57fe3c5158",
+              "index": 3,
+              "text": "Adding a result queues its chosen link without forcing downloads to start and the user can continue searching or return to the Downloads queue.",
+              "isDone": true
+            },
+            {
+              "id": "88f9329d3fbb45d995142868097c94fa",
+              "index": 4,
+              "text": "Selecting a result shows artwork and metadata below; all populated metadata except track titles can be overridden before queueing.",
+              "isDone": true
+            },
+            {
+              "id": "8ed4d7d0e2624a369a4dd6e7bfb4e3d4",
+              "index": 5,
+              "text": "The completed change is verified, committed, built as a release, and published as a GitHub release.",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": true,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-17T05:23:17.2038988+00:00",
+          "updatedAt": "2026-09-21T21:51:48.6303999+00:00"
+        },
+        {
+          "id": "e7b04afc595f404bab7b5df50e212167",
+          "index": 239,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Polish Downloads and link-search UI",
+          "task": "Clean up the Downloads page so its hierarchy, spacing, actions, queue status, and empty/loading/error states are easier to scan. Give special attention to the recently added link and catalog search experience: make the entry points and modes obvious, keep primary actions visible, and retain all current queueing and metadata-editing behavior.",
+          "tags": [
+            "downloads",
+            "ui",
+            "polish"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "0d2107b2207b4a1e995fa177b854a1ee",
+              "index": 1,
+              "text": "The Downloads page has a clearer visual hierarchy with consistent spacing, grouped controls, readable status, and deliberate empty/loading/error states.",
+              "isDone": true
+            },
+            {
+              "id": "d298649852114bed8f45c41c08601d47",
+              "index": 2,
+              "text": "Link entry and multi-service catalog search are clearly distinguished and easy to operate with mouse and keyboard.",
+              "isDone": true
+            },
+            {
+              "id": "22b334b2ca3f4128b7193a19afb5db0a",
+              "index": 3,
+              "text": "Queueing, provider actions, metadata editing, resizing, and persisted settings continue to work without layout regressions.",
+              "isDone": true
+            },
+            {
+              "id": "d356d9163fd7443483e9c986d6c72701",
+              "index": 4,
+              "text": "The application builds successfully after the UI changes.",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-21T21:54:28.7412111+00:00",
+          "updatedAt": "2026-09-21T22:15:23.3794149+00:00"
+        },
+        {
+          "id": "961b66d14f88418881d744487f1c5f1e",
+          "index": 240,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Audit and improve app performance",
+          "task": "Sweep the full application for avoidable UI-thread work, unbounded concurrency, repeated I/O, excessive refreshes or logging, and other likely causes of system-wide stalls. Prioritize Downloads and Podcasts, which can make the computer hang while active, then address additional high-confidence hot spots elsewhere without changing user-visible behavior.",
+          "tags": [
+            "performance",
+            "downloads",
+            "Podcasts"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "2305f027d56d4b17919f949a770c6e7f",
+              "index": 1,
+              "text": "Downloads avoids unbounded or UI-thread-heavy work; concurrency and progress/log update rates are bounded where appropriate.",
+              "isDone": true
+            },
+            {
+              "id": "81beb014e2994e8c90e47d76a051f59e",
+              "index": 2,
+              "text": "Podcast refresh, download, persistence, and view-update paths avoid redundant I/O and long-running work on the UI thread.",
+              "isDone": true
+            },
+            {
+              "id": "f868eee7ebd94319a760517860b10d68",
+              "index": 3,
+              "text": "The rest of the app is reviewed and additional high-confidence performance issues found during the sweep are fixed or documented as follow-up tasks.",
+              "isDone": true
+            },
+            {
+              "id": "0a0fe99cc9cf4fa4a22e24bd2af0f541",
+              "index": 4,
+              "text": "Findings and implemented optimizations are documented on the card, and the application builds successfully.",
+              "isDone": true
+            }
+          ],
+          "notes": [
+            {
+              "id": "2e9d7dc3fe674fd3b665b8a64ccf58ff",
+              "text": "Performance sweep findings and changes: Downloads now virtualizes/recycles queue containers, throttles yt-dlp UI progress to about 8 updates/second or meaningful 1% changes, serializes progressive TagLib/artwork imports, avoids rebuilding the hidden library after every finalized track, and removes per-candidate synchronous score logging. Podcasts now serializes large file downloads, serializes auto-rule passes and iPod replacement work, coalesces overlapping feed refreshes, batches persistence and view refreshes for bulk/automatic downloads, throttles transfer progress, and virtualizes/recycles episode and search rows. Whole-app fixes move drag/drop music import off the UI thread and debounce library search rerenders. Review also covered iPod reads/writes, artwork work, Streamrip, notification/Reflect views, persistence, maintenance actions, and library grouping. Larger layout/thread-safety refactors are captured as locked follow-ups #241 (virtualized library card grids) and #242 (background-safe Settings maintenance). Verification: Release build succeeded with 0 warnings and 0 errors; no test project is present."
+            }
+          ],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-21T21:54:29.3694436+00:00",
+          "updatedAt": "2026-09-21T22:34:26.2850291+00:00"
+        },
+        {
+          "id": "f8c7604e387347d09d894c1d67927da2",
+          "index": 241,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Virtualize large library card grids",
+          "task": "Replace the non-virtualized WrapPanel used for album, artist, and genre cards with a recycling layout that preserves the current responsive card grid and drag/drop behavior for very large libraries.",
+          "tags": [
+            "performance",
+            "library"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "bc69769cca5f4dba8b00bd74f00e06fb",
+              "index": 1,
+              "text": "Only visible and near-visible library cards are materialized while scrolling.",
+              "isDone": true
+            },
+            {
+              "id": "67e18c89c9874cd9a08ff428c601e348",
+              "index": 2,
+              "text": "Card navigation, artwork, drag/drop, and responsive wrapping behavior remain intact.",
+              "isDone": true
+            },
+            {
+              "id": "4fc2eaa86b374827a53b006c805d77e5",
+              "index": 3,
+              "text": "The application builds successfully and the large-library behavior is verified.",
+              "isDone": true
+            }
+          ],
+          "notes": [
+            {
+              "id": "382fb69655f04a45a9848efdae2b2079",
+              "text": "Implemented a recycling VirtualizingWrapPanel for the album/artist/genre ListBox and deferred artwork decoding until a card is realized. A temporary Debug-only WPF smoke harness loaded 10,000 cards: 20 visuals were realized initially, 20 after scrolling to item 10,000, selection survived recycling, and narrowing the viewport doubled the row extent as expected. Final Debug build succeeded with 0 warnings and 0 errors."
+            }
+          ],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-21T22:33:06.0095957+00:00",
+          "updatedAt": "2026-09-21T22:48:24.8368032+00:00"
+        },
+        {
+          "id": "905908b618a94325ba9e2d53d737cb72",
+          "index": 243,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Align search actions and unify section headers",
+          "task": "Polish navigation and search typography: vertically center the Downloads catalog-search button label and the corresponding search-results popup action labels, then use warm white for the Downloads title, Artists/Albums/Genres titles, podcast library and show titles, and iPod subcategory headers.",
+          "tags": [
+            "UI",
+            "downloads"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "066ffa0c1501433a96007f54e872a435",
+              "index": 1,
+              "text": "The Downloads search button and search-results popup action text are vertically centered.",
+              "isDone": true
+            },
+            {
+              "id": "1a5d69eab045432ca7ae52e1db7ef6e6",
+              "index": 2,
+              "text": "Downloads, Artists, Albums, Genres, podcast library/show, and iPod subcategory headers use the warm-white primary text color.",
+              "isDone": true
+            },
+            {
+              "id": "da7b889a75bd4302ae94c16daff320f3",
+              "index": 3,
+              "text": "Existing active-state colors, spacing, navigation behavior, and search actions remain intact.",
+              "isDone": true
+            },
+            {
+              "id": "c1905cd817834a9abeb4d51fc5064f85",
+              "index": 4,
+              "text": "The application builds successfully in Debug configuration.",
+              "isDone": true
+            }
+          ],
+          "notes": [
+            {
+              "id": "c21ce537e2f643a3bdad2588fad9c847",
+              "text": "Centered the shared PrimaryButtonStyle content presenter vertically, covering the Downloads catalog search, overlay search, result-row Download action, and other primary actions without changing their dimensions or handlers. Explicitly set #F4F6FA on the Download title, dynamic Music/iPod ViewTitle, and dynamic PodcastTitle. Debug build succeeded with 0 warnings and 0 errors."
+            }
+          ],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-21T22:47:27.0818563+00:00",
+          "updatedAt": "2026-09-21T22:50:30.5114078+00:00"
+        },
+        {
+          "id": "db421a1ce64f4e68b32c7d5007d10aaf",
+          "index": 242,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Run library maintenance without blocking the UI",
+          "task": "Move Refresh library and Organize library disk/tag scans out of the WPF dispatcher while safely applying model changes on the UI thread and showing busy/progress feedback in Settings.",
+          "tags": [
+            "performance",
+            "library"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "de68861308aa489d8de3ca19193802e4",
+              "index": 1,
+              "text": "Refresh and organize operations keep the window responsive during large library scans.",
+              "isDone": true
+            },
+            {
+              "id": "5efc58e966c04b5aab9a030a3cc74578",
+              "index": 2,
+              "text": "Track property and collection updates remain UI-thread-safe and persistence remains correct.",
+              "isDone": true
+            },
+            {
+              "id": "5e1f25f3ee11432494ed951f7702e31e",
+              "index": 3,
+              "text": "Settings prevents duplicate maintenance runs and reports completion or failure clearly.",
+              "isDone": true
+            }
+          ],
+          "notes": [
+            {
+              "id": "f821460da9bc4491a8b328c943b8d81a",
+              "text": "Moved refresh tag scans and organize disk work to background tasks using detached Track snapshots. WPF-bound model changes are applied on the UI thread, persistence serializes background-safe snapshots, and Settings prevents overlapping maintenance while showing progress plus completion or failure feedback. Verified with a focused organize/missing-file smoke test and a Debug build with 0 warnings and 0 errors."
+            }
+          ],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-21T22:33:06.8147254+00:00",
+          "updatedAt": "2026-09-22T04:15:58.4557573+00:00"
+        },
+        {
+          "id": "2914676bf9a94b66a4c7d69d1138506d",
+          "index": 244,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Downloads queue list clips its last rows",
+          "task": "With 8\u002B queued downloads the queue list gets a scrollbar, but the bottom of the scroll area is cut off, so the last items (and the metadata editor target) can\u0027t be seen or selected. The queue must scroll fully so every item is reachable and editable.",
+          "tags": [
+            "downloads",
+            "ui"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "fa257f8330034f97bc720fa81aed46a8",
+              "index": 1,
+              "text": "Every queued download is fully visible when scrolled to the bottom",
+              "isDone": true
+            },
+            {
+              "id": "22052b966bdc47c8b8b8e6d8798e41ee",
+              "index": 2,
+              "text": "Metadata of the last queued items can be selected and edited",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-29T00:55:19.1938789+00:00",
+          "updatedAt": "2026-09-29T00:56:25.6196807+00:00"
+        },
+        {
+          "id": "fad447ad90824a5082d8689157c0564c",
+          "index": 245,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Re-running the same search reopens previous results",
+          "task": "If a search is run, the search results window is closed, and the same terms are searched again, reopen the results as they were (same results, same scroll position) instead of starting a new search.",
+          "tags": [
+            "downloads",
+            "ui"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "7f0e996247424a2fb7ca35bdd6e26443",
+              "index": 1,
+              "text": "Searching identical terms after closing reuses the previous results without a new network search",
+              "isDone": true
+            },
+            {
+              "id": "857d5f1da4ed4468b69046caf129303e",
+              "index": 2,
+              "text": "The scroll position is restored",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-29T00:55:20.0319177+00:00",
+          "updatedAt": "2026-09-29T00:57:47.1607596+00:00"
+        },
+        {
+          "id": "5758710a05c3471688f0cc7f08ee8bf9",
+          "index": 246,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Reflect keeps listening history for deleted tracks",
+          "task": "The library was deleted. Reflect (listening stats) must still show metadata (title/artist/album/art where possible) for tracks that were listened to, even after those tracks are deleted from the library.",
+          "tags": [
+            "ui"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "11e743cf6205446c9ada56af743d09da",
+              "index": 1,
+              "text": "Listen history keeps enough metadata to render deleted tracks",
+              "isDone": true
+            },
+            {
+              "id": "529ad52049f04257ba1cc4c00869d607",
+              "index": 2,
+              "text": "Reflect shows listened tracks/artists/albums even when they are no longer in the library",
+              "isDone": true
+            }
+          ],
+          "notes": [
+            {
+              "id": "0d2da393304947ccad5a63cac829ffd8",
+              "text": "64 song listens in reflect.json point at tracks deleted before this change; only their ids were stored and no library.json backup exists in %APPDATA%\\Sink, so they can\u0027t be restored. Everything recorded from now on survives deletion."
+            }
+          ],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-29T00:55:20.9900758+00:00",
+          "updatedAt": "2026-09-29T01:00:19.6641588+00:00"
+        },
+        {
+          "id": "8d49f86730844f4299cbba0a96205752",
+          "index": 247,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Show library file size in the sidebar footer",
+          "task": "Add a small label at the very bottom of the sidebar, above the version/bug-report text, showing the current total file size of the library.",
+          "tags": [
+            "ui"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "c1a491d7792143da913a3ecccc605638",
+              "index": 1,
+              "text": "Sidebar footer shows the library\u0027s total file size above the version/bug text",
+              "isDone": true
+            },
+            {
+              "id": "6ae7aa9be3c04b17b8afba3311ada4e4",
+              "index": 2,
+              "text": "The size updates when the library changes",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": true,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-29T00:55:21.7944815+00:00",
+          "updatedAt": "2026-09-29T01:03:15.5777094+00:00"
+        },
+        {
+          "id": "f5248c3d64644003914b8c79ac39affe",
+          "index": 249,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Autocomplete everywhere with live prefix narrowing; live library size",
+          "task": "Autocomplete for every text field: the queue row name box (artist/album/title by row kind), the library search box and the podcasts search box. Behavior: suggestions update on every keystroke and narrow by prefix \u2014 with My Bloody Valentine, My Chemical Romance, Modest Mouse: \u0027M\u0027 shows all three, \u0027My\u0027 drops Modest Mouse, \u0027My C\u0027 shows only My Chemical Romance. The sidebar library size label must update in real time while tracks download.",
+          "tags": [
+            "ui",
+            "downloads",
+            "metadata"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "77ba084de09f4265acef88a997bb1b9e",
+              "index": 1,
+              "text": "Queue row name box autocompletes by row kind",
+              "isDone": true
+            },
+            {
+              "id": "f04951a550fa4998b5e36303ee24f5e3",
+              "index": 2,
+              "text": "Suggestions narrow by prefix live on every keystroke",
+              "isDone": true
+            },
+            {
+              "id": "618e9a398d4e4de08cba60d1f7d07610",
+              "index": 3,
+              "text": "Library search box autocompletes",
+              "isDone": true
+            },
+            {
+              "id": "cc8e82f750cd4f2a8334a9965ec9bec5",
+              "index": 4,
+              "text": "Podcasts search box autocompletes",
+              "isDone": true
+            },
+            {
+              "id": "00ae363d337340e2817a0e66a016d5df",
+              "index": 5,
+              "text": "Library size label updates live during downloads",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": true,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-29T01:31:04.918362+00:00",
+          "updatedAt": "2026-09-29T01:35:00.8577564+00:00"
+        },
+        {
+          "id": "73bcc4c0bd284fe4b4da6cdafadad72e",
+          "index": 248,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Autocomplete from download queue metadata and in search boxes",
+          "task": "Download-page metadata autocomplete currently only suggests values from the library. Also suggest values already present in the download queue (including artist and album names of queued nodes). Add the same autocomplete to the catalog search boxes (track/album/artist) on the main Download page and in the search results popout.",
+          "tags": [
+            "downloads",
+            "ui",
+            "metadata"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "56ae3c7a7c7b43b1905c03359cb3fd06",
+              "index": 1,
+              "text": "Queue field autocomplete also suggests artist/album/genre/title values already in the download queue",
+              "isDone": true
+            },
+            {
+              "id": "344ebe75ee8c4239babda401ef31067a",
+              "index": 2,
+              "text": "Main Download search boxes autocomplete from library \u002B queue",
+              "isDone": true
+            },
+            {
+              "id": "38391fd08f38401ebea503d739c6534f",
+              "index": 3,
+              "text": "Search results popout boxes autocomplete from library \u002B queue",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": true,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-29T01:17:46.4662663+00:00",
+          "updatedAt": "2026-09-29T12:04:09.8234566+00:00"
+        },
+        {
+          "id": "0c6f2d36f63e4059a42f4021e357a7ea",
+          "index": 253,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Search shortcuts, detailed download status, sync percentage",
+          "task": "1) In the catalog search results and the download queue, right-clicking an album offers \u0027Search for artist\u0027, and right-clicking a track offers \u0027Search for album\u0027, running a catalog search for it. 2) The download status bar shows \u0027Downloading: [title] - [album] - [artist] [(genre)].extension - x/y\u0027 instead of just \u0027track x/y\u0027. 3) While syncing, show a progress percentage next to the iPod text, combined across music, changes and podcasts.",
+          "tags": [
+            "downloads",
+            "ui"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "d06b38e4a6564616984e1ad8f4402609",
+              "index": 1,
+              "text": "Right-click album -\u003E Search for artist (search results and queue)",
+              "isDone": true
+            },
+            {
+              "id": "1bc8bbd4bf5447f3a48e6be908f02976",
+              "index": 2,
+              "text": "Right-click track -\u003E Search for album (search results and queue)",
+              "isDone": true
+            },
+            {
+              "id": "30ba4433dd034c86822afeef12aa9f17",
+              "index": 3,
+              "text": "Download status shows title - album - artist (genre).ext - x/y",
+              "isDone": true
+            },
+            {
+              "id": "777175254d724f5a8f919a003bcfff1d",
+              "index": 4,
+              "text": "Sync shows a combined progress percentage next to the iPod text",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": true,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-30T04:25:48.0293605+00:00",
+          "updatedAt": "2026-09-30T05:16:52.5277604+00:00"
+        },
+        {
+          "id": "daf8f35052c34912901aef627b0c858e",
+          "index": 256,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Detect fake (upconverted) FLAC files",
+          "task": "Classify a library file as genuine lossless, fake lossless (lossy audio re-wrapped as FLAC by an ffmpeg conversion, or with a lossy spectral cutoff), lossy, or missing. Used by \u0027Download high quality\u0027.",
+          "tags": [
+            "metadata"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "d85a20c411be4a64936682446214dfb5",
+              "index": 1,
+              "text": "Sink-converted MP3\u2192FLAC files are classified as fake",
+              "isDone": true
+            },
+            {
+              "id": "3e91bb2ad8964a2299702de0137fb888",
+              "index": 2,
+              "text": "Genuine Deezer CD FLAC is classified as lossless",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-30T05:51:19.8146434+00:00",
+          "updatedAt": "2026-09-30T05:56:04.9911257+00:00"
+        },
+        {
+          "id": "717ec5bb3efc45dbba811110888e1b92",
+          "index": 257,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Startup scan for missing library files",
+          "task": "Every startup, check every track\u0027s file exists. A missing track gets a red error light in track lists; its album card turns greyscale with a red light, and its artist (and genre) card gets a red light too, until a later startup finds the file again.",
+          "tags": [
+            "ui"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "e7d2d808517f4a69bd764c6a64697a6d",
+              "index": 1,
+              "text": "Every startup checks each track\u0027s file in the background",
+              "isDone": true
+            },
+            {
+              "id": "56f6fdf6679d47f6bebe7006fec0d0b7",
+              "index": 2,
+              "text": "Missing tracks show a red error light",
+              "isDone": true
+            },
+            {
+              "id": "18b11a28365a4bdab448b75eb097107e",
+              "index": 3,
+              "text": "Albums with missing tracks show greyscale art and a red light",
+              "isDone": true
+            },
+            {
+              "id": "cc82ff599b9a4af986c353ff4b770e3f",
+              "index": 4,
+              "text": "Artists with missing tracks show a red light",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-30T05:51:20.228175+00:00",
+          "updatedAt": "2026-09-30T05:57:09.7967594+00:00"
+        },
+        {
+          "id": "0e96a54c6a0e4720a083ab30884e1561",
+          "index": 258,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Keep high quality setting (FLAC originals)",
+          "task": "Setting \u0027Keep high quality\u0027 plus a high-quality folder (default Sink/Original next to the library). When on, Deezer downloads are kept as real FLAC in that folder and the library copy is converted from it into the chosen format.",
+          "tags": [
+            "downloads",
+            "metadata"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "e9e3a41c1d41421da0ff0658e473b1c1",
+              "index": 1,
+              "text": "Settings has Keep high quality and a high-quality folder",
+              "isDone": true
+            },
+            {
+              "id": "781c3c3365494e92a6951a6d6017a9c7",
+              "index": 2,
+              "text": "With it on, downloads store a real FLAC original and a converted library copy",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-30T05:51:20.5392871+00:00",
+          "updatedAt": "2026-09-30T05:58:38.4335447+00:00"
+        },
+        {
+          "id": "17ed195b9fa54ab6903d90ede0711323",
+          "index": 259,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Download high quality from right-click",
+          "task": "Albums, artists, genres and tracks get \u0027Download high quality\u0027. With Keep high quality on: fake-FLAC originals are deleted and replaced, MP3/lossy tracks get a real FLAC downloaded to the high-quality folder, genuine FLAC is skipped. With it off: the track is re-downloaded in the chosen format and the old file deleted and replaced, unless it\u0027s already that format (and not a fake FLAC). Existing tracks are updated in place, keeping plays, playlists and favorites.",
+          "tags": [
+            "downloads",
+            "metadata"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "893fbaf48b5a4da0b29f9672655db166",
+              "index": 1,
+              "text": "Right-click Download high quality on albums, artists, genres and tracks",
+              "isDone": true
+            },
+            {
+              "id": "98970a460aa9463a99a23458c9e0b752",
+              "index": 2,
+              "text": "Keep-high-quality rules (replace fake, fetch FLAC for lossy, skip genuine)",
+              "isDone": true
+            },
+            {
+              "id": "47b3f96b50d34e8fbd0888f037b94fdd",
+              "index": 3,
+              "text": "Without it: replace unless already the chosen format",
+              "isDone": true
+            },
+            {
+              "id": "9c1d3fd5ebd9465d8b983838a64abd32",
+              "index": 4,
+              "text": "Replaced tracks keep their identity (plays, playlists, favorites)",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": true,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-30T05:51:20.8689869+00:00",
+          "updatedAt": "2026-09-30T06:04:11.367093+00:00"
+        },
+        {
+          "id": "3615b67c7eb943409c56224b28b1d1ed",
+          "index": 261,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Search artwork online for albums and tracks",
+          "task": "Extend right-click \u0027Search artwork online\u2026\u0027 (Google Images) from artists and genres to album cards and track rows. An album\u0027s pick becomes the cover for all its tracks; a track\u0027s pick applies to the selected track(s).",
+          "tags": [
+            "ui",
+            "metadata"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "badde2bfa3824b7898a8cc3b6eb71840",
+              "index": 1,
+              "text": "Album cards have Search artwork online\u2026",
+              "isDone": true
+            },
+            {
+              "id": "7f060d0b7894406caf3dde1ee3d1fe1a",
+              "index": 2,
+              "text": "Track rows have Search artwork online\u2026",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": true,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-30T06:22:57.8845509+00:00",
+          "updatedAt": "2026-09-30T06:24:52.8577859+00:00"
+        },
+        {
+          "id": "6b2a21a2e809488396c52059cc839aef",
+          "index": 262,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Now-playing backdrop and record label art",
+          "task": "While something plays, the main content area shows the artist\u0027s artwork at 20% opacity with blurred/feathered edges, and the centre (label) of the spinning record shows the album artwork cropped to a circle, rotating with the record. Same for podcasts (show artwork).",
+          "tags": [
+            "ui",
+            "animations"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "a578739a40f74d8eac11af6313354bad",
+              "index": 1,
+              "text": "Content area shows the playing artist\u0027s artwork at 20% opacity with soft edges",
+              "isDone": true
+            },
+            {
+              "id": "16d223d955d645f783ef5a757cc15353",
+              "index": 2,
+              "text": "Record label shows album art cropped to a circle and rotates with the record",
+              "isDone": true
+            },
+            {
+              "id": "3920fdf329d44cc2ba19a551f9c68b3b",
+              "index": 3,
+              "text": "Podcasts do the same with the show artwork",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": true,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-30T06:25:00.9405195+00:00",
+          "updatedAt": "2026-09-30T06:28:30.1926531+00:00"
+        },
+        {
+          "id": "e478a31f252942878246ae3faefca3d1",
+          "index": 264,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Experimental Cover Flow view",
+          "task": "Toolbar \u0027Cover Flow\u0027 button opens a full-window view (sidebar hidden) showing every album as a 3D CD jewel case on a wood shelf against a light wall: album art on the front, artist/album on the spine. The centred album is selected: it smoothly pulls out from the shelf and turns to show its art, and returns when deselected. Selecting it flips it to show the track list. A search box with autocomplete filters by genre, artist, album or track as you type.",
+          "tags": [
+            "ui",
+            "animations"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "58b8ab23ceeb4e34a142608c850e3edc",
+              "index": 1,
+              "text": "Cover Flow button hides the sidebar and opens the view",
+              "isDone": true
+            },
+            {
+              "id": "97892854ff3d444e975f5567253d9b79",
+              "index": 2,
+              "text": "Albums are 3D jewel cases: art on front, artist/album on the spine, on a wood shelf over a light wall",
+              "isDone": true
+            },
+            {
+              "id": "392468c4ea964ef5a594bbd79e952722",
+              "index": 3,
+              "text": "Centre album pulls out and turns to show its art; returns to the shelf when deselected",
+              "isDone": true
+            },
+            {
+              "id": "80285a220c794cf4aed6f88cb563881a",
+              "index": 4,
+              "text": "Selecting the album flips it to show its track list",
+              "isDone": true
+            },
+            {
+              "id": "47099e1e9e234423aece969d034a26f0",
+              "index": 5,
+              "text": "Search box with autocomplete filters by genre, artist, album or track",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-30T06:36:36.301597+00:00",
+          "updatedAt": "2026-09-30T06:41:19.7209396+00:00"
+        },
+        {
+          "id": "a1731e4f0767439d8b838a36a00050e2",
+          "index": 265,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Cover Flow: framing and hinge bar",
+          "task": "At the user\u0027s window size the top of the selected album is cut off; frame the scene by vertical field of view so it fits any window. Add a black hinge bar on the left of the album art (right of the back).",
+          "tags": [
+            "ui"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "cce4b9fc275945f18042914895d97b5f",
+              "index": 1,
+              "text": "Selected album fully visible at any window size",
+              "isDone": true
+            },
+            {
+              "id": "80a6ec35ce07493a9150ef88af35f073",
+              "index": 2,
+              "text": "Black hinge bar left of the art and right of the back",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-30T06:50:34.4291439+00:00",
+          "updatedAt": "2026-09-30T06:54:31.2342053+00:00"
+        },
+        {
+          "id": "4aa1bb50974449cd9710c62a65d03b4d",
+          "index": 266,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Cover Flow: camera move on flip, CD flies to the record on play",
+          "task": "When an album flips, zoom and move the camera slightly for a more dynamic feel. When a track or album is played from Cover Flow, a CD slides out of the case and flies to where the spinning record is.",
+          "tags": [
+            "ui",
+            "animations"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "a5007beda68b4de2b9258b819e7874af",
+              "index": 1,
+              "text": "Camera zooms in and shifts slightly while a case is flipped, and eases back",
+              "isDone": true
+            },
+            {
+              "id": "fc1882ecfb114fc3b185e62bd72ef6b9",
+              "index": 2,
+              "text": "Playing from Cover Flow slides a CD out of the case to the record\u0027s spot",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-30T06:54:50.010646+00:00",
+          "updatedAt": "2026-09-30T06:57:45.6541581+00:00"
+        },
+        {
+          "id": "64ad3c2296ce40328b4c773efdafe27a",
+          "index": 267,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Cover Flow: one CD per play, shadows and glare",
+          "task": "Double-clicking a track launched two CDs. Add lighting: soft shadows under the cases on the shelf, a shadow under the flying CD, and a glare that stays fixed while the disc spins.",
+          "tags": [
+            "ui",
+            "animations"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "305f8bbca4b8432f81e337d3bd3bb89a",
+              "index": 1,
+              "text": "Only one CD flies per play (double-click safe)",
+              "isDone": true
+            },
+            {
+              "id": "49c6016b29614688b675ba3bccfee424",
+              "index": 2,
+              "text": "Cases cast soft shadows on the shelf",
+              "isDone": true
+            },
+            {
+              "id": "8aa4eab200e24019875d943a58391990",
+              "index": 3,
+              "text": "Flying CD has a shadow and a fixed glare while it spins",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": false,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-30T07:05:58.3077922+00:00",
+          "updatedAt": "2026-09-30T07:11:24.6392252+00:00"
+        },
+        {
+          "id": "07f4eecc14444121a78a7a8378b69f4a",
+          "index": 268,
+          "kind": "task",
+          "dueDate": null,
+          "startedDate": null,
+          "priority": null,
+          "title": "Artwork size slider with list mode",
+          "task": "Albums, artists and genres get a slider to change the artwork size (more or fewer per row). Fully zoomed out, they show as a list until zoomed back in.",
+          "tags": [
+            "ui"
+          ],
+          "files": [],
+          "blockedByTaskIds": [],
+          "clusterId": null,
+          "customTypeId": null,
+          "customValues": {},
+          "requirements": [
+            {
+              "id": "8f338359de5c4dffbe50dc80d68612b9",
+              "index": 1,
+              "text": "Slider resizes album/artist/genre cards",
+              "isDone": true
+            },
+            {
+              "id": "bd7a0ce25d4f4326852b4a1a3b332402",
+              "index": 2,
+              "text": "Minimum shows a list instead of cards",
+              "isDone": true
+            },
+            {
+              "id": "3081ea0f2e924115a4f59f6656af57db",
+              "index": 3,
+              "text": "Size is remembered",
+              "isDone": true
+            }
+          ],
+          "notes": [],
+          "flags": {
+            "commit": true,
+            "build": true,
+            "release": true,
+            "merge": false
+          },
+          "isDone": true,
+          "isLocked": false,
+          "isAwaitingFeedback": false,
+          "isCollapsed": false,
+          "createdAt": "2026-09-30T07:05:58.5913192+00:00",
+          "updatedAt": "2026-09-30T07:14:47.7804934+00:00"
         }
       ]
     }
