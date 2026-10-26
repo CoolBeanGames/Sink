@@ -1347,6 +1347,7 @@ public partial class MainWindow
         if (_playingEpisode is not null) StopPodcast(markPlayed: false);
         if (_nowPlaying is not null)
         {
+            SaveLibraryPlayback();
             _mediaPlayer.Stop();
             _isPlaying = false;
             _nowPlaying = null;

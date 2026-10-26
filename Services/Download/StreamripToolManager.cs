@@ -92,16 +92,42 @@ public static class StreamripToolManager
             var parseUrlPy = Path.Combine(Root, "tools", "streamrip", "Lib", "site-packages", "streamrip", "rip", "parse_url.py");
             if (!File.Exists(parseUrlPy)) return;
             var parseUrlText = File.ReadAllText(parseUrlPy);
-            if (parseUrlText.Contains(@"deezer\.page\.link"))
+            var patched = RepairDeezerShortLinkPattern(parseUrlText);
+            if (patched != parseUrlText)
             {
-                parseUrlText = parseUrlText.Replace(@"deezer\.page\.link", @"(?:deezer\.page\.link|link\.deezer\.com/s)");
-                File.WriteAllText(parseUrlPy, parseUrlText);
+                File.WriteAllText(parseUrlPy, patched);
             }
         }
         catch (Exception ex)
         {
             Log.Warn($"Could not patch Deezer CDN domain in streamrip: {ex.Message}");
         }
+    }
+
+    internal static string RepairDeezerShortLinkPattern(string text)
+    {
+        const string original = @"deezer\.page\.link";
+        const string alternative = @"|link\.deezer\.com/s)";
+        const string replacement = "(?:" + original + alternative;
+
+        // Older Sink builds wrapped the original again on every setup. Walk
+        // the literal wrappers iteratively so even deeply damaged files can
+        // be repaired without asking a regex parser to read their nesting.
+        var searchFrom = 0;
+        while (text.IndexOf(original, searchFrom, StringComparison.Ordinal) is var index && index >= 0)
+        {
+            var start = index;
+            var end = index + original.Length;
+            while (start >= 3 && text.AsSpan(start - 3, 3).SequenceEqual("(?:")
+                   && text.AsSpan(end).StartsWith(alternative, StringComparison.Ordinal))
+            {
+                start -= 3;
+                end += alternative.Length;
+            }
+            text = text[..start] + replacement + text[end..];
+            searchFrom = start + replacement.Length;
+        }
+        return text;
     }
 
     internal static void ApplyManagedEnvironment(ProcessStartInfo psi)

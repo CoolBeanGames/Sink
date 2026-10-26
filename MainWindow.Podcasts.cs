@@ -386,6 +386,7 @@ public partial class MainWindow
         StopPreview("started a podcast");
 
         // Take over from music playback.
+        SaveLibraryPlayback();
         _mediaPlayer.Stop();
         _mediaPlayer.Close();
         _nowPlaying = null;

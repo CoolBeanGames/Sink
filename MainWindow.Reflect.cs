@@ -78,6 +78,7 @@ public partial class MainWindow
     /// <summary>Flushes whatever's mid-playback as a listen when the app closes, rather than losing it silently.</summary>
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
+        SaveLibraryPlayback();
         RecordSongListenIfDue();
         if (_playingEpisode is not null) StopPodcast(markPlayed: false);
         
@@ -96,6 +97,7 @@ public partial class MainWindow
 
     /// <summary>True once the currently-playing song has already been recorded this play, so PlaybackTimer_Tick's live check and a later switch-away/close don't double-count it. Reset in PlayTrack.</summary>
     private bool _nowPlayingListenRecorded;
+    private TimeSpan _songResumeStart;
 
     /// <summary>
     /// Records a listen for the current song the moment enough of it has
@@ -112,13 +114,14 @@ public partial class MainWindow
         if (_nowPlaying is null || _nowPlayingListenRecorded) return;
         var full = _nowPlaying.Duration;
         var threshold = TimeSpan.FromSeconds(Math.Min(30, Math.Max(1, full.TotalSeconds)));
-        if (_simulatedPosition < threshold) return;
+        if (_simulatedPosition - _songResumeStart < threshold) return;
         var completed = full > TimeSpan.Zero && _simulatedPosition >= full - TimeSpan.FromSeconds(2);
         var listen = new ListenEvent { Kind = ListenKind.Song, ItemId = _nowPlaying.Id, Duration = _simulatedPosition, Completed = completed };
         listen.SnapshotFrom(_nowPlaying);
         _listenEvents.Add(listen);
         ReflectStore.Save(_listenEvents);
         _nowPlayingListenRecorded = true;
+        _libraryPlaybackHistory.MarkListenRecorded(_nowPlaying.Id);
         // Live-refresh the PLAYS column (and Tags page) right away rather
         // than waiting for some unrelated re-render to happen to pick it up.
         RenderLibrary();

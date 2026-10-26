@@ -21,6 +21,7 @@ public partial class MainWindow
 
     private void IpodPodcastsButton_Click(object sender, RoutedEventArgs e)
     {
+        _libraryHubActive = false;
         _source = LibrarySource.Ipod;
         ApplySourceChrome();
         _ipodPodcastsActive = true;
@@ -53,6 +54,8 @@ public partial class MainWindow
     }
     private void RenderIpodPodcasts()
     {
+        LibraryHub.Visibility = Visibility.Collapsed;
+        LibrarySearchBorder.Visibility = Visibility.Visible;
         GroupsScroller.Visibility = Visibility.Collapsed;
         TracksBorder.Visibility = Visibility.Collapsed;
         IpodPlaylistsArea.Visibility = Visibility.Collapsed;

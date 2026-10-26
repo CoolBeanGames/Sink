@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     private string? _ipodLibraryRoot;
     private LibraryCategory _category = LibraryCategory.Albums;
     private LibrarySource _source = LibrarySource.Music;
+    private bool _libraryHubActive = true;
     // Remembered per source (task 162) — so returning to Library/iPod from
     // Downloads, Tags, Reflect, etc. lands back on whatever category (e.g.
     // Songs) was last active there instead of always snapping to Albums.
@@ -104,8 +105,8 @@ public partial class MainWindow : Window
             _librarySearchTimer.Stop();
             RenderLibrary();
         };
-        _mediaPlayer.MediaOpened += (_, _) => UpdatePlayerDuration();
-        _mediaPlayer.MediaEnded += (_, _) => NextTrack();
+        _mediaPlayer.MediaOpened += (_, _) => { ApplyPendingLibrarySeek(); UpdatePlayerDuration(); };
+        _mediaPlayer.MediaEnded += (_, _) => { SaveLibraryPlayback(completed: true); NextTrack(); };
         _mediaPlayer.Volume = 0.7;
         RenderLibrary();
         LoadUiState();
@@ -114,6 +115,7 @@ public partial class MainWindow : Window
         InitNotifications();
         InitTagsPage();
         InitReflect();
+        RenderLibrary();
         _ipodPollTimer.Tick += (_, _) => PollForIpod();
         _ipodPollTimer.Start();
         Loaded += (_, _) => PollForIpod();
@@ -623,6 +625,7 @@ public partial class MainWindow : Window
     private void Category_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button button || !Enum.TryParse(button.Name.Replace("Button", ""), out LibraryCategory category)) return;
+        _libraryHubActive = false;
         _source = LibrarySource.Music;
         _category = category; _lastMusicCategory = category; _drilldown = null; _artistFilter = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
         ApplySourceChrome();
@@ -633,6 +636,7 @@ public partial class MainWindow : Window
     private void IpodCategory_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button button || !Enum.TryParse(button.Name.Replace("Ipod", "").Replace("Button", ""), out LibraryCategory category)) return;
+        _libraryHubActive = false;
         _source = LibrarySource.Ipod;
         _category = category; _lastIpodCategory = category; _drilldown = null; _artistFilter = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
         ApplySourceChrome();
@@ -640,12 +644,22 @@ public partial class MainWindow : Window
         RenderLibrary();
     }
 
-    private void ShowMusicSource_Click(object sender, RoutedEventArgs e) => SetSource(LibrarySource.Music);
+    private void ShowMusicSource_Click(object sender, RoutedEventArgs e)
+    {
+        _libraryHubActive = true;
+        _source = LibrarySource.Music;
+        _drilldown = null; _artistFilter = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
+        SearchBox.Text = "";
+        ApplySourceChrome();
+        SetActiveNavigation(null);
+        RenderLibrary();
+    }
     private void ShowIpodSource_Click(object sender, RoutedEventArgs e) => SetSource(LibrarySource.Ipod);
 
     /// <summary>Returns to a source's last-active category (task 162) instead of always resetting to Albums.</summary>
     private void SetSource(LibrarySource source)
     {
+        _libraryHubActive = false;
         _source = source;
         _category = source == LibrarySource.Music ? _lastMusicCategory : _lastIpodCategory;
         _drilldown = null; _artistFilter = null; _activePlaylist = null; PlaylistList.SelectedItem = null;
@@ -761,6 +775,22 @@ public partial class MainWindow : Window
         IpodPlaylistsArea.Visibility = Visibility.Collapsed;
         MetadataIndex.Rebuild(_tracks);
         RecomputePlayCounts();
+        if (_libraryHubActive && _source == LibrarySource.Music)
+        {
+            GroupsScroller.Visibility = Visibility.Collapsed;
+            TracksBorder.Visibility = Visibility.Collapsed;
+            CardSizePanel.Visibility = Visibility.Collapsed;
+            BackButton.Visibility = Visibility.Collapsed;
+            CleanupTitlesButton.Visibility = Visibility.Collapsed;
+            LibraryHub.Visibility = Visibility.Visible;
+            LibrarySearchBorder.Visibility = Visibility.Collapsed;
+            ViewTitle.Text = "Library";
+            ViewSubtitle.Text = $"{_tracks.Count} tracks in your collection";
+            RenderLibraryHub();
+            return;
+        }
+        LibraryHub.Visibility = Visibility.Collapsed;
+        LibrarySearchBorder.Visibility = Visibility.Visible;
         var query = SearchBox?.Text?.Trim() ?? "";
         var ipodOnDevice = _source == LibrarySource.Ipod && _ipodLibrary is not null;
         var source = _source != LibrarySource.Ipod ? _tracks.ToList()
@@ -996,17 +1026,27 @@ public partial class MainWindow : Window
 
     private void ClearSelection_Click(object sender, RoutedEventArgs e) => TracksGrid.UnselectAll();
 
-    private void PlayTrack(Track track)
+    private void PlayTrack(Track track, TimeSpan? resumePosition = null)
     {
+        var prior = resumePosition.HasValue
+            ? _libraryPlaybackHistory.Entries.FirstOrDefault(entry => entry.TrackId == track.Id)
+            : null;
+        var alreadyCounted = prior is not null && (prior.ListenRecorded || _listenEvents.Any(ev =>
+            ev.Kind == ListenKind.Song && ev.ItemId == track.Id && ev.Occurred.ToUniversalTime() >= prior.LastStartedUtc));
         StopPreview("started a library track");
         if (_playingEpisode is not null) StopPodcast(markPlayed: false);
         RecordSongListenIfDue(); // log whatever was playing before it's replaced (task 127)
+        SaveLibraryPlayback();
         _mediaPlayer.Stop();
         _mediaPlayer.Close();
         _nowPlaying = track;
-        _simulatedPosition = TimeSpan.Zero;
-        _nowPlayingListenRecorded = false;
+        _simulatedPosition = resumePosition ?? TimeSpan.Zero;
+        _pendingLibrarySeek = _simulatedPosition;
+        _libraryPlaybackFinished = false;
+        _nowPlayingListenRecorded = alreadyCounted;
+        _songResumeStart = resumePosition ?? TimeSpan.Zero;
         _isPlaying = true;
+        if (_tracks.Contains(track)) _libraryPlaybackHistory.Start(track.Id, _simulatedPosition, track.Duration, alreadyCounted);
         var filePath = track.FilePath;
         if (!string.IsNullOrWhiteSpace(filePath) && File.Exists(filePath))
         {
@@ -1042,6 +1082,7 @@ public partial class MainWindow : Window
         // previously only checked on switching away or closing the app, so
         // a song played once and left alone never got counted at all.
         RecordSongListenIfDue();
+        SaveLibraryPlaybackPeriodically();
     }
 
     private void UpdatePlayerDuration()
@@ -1072,6 +1113,7 @@ public partial class MainWindow : Window
         if (_nowPlaying is null) return;
         _isPlaying = !_isPlaying;
         if (_isPlaying) _mediaPlayer.Play(); else _mediaPlayer.Pause();
+        if (!_isPlaying) SaveLibraryPlayback();
         PlayPauseButton.Content = _isPlaying ? "Ⅱ" : "▶";
         UpdateRecordSpin();
     }
@@ -2126,6 +2168,7 @@ public partial class MainWindow : Window
     private void PlaylistList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (PlaylistList.SelectedItem is not Playlist playlist) return;
+        _libraryHubActive = false;
         _source = LibrarySource.Music; ApplySourceChrome();
         _activePlaylist = playlist; _category = LibraryCategory.Playlist; _drilldown = null; _artistFilter = null; SetActiveNavigation(null); RenderLibrary();
     }
