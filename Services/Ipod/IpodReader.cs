@@ -210,6 +210,7 @@ public static class IpodReader
                 Duration = TimeSpan.FromMilliseconds(Math.Max(0, t.Length.MilliSeconds)),
                 PlayCount = Math.Max(0, t.PlayCount),
                 IsPodcast = isPodcast,
+                ExcludedFromShuffle = IpodShuffleFlag.Get(t),
                 BookmarkMs = Math.Max(IpodBookmarks.GetMs(t), rawBookmarkMs),
             });
         }

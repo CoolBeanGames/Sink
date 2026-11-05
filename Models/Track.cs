@@ -1,8 +1,9 @@
+using System.ComponentModel;
 using System.Text.Json.Serialization;
 
 namespace Sink.Models;
 
-public sealed class Track : ITitleTrimmable
+public sealed class Track : ITitleTrimmable, INotifyPropertyChanged
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public required string Title { get; set; }
@@ -21,7 +22,19 @@ public sealed class Track : ITitleTrimmable
     public int TrackNumber { get; set; }
     public int Year { get; set; }
     public TimeSpan Duration { get; init; }
-    public bool ExcludedFromShuffle { get; set; }
+    private bool _excludedFromShuffle;
+    public bool ExcludedFromShuffle
+    {
+        get => _excludedFromShuffle;
+        set
+        {
+            if (_excludedFromShuffle == value) return;
+            _excludedFromShuffle = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ExcludedFromShuffle)));
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>
     /// This track's Title+Artist+Album+TrackNumber identity (see

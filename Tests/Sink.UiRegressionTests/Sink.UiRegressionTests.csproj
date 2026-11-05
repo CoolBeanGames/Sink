@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Controls/ShuffleMenu.cs" Link="Controls/ShuffleMenu.cs" />
+    <Compile Include="../../Models/Track.cs" Link="Models/Track.cs" />
+    <Compile Include="../../Models/ITitleTrimmable.cs" Link="Models/ITitleTrimmable.cs" />
+    <Compile Include="../../Services/Ipod/ItunesDbModels.cs" Link="Ipod/ItunesDbModels.cs" />
+    <Compile Include="../../Services/Download/DownloadModels.cs" Link="Download/DownloadModels.cs" />
+    <Compile Include="../../Services/Download/DownloadSelection.cs" Link="Download/DownloadSelection.cs" />
+    <Compile Include="../../Dialogs/SinkDialog.cs" Link="Dialogs/SinkDialog.cs" />
+    <Compile Include="../../Dialogs/DownloadBrowseWindow.cs" Link="Dialogs/DownloadBrowseWindow.cs" />
+    <None Include="../../MainWindow.xaml" Link="MainWindow.source.xaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

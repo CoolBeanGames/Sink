@@ -90,6 +90,7 @@ public partial class MainWindow
         Sink.Services.AppSettings.Current.OptMusicMeta = OptMusicMeta.IsChecked ?? true;
         Sink.Services.AppSettings.Current.OptNumberTracks = OptNumberTracks.IsChecked ?? false;
         Sink.Services.AppSettings.Current.OptCreatePlaylist = OptCreatePlaylist.IsChecked ?? false;
+        Sink.Services.AppSettings.Current.OptSyncWhenDone = OptSyncWhenDone.IsChecked ?? false;
         Sink.Services.AppSettings.Current.Save();
     }
 

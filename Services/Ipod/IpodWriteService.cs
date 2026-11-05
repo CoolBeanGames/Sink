@@ -4,7 +4,6 @@ using Clickwheel.Exceptions;
 using Sink.Models;
 using Sink.Services;
 using CwTrack = Clickwheel.Parsers.iTunesDB.Track;
-using CwMediaType = Clickwheel.Parsers.iTunesDB.MediaType;
 using CwPlaylist = Clickwheel.Parsers.iTunesDB.Playlist;
 
 namespace Sink.Services.Ipod;
@@ -136,7 +135,8 @@ public static class IpodWriteService
                 src.LastSyncedKey = currentKey;
 
                 if (PushPlayCount(onDevice, src, deviceId)) changedDb = true;
-                if (onDevice is not null && IpodShuffleFlag.Set(onDevice, src.ExcludedFromShuffle)) changedDb = true;
+                if (onDevice is not null && IpodShuffleFlag.Set(onDevice, IsPodcast(onDevice) || src.ExcludedFromShuffle)) changedDb = true;
+                if (MarkPodcast(onDevice, src)) changedDb = true;
 
                 // A track only shows under the device's own Podcasts menu when
                 // it's a member of the special "Podcasts" playlist — the
@@ -152,6 +152,7 @@ public static class IpodWriteService
                 }
             }
 
+            if (IpodPodcastClassification.Normalize(ipod) > 0) changedDb = true;
             if (changedDb)
             {
                 progress?.Report((eligible.Count, eligible.Count, "Updating the iPod database"));
@@ -273,7 +274,8 @@ public static class IpodWriteService
                 src.LastSyncedKey = currentKey;
 
                 if (PushPlayCount(onDevice, src, deviceId)) changedDb = true;
-                if (onDevice is not null && IpodShuffleFlag.Set(onDevice, src.ExcludedFromShuffle)) changedDb = true;
+                if (onDevice is not null && IpodShuffleFlag.Set(onDevice, IsPodcast(onDevice) || src.ExcludedFromShuffle)) changedDb = true;
+                if (MarkPodcast(onDevice, src)) changedDb = true;
 
                 if (onDevice is not null && !playlist.ContainsTrack(onDevice))
                 {
@@ -282,6 +284,8 @@ public static class IpodWriteService
                 }
                 if (onDevice is not null) members.Add(onDevice);
             }
+
+            if (IpodPodcastClassification.Normalize(ipod) > 0) changedDb = true;
 
             // Songs taken out of the library's playlist leave the device's
             // copy of it too — the playlist should match, not only grow.
@@ -608,7 +612,8 @@ public static class IpodWriteService
                 var changed = false;
                 if (ApplyMetadata(onDevice, src)) changed = true;
                 if (PushPlayCount(onDevice, src, deviceId)) changed = true;
-                if (IpodShuffleFlag.Set(onDevice, src.ExcludedFromShuffle)) changed = true;
+                if (IpodShuffleFlag.Set(onDevice, IsPodcast(onDevice) || src.ExcludedFromShuffle)) changed = true;
+                if (MarkPodcast(onDevice, src)) changed = true;
                 src.LastSyncedKey = IpodDbTrack.MakeKey(src.Title, src.Artist, src.Album, src.TrackNumber);
                 if (!changed) continue;
                 updated++;
@@ -661,19 +666,16 @@ public static class IpodWriteService
         return true;
     }
 
-    private static void MarkPodcast(CwTrack? onDevice, Track src)
+    private static bool MarkPodcast(CwTrack? onDevice, Track src)
     {
-        if (onDevice is null || !string.Equals(src.Genre, "Podcast", StringComparison.OrdinalIgnoreCase)) return;
-        onDevice.PodcastFlag = true;
-        onDevice.MediaType = CwMediaType.Podcast;
+        return onDevice is not null && string.Equals(src.Genre, "Podcast", StringComparison.OrdinalIgnoreCase)
+            && IpodPodcastClassification.Mark(onDevice);
     }
 
     private static string DeviceKey(CwTrack t) =>
         IpodDbTrack.MakeKey(t.Title, t.Artist, t.Album, IpodReader.SafeInt(t.TrackNumber));
 
-    private static bool IsPodcast(CwTrack t) =>
-        t.PodcastFlag || t.MediaType == CwMediaType.Podcast ||
-        string.Equals(t.Genre, "Podcast", StringComparison.OrdinalIgnoreCase);
+    private static bool IsPodcast(CwTrack t) => IpodPodcastClassification.IsPodcast(t);
 
     /// <summary>
     /// Every identity an on-device copy of these library tracks could carry:

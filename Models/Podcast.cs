@@ -24,6 +24,7 @@ public sealed class Podcast
 
     [JsonIgnore] public DateTime? LastPublished => Episodes.Count == 0 ? null : Episodes.Max(e => e.Published);
     [JsonIgnore] public int UnplayedCount => Episodes.Count(e => !e.IsPlayed);
+    [JsonIgnore] public int DownloadedCount => Episodes.Count(e => e.IsDownloaded);
 
     /// <summary>Show has episodes that arrived since it was last opened and haven't been played.</summary>
     [JsonIgnore] public bool HasNewUnplayed => Episodes.Any(e => e.IsNew && !e.IsPlayed);

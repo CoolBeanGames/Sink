@@ -8,8 +8,9 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>Sink</AssemblyName>
     <RootNamespace>Sink</RootNamespace>
-    <Version>1.0.53</Version>
+    <Version>1.0.59</Version>
     <ApplicationIcon>Assets\sink.ico</ApplicationIcon>
+    <DefaultItemExcludes>$(DefaultItemExcludes);builds\**;Tests\**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="Assets\sink.ico" />

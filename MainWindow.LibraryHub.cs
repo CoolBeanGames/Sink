@@ -15,16 +15,20 @@ public partial class MainWindow
     private bool _libraryPlaybackFinished;
 
     private sealed record HubItem(string Name, string Detail, string Initial, Brush Color,
-        string? ArtPath, Track Track, string? Key = null, double ResumeSeconds = 0)
+        string? ArtPath, Track Track, string? Key = null, double ResumeSeconds = 0,
+        bool GroupExcludedFromShuffle = false)
     {
         public ImageSource? Art => LoadArtwork(ArtPath);
+        public bool ShowShuffleIcon => Key is null || GroupExcludedFromShuffle;
+        public bool ExcludedFromShuffle => Key is null ? Track.ExcludedFromShuffle : GroupExcludedFromShuffle;
     }
 
     private static HubItem HubCard(string name, string detail, Track track, string? key = null,
-        string? artPath = null, double resumeSeconds = 0)
+        string? artPath = null, double resumeSeconds = 0, IEnumerable<Track>? groupTracks = null)
     {
         var group = Card(name, detail, name, [track]);
-        return new HubItem(name, detail, group.Initial, group.Color, artPath ?? group.ArtPath, track, key, resumeSeconds);
+        return new HubItem(name, detail, group.Initial, group.Color, artPath ?? group.ArtPath, track, key, resumeSeconds,
+            groupTracks is not null && groupTracks.Any() && groupTracks.All(t => t.ExcludedFromShuffle));
     }
 
     private static bool HubPlayable(Track track) => !string.IsNullOrWhiteSpace(track.FilePath) && File.Exists(track.FilePath);
@@ -37,10 +41,10 @@ public partial class MainWindow
         // GroupBy keeps the first occurrence in library insertion order, so an
         // older artist or album doesn't become "new" when another song is added.
         var albums = _tracks.GroupBy(t => (t.Album.ToUpperInvariant(), t.Artist.ToUpperInvariant())).Reverse()
-            .Take(8).Select(g => HubCard(g.First().Album, g.First().Artist, g.Last(), g.First().Album)).ToList();
+            .Take(8).Select(g => HubCard(g.First().Album, g.First().Artist, g.Last(), g.First().Album, groupTracks: g)).ToList();
         var artists = _tracks.GroupBy(t => t.Artist, StringComparer.OrdinalIgnoreCase).Reverse()
             .Take(8).Select(g => HubCard(g.Key, $"{g.Count()} tracks", g.Last(), g.Key,
-                Artwork.CachedPath($"artist:{g.Key}"))).ToList();
+                Artwork.CachedPath($"artist:{g.Key}"), groupTracks: g)).ToList();
 
         var byId = _tracks.GroupBy(t => t.Id).ToDictionary(g => g.Key, g => g.First());
         var historyIds = _libraryPlaybackHistory.Entries.Select(e => e.TrackId).ToHashSet();
@@ -63,7 +67,7 @@ public partial class MainWindow
         HubNewAlbums.ItemsSource = albums; HubNewAlbumsEmpty.Visibility = albums.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         HubNewArtists.ItemsSource = artists; HubNewArtistsEmpty.Visibility = artists.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         HubRecent.ItemsSource = recent; HubRecentEmpty.Visibility = recent.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        var unplayed = _tracks.Count(t => t.PlayCount == 0 && HubMayBePlayable(t));
+        var unplayed = _tracks.Count(t => t.PlayCount == 0 && !t.ExcludedFromShuffle && HubMayBePlayable(t));
         HubRandomButton.IsEnabled = unplayed > 0;
         HubRandomDescription.Text = unplayed > 0
             ? $"Pick a random track you haven't played yet · {unplayed} available"
@@ -91,7 +95,7 @@ public partial class MainWindow
     private void HubRandom_Click(object sender, RoutedEventArgs e)
     {
         RecomputePlayCounts();
-        var choices = _tracks.Where(t => t.PlayCount == 0 && HubMayBePlayable(t)).ToList();
+        var choices = _tracks.Where(t => t.PlayCount == 0 && !t.ExcludedFromShuffle && HubMayBePlayable(t)).ToList();
         while (choices.Count > 0)
         {
             var index = Random.Shared.Next(choices.Count);

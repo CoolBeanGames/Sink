@@ -7,6 +7,53 @@
         Title="Sink" Icon="Assets/sink.ico" Width="1260" Height="800" MinWidth="940" MinHeight="620" WindowStartupLocation="CenterScreen" Background="#0B0D12" AllowDrop="True" DragEnter="Window_DragEnter" DragOver="Window_DragOver" DragLeave="Window_DragLeave" Drop="Window_Drop" Closing="Window_Closing">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="B2V"/>
+        <Style x:Key="ShuffleIcon" TargetType="Path">
+            <Setter Property="Width" Value="13"/>
+            <Setter Property="Height" Value="13"/>
+            <Setter Property="Stretch" Value="Uniform"/>
+            <Setter Property="Data" Value="M1,3 L4,3 C7,3 7,11 10,11 L13,11 M10,8 L13,11 L10,14 M1,11 L4,11 C5,11 6,9 7,7 C8,5 9,3 10,3 L13,3 M10,0 L13,3 L10,6"/>
+            <Setter Property="Stroke" Value="#626A79"/>
+            <Setter Property="StrokeThickness" Value="1.5"/>
+            <Setter Property="StrokeStartLineCap" Value="Round"/>
+            <Setter Property="StrokeEndLineCap" Value="Round"/>
+            <Setter Property="StrokeLineJoin" Value="Round"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="ToolTip" Value="Excluded from shuffle"/>
+            <Setter Property="AutomationProperties.Name" Value="Excluded from shuffle"/>
+        </Style>
+        <Style x:Key="TrackShuffleIcon" TargetType="Path" BasedOn="{StaticResource ShuffleIcon}">
+            <Setter Property="Stroke" Value="#A79AFF"/>
+            <Setter Property="ToolTip" Value="Included in shuffle"/>
+            <Setter Property="AutomationProperties.Name" Value="Included in shuffle"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding ExcludedFromShuffle}" Value="True">
+                    <Setter Property="Stroke" Value="#626A79"/>
+                    <Setter Property="ToolTip" Value="Excluded from shuffle"/>
+                    <Setter Property="AutomationProperties.Name" Value="Excluded from shuffle"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="GroupShuffleIcon" TargetType="Path" BasedOn="{StaticResource ShuffleIcon}">
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Setter Property="ToolTip" Value="All tracks excluded from shuffle"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsShuffleExcluded}" Value="True">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="HubShuffleIcon" TargetType="Path" BasedOn="{StaticResource TrackShuffleIcon}">
+            <Setter Property="Visibility" Value="{Binding ShowShuffleIcon, Converter={StaticResource B2V}}"/>
+        </Style>
+        <Style x:Key="ShuffleIconCell" TargetType="DataGridCell">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        </Style>
         <Style x:Key="EpisodeIconButton" TargetType="Button">
             <Setter Property="Background" Value="#242A34"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -118,7 +165,11 @@
                     </Grid>
                 </Border>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,6,0">
-                    <TextBlock Text="{Binding Name}" Foreground="#F4F6FA" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding Name}" Foreground="#F4F6FA" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                        <Path Grid.Column="1" Style="{StaticResource HubShuffleIcon}" Margin="7,0,0,0"/>
+                    </Grid>
                     <TextBlock Text="{Binding Detail}" Foreground="#9199A8" FontSize="11" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
             </Grid>
@@ -137,6 +188,7 @@
                     <TextBlock Text="{Binding Detail}" Foreground="#7D8493" FontSize="11" TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <Path Style="{StaticResource GroupShuffleIcon}" Margin="0,0,8,0"/>
                     <Ellipse Width="8" Height="8" Fill="#E5484D" Margin="0,0,6,0" Visibility="{Binding HasMissing, Converter={StaticResource B2V}}" ToolTip="Some of these tracks' files can't be found"/>
                     <Ellipse Width="8" Height="8" Fill="#8B7CFF" Visibility="{Binding HasUnsyncedChanges, Converter={StaticResource B2V}}" ToolTip="Has changes not yet synced to the iPod"/>
                 </StackPanel>
@@ -413,7 +465,7 @@
                         </Style>
                     </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate><DataTemplate>
-                        <StackPanel Width="184"><StackPanel.LayoutTransform><ScaleTransform ScaleX="{Binding CardScale, RelativeSource={RelativeSource AncestorType=Window}}" ScaleY="{Binding CardScale, RelativeSource={RelativeSource AncestorType=Window}}"/></StackPanel.LayoutTransform><Border Height="145" CornerRadius="12" Background="{Binding Color}" BorderBrush="#303744" BorderThickness="1" ClipToBounds="True"><Grid><Ellipse Width="92" Height="92" Stroke="#FFFFFF" StrokeThickness="1" Opacity="0.13"/><Ellipse Width="30" Height="30" Fill="#0B0D12" Opacity="0.35"/><TextBlock Text="{Binding Initial}" FontSize="36" Foreground="#DAD7FF" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding Art}" Stretch="UniformToFill"/><Ellipse Width="10" Height="10" Fill="#8B7CFF" Stroke="#12151C" StrokeThickness="1.5" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,8,0" Visibility="{Binding HasUnsyncedChanges, Converter={StaticResource B2V}}" ToolTip="Has changes not yet synced to the iPod"/><Ellipse Width="10" Height="10" Fill="#E5484D" Stroke="#12151C" StrokeThickness="1.5" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8,8,0,0" Visibility="{Binding HasMissing, Converter={StaticResource B2V}}" ToolTip="Some of these tracks' files can't be found"><Ellipse.Effect><DropShadowEffect ShadowDepth="0" BlurRadius="8" Color="#E5484D" Opacity="0.9"/></Ellipse.Effect></Ellipse></Grid></Border><TextBlock Text="{Binding Name}" Foreground="#F4F6FA" FontWeight="SemiBold" Margin="3,10,3,0" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Detail}" Foreground="#7D8493" FontSize="11" Margin="3,3,3,0"/></StackPanel>
+                        <StackPanel Width="184"><StackPanel.LayoutTransform><ScaleTransform ScaleX="{Binding CardScale, RelativeSource={RelativeSource AncestorType=Window}}" ScaleY="{Binding CardScale, RelativeSource={RelativeSource AncestorType=Window}}"/></StackPanel.LayoutTransform><Border Height="145" CornerRadius="12" Background="{Binding Color}" BorderBrush="#303744" BorderThickness="1" ClipToBounds="True"><Grid><Ellipse Width="92" Height="92" Stroke="#FFFFFF" StrokeThickness="1" Opacity="0.13"/><Ellipse Width="30" Height="30" Fill="#0B0D12" Opacity="0.35"/><TextBlock Text="{Binding Initial}" FontSize="36" Foreground="#DAD7FF" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding Art}" Stretch="UniformToFill"/><Ellipse Width="10" Height="10" Fill="#8B7CFF" Stroke="#12151C" StrokeThickness="1.5" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,8,0" Visibility="{Binding HasUnsyncedChanges, Converter={StaticResource B2V}}" ToolTip="Has changes not yet synced to the iPod"/><Ellipse Width="10" Height="10" Fill="#E5484D" Stroke="#12151C" StrokeThickness="1.5" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8,8,0,0" Visibility="{Binding HasMissing, Converter={StaticResource B2V}}" ToolTip="Some of these tracks' files can't be found"><Ellipse.Effect><DropShadowEffect ShadowDepth="0" BlurRadius="8" Color="#E5484D" Opacity="0.9"/></Ellipse.Effect></Ellipse></Grid></Border><Grid Margin="3,10,3,0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Name}" Foreground="#F4F6FA" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><Path Grid.Column="1" Style="{StaticResource GroupShuffleIcon}" Margin="7,0,0,0"/></Grid><TextBlock Text="{Binding Detail}" Foreground="#7D8493" FontSize="11" Margin="3,3,3,0"/></StackPanel>
                     </DataTemplate></ListBox.ItemTemplate>
                 </ListBox>
             </Grid>
@@ -423,6 +475,11 @@
                 <DataGrid x:Name="TracksGrid" Grid.Row="1" AutoGenerateColumns="False" HeadersVisibility="Column" GridLinesVisibility="None" Background="Transparent" BorderThickness="0" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow" VirtualizingPanel.ScrollUnit="Pixel" SelectionChanged="TracksGrid_SelectionChanged" MouseDoubleClick="TracksGrid_MouseDoubleClick" PreviewMouseLeftButtonDown="TracksGrid_PreviewMouseLeftButtonDown" PreviewMouseMove="TracksGrid_PreviewMouseMove" ContextMenuOpening="TracksGrid_ContextMenuOpening" CellEditEnding="TracksGrid_CellEditEnding">
                     <DataGrid.ContextMenu><ContextMenu/></DataGrid.ContextMenu>
                     <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="" Width="28" IsReadOnly="True" CellStyle="{StaticResource ShuffleIconCell}">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate><Path Style="{StaticResource TrackShuffleIcon}"/></DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                         <DataGridTemplateColumn Header="♥" Width="30">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
@@ -539,6 +596,7 @@
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <DockPanel>
+                                        <Path DockPanel.Dock="Left" Style="{StaticResource TrackShuffleIcon}" Margin="0,0,10,0"/>
                                         <Button DockPanel.Dock="Right" Content="Unsync" Click="IpodPodcastUnsync_Click"
                                                 Background="Transparent" Foreground="#E0679B" BorderThickness="0" Cursor="Hand"/>
                                         <TextBlock Text="{Binding Title}" Foreground="#E7E9EE" FontSize="12.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
@@ -587,6 +645,7 @@
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <DockPanel>
+                                        <Path DockPanel.Dock="Left" Style="{StaticResource TrackShuffleIcon}" Margin="0,0,10,0"/>
                                         <Button DockPanel.Dock="Right" Content="Unsync" Click="IpodPodcastUnsync_Click"
                                                 Background="Transparent" Foreground="#E0679B" BorderThickness="0" Cursor="Hand"/>
                                         <TextBlock Text="{Binding Title}" Foreground="#E7E9EE" FontSize="12.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
@@ -808,6 +867,8 @@
                                   ToolTip="Write each album track's position (1, 2, 3…) as its track number when it doesn't already have one"/>
                         <CheckBox x:Name="OptCreatePlaylist" Content="Create matching playlist in library" Foreground="#C7CCD6" Margin="0,0,26,10"
                                   ToolTip="When downloading a playlist (Spotify, YouTube, or any future source), also build a library playlist with the same name and tracks"/>
+                        <CheckBox x:Name="OptSyncWhenDone" Content="Sync when done" Foreground="#C7CCD6" Margin="0,0,26,10"
+                                  ToolTip="Sync music and playlists to the connected iPod after the current download set finishes. Stopping downloads skips the sync."/>
                     </WrapPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                         <StackPanel Margin="0,0,26,0">
@@ -885,6 +946,11 @@
                               PreviewKeyDown="TagsGrid_PreviewKeyDown">
                         <DataGrid.ContextMenu><ContextMenu/></DataGrid.ContextMenu>
                         <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="" Width="28" IsReadOnly="True" CellStyle="{StaticResource ShuffleIconCell}">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate><Path Style="{StaticResource TrackShuffleIcon}"/></DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTemplateColumn Header="#" Width="48" SortMemberPath="TrackNumber">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
@@ -1115,8 +1181,9 @@
                                     </Grid>
                                     <TextBlock Text="{Binding Title}" Foreground="#F4F6FA" FontWeight="SemiBold" Margin="3,10,3,0" TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Text="{Binding Author}" Foreground="#7D8493" FontSize="11" Margin="3,3,3,0" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Foreground="#9D91FF" FontSize="10.5" Margin="3,5,3,0">
+                                    <TextBlock Foreground="#9D91FF" FontSize="10.5" Margin="3,5,3,0" TextWrapping="Wrap">
                                         <Run Text="{Binding UnplayedCount, Mode=OneWay}"/><Run Text=" unplayed · "/><Run Text="{Binding Episodes.Count, Mode=OneWay}"/><Run Text=" episodes"/>
+                                        <Run Text=" · "/><Span ToolTip="Downloaded episodes"><Run Text="↓ "/><Run Text="{Binding DownloadedCount, Mode=OneWay}"/></Span>
                                     </TextBlock>
                                 </StackPanel>
                             </Button>
@@ -1417,6 +1484,7 @@
                     <ListBox x:Name="MusicSearchResults" Grid.Row="1" Background="#0F1218" BorderBrush="#262C38" BorderThickness="1"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.ScrollUnit="Pixel"
                              SelectionChanged="MusicSearchResults_SelectionChanged"
+                             PreviewMouseRightButtonDown="MusicSearchResults_PreviewMouseRightButtonDown"
                              ContextMenuOpening="MusicSearchResults_ContextMenuOpening">
                         <ListBox.ContextMenu><ContextMenu/></ListBox.ContextMenu>
                         <ListBox.ItemContainerStyle>

@@ -137,6 +137,7 @@ public partial class MainWindow : Window
         OptMusicMeta.IsChecked = settings.OptMusicMeta;
         OptNumberTracks.IsChecked = settings.OptNumberTracks;
         OptCreatePlaylist.IsChecked = settings.OptCreatePlaylist;
+        OptSyncWhenDone.IsChecked = settings.OptSyncWhenDone;
     }
 
     // ---- Middle-mouse drag to scroll (task 98) -------------------------
@@ -504,10 +505,20 @@ public partial class MainWindow : Window
     {
         try
         {
+            // Includes episodes already on the device, even if their downloads
+            // are gone locally or they came from an older Sink version.
+            var episodeKeys = _podcasts.SelectMany(show => show.Episodes.Select(episode => PodcastEpisodeKey(show, episode))).ToHashSet();
+            var repaired = 0;
+            if (!_ipodWriting)
+            {
+                _ipodWriting = true;
+                try { repaired = await Task.Run(() => Services.Ipod.IpodMaintenance.RepairPodcastCategories(root, episodeKeys)); }
+                finally { _ipodWriting = false; }
+            }
             var library = await Task.Run(() => Sink.Services.Ipod.IpodReader.Read(root));
             if (_ipodLibraryRoot != root) return (false, 0, 0); // device changed while loading
             _ipodLibrary = library;
-            var podcastsUpdated = await SyncPodcastStatusFromIpodAsync();
+            var podcastsUpdated = repaired + await SyncPodcastStatusFromIpodAsync();
             var podcastsRemoved = await ReconcilePodcastsOnIpodAsync(root);
             if (podcastsRemoved > 0)
             {
@@ -517,6 +528,8 @@ public partial class MainWindow : Window
                 podcastsUpdated += podcastsRemoved;
             }
 
+            ApplyPendingShufflePreferences(root);
+            ResumePendingShuffleUpdates();
             _ipodTracks.Clear();
             foreach (var t in library.Tracks) _ipodTracks.Add(AdaptIpodTrack(t));
             var readableName = library.DeviceName ?? _ipodDevice?.Name ?? "iPod";
@@ -582,6 +595,7 @@ public partial class MainWindow : Window
             TrackNumber = t.TrackNumber,
             Year = t.Year,
             Duration = t.Duration,
+            ExcludedFromShuffle = t.ExcludedFromShuffle,
             // Cache-only lookup here — cheap, runs synchronously for every track on
             // the UI thread. A cache miss (never seen this album's art before) is
             // filled in afterward by EnrichIpodArtwork, off the UI thread, since
@@ -843,9 +857,9 @@ public partial class MainWindow : Window
         var trackSyncDot = _source == LibrarySource.Music;
         var groups = _category switch
         {
-            LibraryCategory.Artists => source.GroupBy(track => track.Artist).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key, group, $"artist:{group.Key}", trackSyncDot)),
+            LibraryCategory.Artists => source.GroupBy(track => track.Artist).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key, group, $"artist:{group.Key}", trackSyncDot, showShuffleExclusion: true)),
             LibraryCategory.Genres => source.GroupBy(track => track.Genre).Select(group => Card(group.Key, $"{group.Count()} tracks", group.Key, group, $"genre:{group.Key}", trackSyncDot)),
-            _ => source.GroupBy(track => track.Album).Select(group => Card(group.Key, group.First().Artist, group.Key, group, null, trackSyncDot))
+            _ => source.GroupBy(track => track.Album).Select(group => Card(group.Key, group.First().Artist, group.Key, group, null, trackSyncDot, showShuffleExclusion: true))
         };
         var cards = groups.Where(card => query.Length == 0 || card.Name.Contains(query, StringComparison.OrdinalIgnoreCase)).OrderBy(card => card.Name).ToList();
         GroupsView.ItemsSource = cards;
@@ -867,17 +881,18 @@ public partial class MainWindow : Window
         return _syncedTrackIds.Count == 0 ? "Nothing synced to iPod yet — drag music onto IPOD" : null;
     }
 
-    private static GroupCard Card(string name, string detail, string colorSeed, IEnumerable<Track> members, string? artworkOverrideKey = null, bool trackSyncDot = false)
+    private static GroupCard Card(string name, string detail, string colorSeed, IEnumerable<Track> members, string? artworkOverrideKey = null, bool trackSyncDot = false, bool showShuffleExclusion = false)
     {
+        var tracks = members.ToList();
         var palette = new[] { "#273A78", "#6E354B", "#285D56", "#6C4D31" };
         var initial = string.IsNullOrEmpty(name) ? "?" : name[..1].ToUpperInvariant();
         var artPath = (artworkOverrideKey is not null ? Artwork.CachedPath(artworkOverrideKey) : null)
-            ?? members.Select(t => t.ArtworkPath).FirstOrDefault(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p));
+            ?? tracks.Select(t => t.ArtworkPath).FirstOrDefault(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p));
         return new GroupCard(name, detail, initial,
             new SolidColorBrush((Color)ColorConverter.ConvertFromString(palette[Math.Abs(colorSeed.GetHashCode()) % palette.Length])),
             artPath,
-            trackSyncDot && members.Any(t => t.HasUnsyncedChanges),
-            members.Any(t => t.IsMissing));
+            trackSyncDot && tracks.Any(t => t.HasUnsyncedChanges),
+            tracks.Any(t => t.IsMissing), showShuffleExclusion, tracks);
     }
 
     private static readonly Dictionary<string, ImageSource> _artCache = [];
@@ -1001,7 +1016,7 @@ public partial class MainWindow : Window
     private List<Track> TracksForCards(IReadOnlyList<GroupCard> cards)
     {
         IEnumerable<Track> pool = _source == LibrarySource.Ipod
-            ? _tracks.Where(t => _syncedTrackIds.Contains(t.Id))
+            ? _ipodLibrary is not null ? IpodMusicTracks() : _tracks.Where(t => _syncedTrackIds.Contains(t.Id))
             : _tracks;
         var names = cards.Select(c => c.Name).ToHashSet();
         return (_category switch
@@ -1456,6 +1471,7 @@ public partial class MainWindow : Window
     {
         _syncSessionActive = false;
         StopIpodSync();
+        ResumePendingShuffleUpdates();
     }
 
     /// <summary>Progress from whatever step is running (done of total), folded into the session when there is one.</summary>
@@ -2224,8 +2240,8 @@ public partial class MainWindow : Window
             menu.Items.Add(Item("Check quality", () => CheckQuality(tracks)));
             menu.Items.Add(Item("Search artwork online…", () => SearchTrackArtwork(tracks)));
             if (tracks.Count == 1 && tracks[0].FilePath is { } filePath) menu.Items.Add(Item("Show in File Explorer", () => ShowInExplorer(filePath)));
-            menu.Items.Add(ExcludeFromShuffleItem(tracks));
         }
+        menu.Items.Add(ExcludeFromShuffleItem(tracks));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Delete from library", () => DeleteTracks(tracks)));
     }
@@ -2281,8 +2297,8 @@ public partial class MainWindow : Window
         {
             menu.Items.Add(Item("Sync to iPod", () => SyncTracksToIpod(tracks)));
             menu.Items.Add(Item("Download high quality", () => DownloadHighQuality(tracks)));
-            menu.Items.Add(ExcludeFromShuffleItem(tracks));
         }
+        menu.Items.Add(ExcludeFromShuffleItem(tracks));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("Delete from library", () => DeleteTracks(tracks)));
     }
@@ -2328,27 +2344,51 @@ public partial class MainWindow : Window
 
     private MenuItem ExcludeFromShuffleItem(IReadOnlyList<Track> tracks)
     {
-        // Mirrors iTunes: the label itself flips instead of a checkmark, and
-        // a mixed selection reads as "still has some included" so it defaults
-        // to Exclude — click again once they're all excluded and it reads
-        // Include.
-        var allExcluded = tracks.All(t => t.ExcludedFromShuffle);
-        var item = new MenuItem { Header = allExcluded ? "Include in shuffle" : "Exclude from shuffle" };
-        item.Click += (_, _) =>
+        var source = _source;
+        return Controls.ShuffleMenu.Create(tracks, async exclude =>
         {
-            var exclude = !allExcluded;
-            foreach (var track in tracks) track.ExcludedFromShuffle = exclude;
-            SaveLibrary();
-            // The tracks stay on the device either way — only the on-device
-            // "skip when shuffling" bit changes, and that's pushed by the
-            // next Sync all/Sync changes (IpodWriteService.PushTrackMetadata).
-            PlaybackStatus.Text = (exclude
-                ? $"Excluded {tracks.Count} track{(tracks.Count == 1 ? "" : "s")} from shuffle"
-                : $"Included {tracks.Count} track{(tracks.Count == 1 ? "" : "s")} in shuffle") + " — takes effect on the next sync";
-        };
-        return item;
-    }
+            // The menu has already changed the selected models and its label.
+            // Keep every local/device representation in agreement before I/O.
+            var keys = tracks.Select(t => Services.Ipod.IpodDbTrack.MakeKey(t.Title, t.Artist, t.Album, t.TrackNumber)).ToHashSet();
+            var paths = tracks.Where(t => !string.IsNullOrWhiteSpace(t.FilePath))
+                .Select(t => Path.GetFullPath(t.FilePath!)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var local in _tracks)
+                if (keys.Contains(Services.Ipod.IpodDbTrack.MakeKey(local.Title, local.Artist, local.Album, local.TrackNumber))
+                    || (local.LastSyncedKey is not null && keys.Contains(local.LastSyncedKey)))
+                    local.ExcludedFromShuffle = exclude;
+            foreach (var deviceTrack in _ipodTracks)
+                if (keys.Contains(Services.Ipod.IpodDbTrack.MakeKey(deviceTrack.Title, deviceTrack.Artist, deviceTrack.Album, deviceTrack.TrackNumber))
+                    || (!string.IsNullOrWhiteSpace(deviceTrack.FilePath) && paths.Contains(Path.GetFullPath(deviceTrack.FilePath))))
+                    deviceTrack.ExcludedFromShuffle = exclude;
+            if (_ipodLibrary is not null)
+                foreach (var row in _ipodLibrary.Tracks)
+                    if (keys.Contains(row.Key) || (!string.IsNullOrWhiteSpace(row.FilePath) && paths.Contains(Path.GetFullPath(row.FilePath))))
+                        row.ExcludedFromShuffle = exclude;
 
+            SaveShufflePreferences();
+            foreach (var card in GroupsView.Items.OfType<GroupCard>()) card.RefreshShuffleIndicator();
+            if (_libraryHubActive) RenderLibraryHub();
+            var message = exclude
+                ? $"Excluded {tracks.Count} track{(tracks.Count == 1 ? "" : "s")} from shuffle"
+                : $"Included {tracks.Count} track{(tracks.Count == 1 ? "" : "s")} in shuffle";
+            Services.Log.Info($"Shuffle preference changed: source={source}, tracks={tracks.Count}, excluded={exclude}");
+            if (_ipodDevice?.LibraryRoot is not string root)
+            {
+                PlaybackStatus.Text = message + " — applies to the iPod on the next sync";
+                return;
+            }
+            if (_ipodWriting || _syncSessionActive)
+            {
+                // A device operation must never block the local toggle. Keep
+                // the latest intent and flush it after the active writer ends.
+                QueueShuffleUpdate(root, tracks, exclude, source == LibrarySource.Ipod);
+                PlaybackStatus.Text = message + " — iPod update queued";
+                return;
+            }
+            QueueShuffleUpdate(root, tracks, exclude, source == LibrarySource.Ipod);
+            await FlushShuffleUpdatesAsync();
+        });
+    }
     private void PlayTracks(IReadOnlyList<Track> tracks)
     {
         if (tracks.Count > 0) PlayTrack(tracks[0]);
@@ -2616,8 +2656,13 @@ public partial class MainWindow : Window
     /// </summary>
     private sealed record GroupCard(
         string Name, string Detail, string Initial, Brush Color,
-        string? ArtPath = null, bool HasUnsyncedChanges = false, bool HasMissing = false)
+        string? ArtPath = null, bool HasUnsyncedChanges = false, bool HasMissing = false,
+        bool ShowShuffleExclusion = false, IReadOnlyList<Track>? Members = null) : System.ComponentModel.INotifyPropertyChanged
     {
+        public bool IsShuffleExcluded => ShowShuffleExclusion && Members is { Count: > 0 } && Members.All(t => t.ExcludedFromShuffle);
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+        public void RefreshShuffleIndicator() => PropertyChanged?.Invoke(this,
+            new System.ComponentModel.PropertyChangedEventArgs(nameof(IsShuffleExcluded)));
         /// <summary>Greyscale while any of the card's tracks can't be found (startup scan).</summary>
         public ImageSource? Art => HasMissing ? LoadGreyArtwork(ArtPath) : LoadArtwork(ArtPath);
     }

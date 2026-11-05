@@ -205,14 +205,8 @@ public sealed class DownloadNode : INotifyPropertyChanged, ITitleTrimmable
         get
         {
             if (Children.Count == 0) return _enabled;
-            bool? acc = null;
-            foreach (var c in Children)
-            {
-                var v = c.Enabled;
-                if (acc is null) { acc = v; continue; }
-                if (acc != v) return null;
-            }
-            return acc;
+            var first = Children[0].Enabled;
+            return Children.All(c => c.Enabled == first) ? first : null;
         }
         set
         {

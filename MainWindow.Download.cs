@@ -279,6 +279,7 @@ public partial class MainWindow
         _musicSearchCts?.Dispose();
         var cts = _musicSearchCts = new CancellationTokenSource();
         _musicSearchResults.Clear();
+        _searchBrowseNodes.Clear();
         MusicSearchOverlay.Visibility = Visibility.Visible;
         MusicSearchResultsPanel.Visibility = Visibility.Visible;
         MusicSearchDetails.Visibility = Visibility.Collapsed;
@@ -411,9 +412,7 @@ public partial class MainWindow
     private async void SearchResultAction_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: MusicSearchResult result, Tag: string requested }) return;
-        var source = requested == "Download"
-            ? result.HasDeezer ? "Deezer" : result.HasSpotify ? "Spotify" : "YouTube"
-            : requested;
+        var source = requested == "Download" ? PreferredSearchSource(result) : requested;
         if ((source == "Deezer" && !result.HasDeezer)
             || (source == "YouTube" && !result.HasYouTube)
             || (source == "Spotify" && !result.HasSpotify)) return;
@@ -423,7 +422,8 @@ public partial class MainWindow
         try
         {
             SetDownloadStatus($"Adding “{result.Title}” from {source}…");
-            var artwork = await MusicSearchService.CacheArtworkAsync(result.Artwork);
+            var artwork = result.Kind == MusicSearchResultKind.Track
+                ? await MusicSearchService.CacheArtworkAsync(result.Artwork) : null;
             var url = source switch
             {
                 "Deezer" => result.DeezerUrl,
@@ -448,9 +448,7 @@ public partial class MainWindow
             else
             {
                 SetDownloadStatus($"Loading {result.Title} so its full {result.Kind.ToString().ToLowerInvariant()} can be queued…");
-                var info = await Task.Run(() => DownloadService.ScanAsync(url));
-                node = BuildNode(url, info);
-                ApplySearchMetadata(node, result, artwork);
+                node = DownloadSelection.Snapshot(await LoadSearchNodeAsync(result, source, CancellationToken.None));
             }
             _rootNodes.Add(node);
             SaveFailedDownloadQueue();
@@ -620,6 +618,7 @@ public partial class MainWindow
                 IsMixedPlaylist = info.IsMixedPlaylist,
             };
             FillTracks(node, info);
+            node.Scanned = true;
             return node;
         }
 
@@ -1183,6 +1182,12 @@ public partial class MainWindow
         var menu = MusicSearchResults.ContextMenu!;
         menu.Items.Clear();
         if (MusicSearchResults.SelectedItem is not MusicSearchResult result) { e.Handled = true; return; }
+        if (result.Kind is MusicSearchResultKind.Album or MusicSearchResultKind.Artist)
+        {
+            e.Handled = true;
+            Dispatcher.BeginInvoke(new Action(() => _ = BrowseSearchResultAsync(result)));
+            return;
+        }
         // An album result's Title is the album name.
         AddCatalogSearchItems(menu, result.Kind,
             album: result.Kind == MusicSearchResultKind.Album ? FirstFilled(result.Title) : FirstFilled(result.Album),
@@ -1904,6 +1909,44 @@ public partial class MainWindow
             if (done > 0) PruneSucceeded();
             SaveFailedDownloadQueue();
             RefreshDownloadChrome();
+        }
+
+        // Only a naturally finished set triggers this; Stop must not start a
+        // device operation. Library imports and matching playlists are saved
+        // above before the automatic sync sees them.
+        if (!token.IsCancellationRequested)
+            await SyncAfterDownloadsAsync();
+    }
+
+    private async Task SyncAfterDownloadsAsync()
+    {
+        if (OptSyncWhenDone.IsChecked != true || !_ipodConnected
+            || _ipodDevice?.LibraryRoot is not string root) return;
+
+        // Stay with the device connected when this set finished. A later
+        // connection should not unexpectedly pick up an old download request.
+        bool StillRequested() => OptSyncWhenDone.IsChecked == true && _ipodConnected
+            && string.Equals(_ipodDevice?.LibraryRoot, root, StringComparison.OrdinalIgnoreCase);
+        if (_ipodWriting || _syncSessionActive)
+            SetDownloadStatus("Downloads finished — waiting for the iPod to finish syncing…");
+        while (_ipodWriting || _syncSessionActive)
+        {
+            await Task.Delay(400);
+            if (!StillRequested() || _downloading) return;
+        }
+        if (!StillRequested() || _downloading) return;
+
+        SetDownloadStatus("Downloads finished — syncing music and playlists to the iPod…");
+        try
+        {
+            // Use the same additive music/playlist sync as sync-on-connect.
+            await SyncOnConnectAsync();
+            SetDownloadStatus($"Downloads finished — {PlaybackStatus.Text}");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Automatic sync after downloads failed", ex);
+            SetDownloadStatus($"Downloads finished — iPod sync failed: {Shorten(ex.Message)}");
         }
     }
 

@@ -20,6 +20,7 @@ public sealed class IpodDbTrack
     public TimeSpan Duration { get; set; }
     public int PlayCount { get; set; }
     public bool IsPodcast { get; set; }
+    public bool ExcludedFromShuffle { get; set; }
 
     /// <summary>Resume position stored on the device (milliseconds); 0 when none.</summary>
     public long BookmarkMs { get; set; }

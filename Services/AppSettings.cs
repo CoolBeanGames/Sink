@@ -86,6 +86,7 @@ public sealed class AppSettings
     public bool OptMusicMeta { get; set; } = true;
     public bool OptNumberTracks { get; set; } = false;
     public bool OptCreatePlaylist { get; set; } = false;
+    public bool OptSyncWhenDone { get; set; } = false;
 
     /// <summary>Album/artist/genre artwork size slider (0 = list, 100 = largest cards).</summary>
     public double CardSize { get; set; } = 43;
@@ -135,6 +136,7 @@ public sealed class AppSettings
         OptMusicMeta = OptMusicMeta,
         OptNumberTracks = OptNumberTracks,
         OptCreatePlaylist = OptCreatePlaylist,
+        OptSyncWhenDone = OptSyncWhenDone,
         CardSize = CardSize,
     };
 }
