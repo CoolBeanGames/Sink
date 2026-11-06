@@ -1,3 +1,7 @@
+# Sink 1.0.67
+
+- Keep temporary downloads outside Music and only save completed tracks in the format selected in Settings. With **Keep high quality** enabled, Deezer FLAC originals go in the configured Originals folder.
+
 # Sink 1.0.66
 
 - Added **Storage breakdown** in Settings to compare library files, everything in Music, kept originals, and the connected iPod catalog.

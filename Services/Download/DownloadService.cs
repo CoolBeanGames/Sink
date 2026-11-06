@@ -190,8 +190,8 @@ public static partial class DownloadService
                 node, options, progress, status, onTrackFile, onTrackDone, token).ConfigureAwait(false);
 
         System.IO.Directory.CreateDirectory(DownloadsDirectory);
-        var workDir = Path.Combine(DownloadsDirectory, "_" + Guid.NewGuid().ToString("N")[..8]);
-        System.IO.Directory.CreateDirectory(workDir);
+        using var work = new DownloadWorkFolder();
+        var workDir = work.Path;
 
         // yt-dlp's Process.OutputDataReceived (and anything after the
         // ConfigureAwait(false) below) fires on a thread-pool thread, not the
@@ -309,12 +309,12 @@ public static partial class DownloadService
             string? file;
             if (isPlaylist)
                 file = System.IO.Directory.EnumerateFiles(workDir)
-                    .Where(f => AudioExtensions.Contains(Path.GetExtension(f)))
+                    .Where(f => DownloadFiles.HasFormat(f, options.FormatExtension))
                     .FirstOrDefault(f => ProducedIndex().Match(Path.GetFileName(f)) is { Success: true } m
                                          && int.TryParse(m.Groups[1].Value, out var idx) && idx == trackNode.Index);
             else
                 file = System.IO.Directory.EnumerateFiles(workDir)
-                    .FirstOrDefault(f => AudioExtensions.Contains(Path.GetExtension(f)));
+                    .FirstOrDefault(f => DownloadFiles.HasFormat(f, options.FormatExtension));
             if (file is null) return false;
 
             // Write an edited title: always for a single, and per-track for an
@@ -339,12 +339,22 @@ public static partial class DownloadService
             // Lands straight in Artist/Album under the library, the same
             // structure "Organize library" enforces after the fact (task 155).
             var destDir = MusicImporter.ArtistAlbumDir(DownloadsDirectory, trackArtist, trackAlbum);
-            System.IO.Directory.CreateDirectory(destDir);
             var stem = isPlaylist ? Path.GetFileNameWithoutExtension(file) : $"{artist} - {node.Title}";
-            var finalPath = UniquePath(Path.Combine(destDir, Sanitize(stem) + Path.GetExtension(file)));
-            File.Move(file, finalPath, overwrite: false);
-
-            ApplyTags(finalPath, trackArtist, trackAlbum, trackGenre, title, trackNo, artBytes);
+            string finalPath;
+            try
+            {
+                System.IO.Directory.CreateDirectory(destDir);
+                finalPath = UniquePath(Path.Combine(destDir, Sanitize(stem) + "." + options.FormatExtension));
+                ApplyTags(file, trackArtist, trackAlbum, trackGenre, title, trackNo, artBytes);
+                DownloadFiles.Publish(file, finalPath, options.FormatExtension);
+                try { File.Delete(file); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Log.Warn($"Could not save the {options.FormatExtension.ToUpperInvariant()} download for {trackNode.Name}: {ex.Message}");
+                return false;
+            }
 
             if (trackNode.Kind == DownloadKind.Track)
                 // Reported the moment this one track (not the whole album) is
@@ -418,7 +428,7 @@ public static partial class DownloadService
             if (!FinalizeTrack(trackNode) && trackNode.Kind == DownloadKind.Track)
             {
                 var realReason = FirstError(stderr);
-                var failureText = realReason ?? "yt-dlp skipped this track";
+                var failureText = realReason ?? $"No {options.FormatExtension.ToUpperInvariant()} file was saved";
                 OnUi(() => { trackNode.State = DownloadState.Failed; trackNode.StatusText = failureText; });
                 Log.Warn($"Track {trackNode.Index} \"{trackNode.Name}\" of {album} did not download: {failureText}");
                 // The short UI status can't always show yt-dlp's exact wording
@@ -433,20 +443,18 @@ public static partial class DownloadService
         ReportProgress(1);
         if (finished.Count == 0)
         {
-            var reason = FirstError(stderr) ?? "yt-dlp produced no audio";
+            var reason = FirstError(stderr) ?? $"No {options.FormatExtension.ToUpperInvariant()} file was saved";
             OnUi(() => { foreach (var t in trackNodes) { t.State = DownloadState.Failed; t.StatusText = reason; } });
             // No line in stderr started with "ERROR", yet nothing came out — log
             // everything we have (exit code, leftover files, full stderr) since
             // the short "reason" alone hasn't been enough to explain this before.
             var leftover = string.Join(", ", SafeListFiles(workDir));
             Log.Error($"Download failed for {node.Name} ({node.Url}): {reason} — exit {exit}, workDir files: [{leftover}]\nstderr:\n{stderr}");
-            try { System.IO.Directory.Delete(workDir, recursive: true); } catch (IOException) { }
             throw new InvalidOperationException(reason);
         }
-        try { System.IO.Directory.Delete(workDir, recursive: true); } catch (IOException) { }
-        if (exit != 0 && isPlaylist && finished.Count < titleOrder.Count)
+        if (isPlaylist && finished.Count < titleOrder.Count)
         {
-            var reason = FirstError(stderr) ?? "yt-dlp reported an error on one or more tracks";
+            var reason = FirstError(stderr) ?? $"One or more tracks did not produce a saved {options.FormatExtension.ToUpperInvariant()} file";
             Log.Warn($"Partial album download for {album} ({node.Url}): {finished.Count}/{titleOrder.Count} tracks — {reason}");
             throw new PartialDownloadException(finished, reason);
         }

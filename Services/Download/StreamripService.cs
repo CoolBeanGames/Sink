@@ -17,9 +17,6 @@ public static partial class StreamripService
         await StreamripToolManager.EnsureAsync(toolProgress, token).ConfigureAwait(false);
 
         Directory.CreateDirectory(DownloadService.DownloadsDirectory);
-        var workRoot = Path.Combine(
-            DownloadService.DownloadsDirectory, "_streamrip_" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(workRoot);
 
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
         void OnUi(Action action)
@@ -42,13 +39,13 @@ public static partial class StreamripService
         var finished = new List<string>();
         var failures = new List<string>();
 
-        try
+        using (var work = new DownloadWorkFolder())
         {
             for (var i = 0; i < selected.Count; i++)
             {
                 token.ThrowIfCancellationRequested();
                 var track = selected[i];
-                var itemDirectory = Path.Combine(workRoot, (i + 1).ToString("000"));
+                var itemDirectory = Path.Combine(work.Path, (i + 1).ToString("000"));
                 Directory.CreateDirectory(itemDirectory);
                 progress.Report((double)i / selected.Count);
                 OnUi(() =>
@@ -90,22 +87,20 @@ public static partial class StreamripService
                     var stem = isCollection
                         ? $"{Math.Max(1, track.Index):000} - {track.Title}"
                         : $"{artist} - {track.Title}";
-                    // "Keep high quality": the real FLAC is kept in the
-                    // high-quality folder before the library copy is
-                    // converted from it. With FLAC as the library format the
-                    // library file already is that FLAC, so no second copy.
+                    var converted = await ConvertToRequestedFormatAsync(source, options, token).ConfigureAwait(false);
+                    // Archive the source FLAC after a successful conversion. A
+                    // FLAC library already has the lossless copy.
                     string? original = null;
                     if (options.KeepOriginal && options.Format != AudioFormat.Flac
-                        && string.Equals(Path.GetExtension(source), ".flac", StringComparison.OrdinalIgnoreCase)
+                        && DownloadFiles.HasFormat(source, "flac")
                         && !string.IsNullOrWhiteSpace(options.OriginalRoot))
                     {
                         var originalDirectory = MusicImporter.ArtistAlbumDir(options.OriginalRoot, artist, album);
                         Directory.CreateDirectory(originalDirectory);
                         original = DownloadService.UniquePath(Path.Combine(originalDirectory, DownloadService.Sanitize(stem) + ".flac"));
-                        File.Copy(source, original);
-                        DownloadService.ApplyTags(original, artist, album, genre, track.Title, trackNo, cover);
+                        DownloadService.ApplyTags(source, artist, album, genre, track.Title, trackNo, cover);
+                        DownloadFiles.Publish(source, original, "flac");
                     }
-                    var converted = await ConvertToRequestedFormatAsync(source, options, token).ConfigureAwait(false);
                     if (options.WriteMetadata || cover is { Length: > 0 } || !options.EmbedAlbumArt)
                     {
                         DownloadService.ApplyTags(
@@ -124,8 +119,8 @@ public static partial class StreamripService
                     Directory.CreateDirectory(destinationDirectory);
                     var finalPath = DownloadService.UniquePath(Path.Combine(
                         destinationDirectory,
-                        DownloadService.Sanitize(stem) + Path.GetExtension(converted)));
-                    File.Move(converted, finalPath, overwrite: false);
+                        DownloadService.Sanitize(stem) + "." + options.FormatExtension));
+                    DownloadFiles.Publish(converted, finalPath, options.FormatExtension);
                     if (original is not null) DownloadService.RegisterOriginal(finalPath, original);
                     DownloadService.RegisterOwner(finalPath, track);
                     finished.Add(finalPath);
@@ -161,10 +156,6 @@ public static partial class StreamripService
                 }
                 progress.Report((double)(i + 1) / selected.Count);
             }
-        }
-        finally
-        {
-            TryDeleteDirectory(workRoot);
         }
 
         if (finished.Count == 0)
@@ -227,15 +218,14 @@ public static partial class StreamripService
     private static async Task<string> ConvertToRequestedFormatAsync(
         string source, DownloadOptions options, CancellationToken token)
     {
-        var wantedExtension = "." + options.FormatExtension;
-        if (string.Equals(Path.GetExtension(source), wantedExtension, StringComparison.OrdinalIgnoreCase))
+        if (DownloadFiles.HasFormat(source, options.FormatExtension))
             return source;
         if (!File.Exists(ToolManager.FfmpegPath))
             throw new InvalidOperationException("ffmpeg is not installed yet");
 
         var output = Path.Combine(
             Path.GetDirectoryName(source)!,
-            Path.GetFileNameWithoutExtension(source) + ".sink-converted" + wantedExtension);
+            Path.GetFileNameWithoutExtension(source) + ".sink-converted." + options.FormatExtension);
         var psi = new ProcessStartInfo(ToolManager.FfmpegPath)
         {
             RedirectStandardOutput = true,
@@ -267,7 +257,6 @@ public static partial class StreamripService
         var error = await stderr.ConfigureAwait(false);
         if (process.ExitCode != 0 || !File.Exists(output))
             throw new InvalidOperationException(FirstNonEmptyLine(error) ?? "ffmpeg could not convert the Deezer download");
-        try { File.Delete(source); } catch (IOException) { }
         return output;
     }
 

@@ -4,6 +4,7 @@ using System.Text;
 using Clickwheel;
 using Sink.Models;
 using Sink.Services;
+using Sink.Services.Download;
 using Sink.Services.Ipod;
 using Track = Sink.Models.Track;
 using CwTrack = Clickwheel.Parsers.iTunesDB.Track;
@@ -44,6 +45,37 @@ void CheckPodcastOnly(IPod ipod, string title)
 
 try
 {
+    var downloadDestination = Path.Combine(workspace, "Download Music");
+    Directory.CreateDirectory(downloadDestination);
+    var mp3Destination = Path.Combine(downloadDestination, "Track.mp3");
+    string workPath;
+    using (var work = new DownloadWorkFolder())
+    {
+        workPath = work.Path;
+        Check(Path.GetDirectoryName(Path.GetDirectoryName(workPath)) == LibraryStore.Directory,
+            "download work is isolated from Music in app data");
+        var rawFlac = Path.Combine(workPath, "Track.flac");
+        File.WriteAllBytes(rawFlac, "fLaC"u8.ToArray());
+        var rejected = false;
+        try { DownloadFiles.Publish(rawFlac, mp3Destination, "mp3"); }
+        catch (IOException) { rejected = true; }
+        Check(rejected && !Directory.EnumerateFiles(downloadDestination).Any(),
+            "a leftover FLAC cannot be published as an MP3 download");
+
+        var convertedMp3 = Path.Combine(workPath, "Track.MP3");
+        File.WriteAllBytes(convertedMp3, []);
+        rejected = false;
+        try { DownloadFiles.Publish(convertedMp3, mp3Destination, "mp3"); }
+        catch (IOException) { rejected = true; }
+        Check(rejected && !File.Exists(mp3Destination), "an empty conversion output stays out of Music");
+        File.WriteAllBytes(convertedMp3, [1, 2, 3]);
+        DownloadFiles.Publish(convertedMp3, mp3Destination, "mp3");
+        Check(Directory.EnumerateFiles(downloadDestination).SequenceEqual([mp3Destination])
+            && File.ReadAllBytes(mp3Destination).SequenceEqual(new byte[] { 1, 2, 3 }),
+            "publishing exposes only the finished file in the requested format");
+    }
+    Check(!Directory.Exists(workPath) && File.Exists(mp3Destination), "download cleanup removes staging and preserves the library copy");
+
     var root = Path.Combine(workspace, "device");
     CreateDevice(root);
     Check(Open(root).IsWritable, "synthetic iPod 5-era database is writable by the real Clickwheel parser");
