@@ -129,6 +129,7 @@ public partial class MainWindow
     /// <summary>Flushes whatever's mid-playback as a listen when the app closes, rather than losing it silently.</summary>
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
+        if (_pcSyncRecoveryPending) return;
         SaveLibraryPlayback();
         RecordSongListenIfDue();
         if (_playingEpisode is not null) StopPodcast(markPlayed: false);
@@ -168,7 +169,7 @@ public partial class MainWindow
         var threshold = TimeSpan.FromSeconds(Math.Min(30, Math.Max(1, full.TotalSeconds)));
         if (_simulatedPosition - _songResumeStart < threshold) return;
         var completed = full > TimeSpan.Zero && _simulatedPosition >= full - TimeSpan.FromSeconds(2);
-        var listen = new ListenEvent { Kind = ListenKind.Song, ItemId = _nowPlaying.Id, Duration = _simulatedPosition, Completed = completed };
+        var listen = new ListenEvent { EventId = Guid.NewGuid(), Kind = ListenKind.Song, ItemId = _nowPlaying.Id, Duration = _simulatedPosition, Completed = completed };
         listen.SnapshotFrom(_nowPlaying);
         _listenEvents.Add(listen);
         ReflectStore.Save(_listenEvents);
@@ -184,7 +185,7 @@ public partial class MainWindow
     private void RecordPodcastListen(Guid episodeId, TimeSpan elapsed, bool completed)
     {
         if (elapsed < TimeSpan.FromSeconds(30) && !completed) return;
-        var listen = new ListenEvent { Kind = ListenKind.PodcastEpisode, ItemId = episodeId, Duration = elapsed, Completed = completed };
+        var listen = new ListenEvent { EventId = Guid.NewGuid(), Kind = ListenKind.PodcastEpisode, ItemId = episodeId, Duration = elapsed, Completed = completed };
         SnapshotPodcast(listen);
         _listenEvents.Add(listen);
         ReflectStore.Save(_listenEvents);
@@ -231,7 +232,7 @@ public partial class MainWindow
             {
                 for (var i = 0; i < delta; i++)
                     {
-                        var listen = new ListenEvent { Kind = ListenKind.Song, ItemId = track.Id, Duration = track.Duration, Completed = true };
+                        var listen = new ListenEvent { EventId = Guid.NewGuid(), Kind = ListenKind.Song, ItemId = track.Id, Duration = track.Duration, Completed = true };
                         listen.SnapshotFrom(track);
                         _listenEvents.Add(listen);
                     }

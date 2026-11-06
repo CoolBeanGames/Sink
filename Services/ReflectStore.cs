@@ -43,6 +43,14 @@ public static class ReflectStore
         // computer's reflect.json can also be imported directly.
         var incoming = JsonSerializer.Deserialize<List<ListenEvent>>(File.ReadAllText(path), Options)
             ?? throw new JsonException("This file doesn't contain Reflect history.");
+        var result = MergeHistory(current, incoming);
+        WriteTransfer(Path_, result.Events);
+        return result;
+    }
+
+    internal static (List<ListenEvent> Events, int Added) MergeHistory(IReadOnlyList<ListenEvent> current, IReadOnlyList<ListenEvent> incoming)
+    {
+        ValidateHistory(incoming);
         var merged = current.ToList();
         var existing = current.Select((listen, index) => (listen, index))
             .GroupBy(entry => EventKey(entry.listen))
@@ -50,9 +58,6 @@ public static class ReflectStore
         var added = 0;
         foreach (var listen in incoming)
         {
-            if (listen is null || listen.ItemId == Guid.Empty || !Enum.IsDefined(listen.Kind) || listen.Duration < TimeSpan.Zero)
-                throw new JsonException("This file contains an invalid listening event.");
-
             // Match each existing copy once. Multiple real listens can have
             // identical timestamps, particularly when pulled from an iPod.
             if (existing.TryGetValue(EventKey(listen), out var matches) && matches.TryDequeue(out var index))
@@ -64,19 +69,27 @@ public static class ReflectStore
             added++;
         }
 
-        WriteTransfer(Path_, merged);
+        ValidateHistory(merged);
         return (merged, added);
     }
 
-    private static (ListenKind Kind, Guid Item, DateTime Occurred, TimeSpan Duration, bool Completed) EventKey(ListenEvent listen) =>
-        (listen.Kind, listen.ItemId, listen.Occurred, listen.Duration, listen.Completed);
+    private static (Guid? EventId, ListenKind Kind, Guid Item, DateTime Occurred, TimeSpan Duration, bool Completed) EventKey(ListenEvent listen) =>
+        listen.EventId is { } id ? (id, default, default, default, default, default)
+        : (null, listen.Kind, listen.ItemId, listen.Occurred, listen.Duration, listen.Completed);
+
+    internal static void ValidateHistory(IReadOnlyList<ListenEvent> events)
+    {
+        foreach (var listen in events)
+            if (listen is null || listen.ItemId == Guid.Empty || listen.EventId == Guid.Empty
+                || !Enum.IsDefined(listen.Kind) || listen.Duration < TimeSpan.Zero)
+                throw new JsonException("This file contains an invalid listening event.");
+        try { _ = events.Sum(listen => listen.Duration.Ticks); }
+        catch (OverflowException) { throw new JsonException("The listening time in this file is too large."); }
+    }
 
     private static void WriteTransfer(string path, IReadOnlyList<ListenEvent> events)
     {
-        // Reject an invalid total before replacing any saved history.
-        try { _ = events.Sum(listen => listen.Duration.Ticks); }
-        catch (OverflowException) { throw new JsonException("The listening time in this file is too large."); }
-
+        ValidateHistory(events);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try

@@ -1,3 +1,9 @@
+# Sink 1.0.64
+
+- Added **Sync with another PC** in Settings. Open it on both PCs to discover Sink installs on the local network and pair them over an encrypted connection.
+- Preview and approve a two-way sync of the music library, playlists, podcasts, and Reflect history. Resolve concurrent edits or leave either copy as it is for now.
+- Remember a shared baseline for each pair. Media paths are translated to each PC's configured folders, and syncing the databases leaves the audio files on disk.
+
 # Sink 1.0.63
 
 - Export and import listening history directly from Reflect. Imports merge with current history and accept older `reflect.json` files.

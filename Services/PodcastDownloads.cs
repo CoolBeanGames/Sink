@@ -6,7 +6,7 @@ namespace Sink.Services;
 internal static class PodcastDownloads
 {
     /// <summary>Reconnect moved files and recover downloads made before Sink stored the catalog beside them.</summary>
-    public static bool TryRecover(string root, List<Podcast> shows, out bool changed)
+    public static bool TryRecover(string root, List<Podcast> shows, out bool changed, IReadOnlySet<string>? removedDownloads = null)
     {
         changed = false;
         var folders = new List<(string Name, string[] Files)>();
@@ -16,7 +16,8 @@ internal static class PodcastDownloads
             foreach (var directory in Directory.EnumerateDirectories(root, "*", options))
             {
                 var files = Directory.EnumerateFiles(directory, "*", options)
-                    .Where(path => TryReadName(path, out _, out _)).ToArray();
+                    .Where(path => TryReadName(path, out _, out _)
+                        && (removedDownloads is null || !removedDownloads.Contains(Path.GetRelativePath(root, path).Replace('\\', '/')))).ToArray();
                 if (files.Length > 0) folders.Add((Path.GetFileName(directory), files));
             }
         }

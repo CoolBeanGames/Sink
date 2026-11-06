@@ -56,6 +56,7 @@ public sealed class SettingsWindow : SinkDialog
         Action exportLibrary,
         Action importLibrary,
         Func<IProgress<LibraryMaintenanceProgress>, Task<string>> organizeLibrary,
+        Action<Window> syncComputers,
         Action? upgradeLibrary = null)
     {
         _upgradeLibrary = upgradeLibrary;
@@ -212,6 +213,7 @@ public sealed class SettingsWindow : SinkDialog
         actions.Children.Add(refreshButton);
         actions.Children.Add(SecondaryButton("Export library…", (_, _) => _export()));
         actions.Children.Add(SecondaryButton("Import library…", (_, _) => _import()));
+        actions.Children.Add(SecondaryButton("Sync with another PC…", (_, _) => syncComputers(this)));
         var organizeButton = SecondaryButton("Organize library…", async (_, _) =>
         {
             await RunMaintenanceAsync("Organizing library…", "Organize library", _organize);

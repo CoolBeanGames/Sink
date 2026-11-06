@@ -225,6 +225,8 @@ try
         Check(ReflectStore.Load().Count == 4, "invalid Reflect history leaves the saved history intact");
     }
 
+    await LanSyncChecks.RunAsync(workspace, Check);
+
     if (args.Length == 1)
     {
         // Optional replay against a COPY of a real existing backup. Never

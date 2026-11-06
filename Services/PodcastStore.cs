@@ -28,6 +28,9 @@ public static class PodcastStore
         var portable = Path.Combine(Folder, CatalogName);
         readable = TryRead(portable, out var shows);
         if (!readable) _unreadableCatalog = portable;
+        // After a PC sync, this PC's catalog may contain newer state or a
+        // conflict left unresolved on the other PC sharing the same drive.
+        if (LanSync.LanSyncStore.PodcastFolder(Folder) is not null && TryRead(LocalCatalog, out var local) && local is not null) return local;
         if (shows is not null) return shows;
         readable &= TryRead(LocalCatalog, out shows);
         return shows ?? [];

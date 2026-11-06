@@ -83,7 +83,9 @@ public partial class MainWindow
 
     private bool RecoverPodcastDownloads()
     {
-        var readable = PodcastDownloads.TryRecover(PodcastStore.Folder, _podcasts, out var changed);
+        var folder = PodcastStore.Folder;
+        var removed = Services.LanSync.LanSyncStore.PodcastFolder(folder)?.RemovedDownloads.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var readable = PodcastDownloads.TryRecover(folder, _podcasts, out var changed, removed);
         if (changed) PodcastStore.Save(_podcasts);
         return readable && _podcastCatalogReadable;
     }

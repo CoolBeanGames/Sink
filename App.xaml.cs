@@ -42,6 +42,15 @@ public partial class App : Application
         DispatcherUnhandledException += App_DispatcherUnhandledException;
 
         AppSettings.Load();
+        try { Services.LanSync.LanSyncStore.Recover(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            Log.Error("PC sync journal recovery failed", ex);
+            MessageBox.Show($"Sink couldn't recover an interrupted PC sync. Check access to the Sink data folder and restart.\n\n{ex.Message}",
+                "Sink", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
+            return;
+        }
         base.OnStartup(e);
     }
 

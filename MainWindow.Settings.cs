@@ -14,6 +14,7 @@ public partial class MainWindow
     {
         var dialog = new SettingsWindow(
             AppSettings.Current.Clone(), RefreshLibraryAsync, ExportLibrary, ImportLibrary, OrganizeLibraryAsync,
+            SyncComputers,
             () => DownloadHighQuality(_tracks.ToList()))
             { Owner = this };
         if (dialog.ShowDialog() != true || dialog.Result is null) return;
@@ -212,6 +213,15 @@ public partial class MainWindow
                 "Import library", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK)
             return;
 
+        ReplaceLibraryContents(data);
+        SaveLibrary();
+        PlaylistList.Items.Refresh();
+        RenderLibrary();
+        PlaybackStatus.Text = $"Imported {_tracks.Count} tracks";
+    }
+
+    private void ReplaceLibraryContents(LibraryData data)
+    {
         _tracks.Clear();
         _playlists.Clear();
         _syncedTrackIds.Clear();
@@ -225,9 +235,5 @@ public partial class MainWindow
         var known = _tracks.Select(t => t.Id).ToHashSet();
         foreach (var id in data.SyncedTrackIds.Where(known.Contains)) _syncedTrackIds.Add(id);
 
-        SaveLibrary();
-        PlaylistList.Items.Refresh();
-        RenderLibrary();
-        PlaybackStatus.Text = $"Imported {_tracks.Count} tracks";
     }
 }

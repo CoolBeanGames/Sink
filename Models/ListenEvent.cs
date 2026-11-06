@@ -10,6 +10,7 @@ public enum ListenKind { Song, PodcastEpisode }
 /// </summary>
 public sealed class ListenEvent
 {
+    public Guid? EventId { get; init; }
     public ListenKind Kind { get; init; }
     public Guid ItemId { get; init; }
     public DateTime Occurred { get; init; } = DateTime.Now;
@@ -38,4 +39,10 @@ public sealed class ListenEvent
         Album = track.Album;
         Genre = track.Genre;
     }
+
+    internal ListenEvent WithItemId(Guid id) => new()
+    {
+        EventId = EventId, Kind = Kind, ItemId = id, Occurred = Occurred, Duration = Duration,
+        Completed = Completed, Title = Title, Artist = Artist, Album = Album, Genre = Genre, Show = Show,
+    };
 }
