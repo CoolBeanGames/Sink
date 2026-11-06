@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
 using Clickwheel;
+using Sink.Models;
 using Sink.Services;
 using Sink.Services.Ipod;
 using Track = Sink.Models.Track;
@@ -198,6 +199,31 @@ try
     Check(readable && PodcastDownloads.TryRecover(newRoot, restored, out discovered) && discovered && restored.Single().Episodes.Single().IsDownloaded,
         "portable catalog reattaches stale absolute paths after moving the folder");
     Check(!PodcastDownloads.TryRecover(Path.Combine(workspace, "Offline drive"), restored, out _), "an unavailable podcast folder cannot be mistaken for an empty library");
+
+    var occurred = new DateTime(2025, 7, 1, 12, 0, 0, DateTimeKind.Utc);
+    var originalListen = new ListenEvent { Kind = ListenKind.Song, ItemId = song.Id, Occurred = occurred, Duration = song.Duration, Completed = true };
+    var backedUpListen = new ListenEvent { Kind = ListenKind.Song, ItemId = song.Id, Occurred = occurred, Duration = song.Duration, Completed = true, Title = song.Title, Artist = song.Artist };
+    var podcastListen = new ListenEvent { Kind = ListenKind.PodcastEpisode, ItemId = recoveredEpisode.Id, Occurred = occurred, Duration = TimeSpan.FromMinutes(9), Completed = true, Show = "Example show", Title = "An episode" };
+    var newerListen = new ListenEvent { Kind = ListenKind.Song, ItemId = song.Id, Occurred = occurred.AddYears(1), Duration = song.Duration, Title = song.Title };
+    var reflectBackup = Path.Combine(workspace, "reflect.json");
+    ReflectStore.Export(reflectBackup, [backedUpListen, backedUpListen, podcastListen]);
+    var imported = ReflectStore.Import(reflectBackup, [originalListen, newerListen]);
+    Check(imported.Added == 2 && imported.Events.Contains(newerListen) && imported.Events.Count == 4, "Reflect import keeps current listens and preserves identical genuine listens from a backup");
+    Check(imported.Events[0].Title == song.Title && !originalListen.HasSnapshot, "Reflect import restores missing metadata without changing current events before saving");
+    var savedReflect = ReflectStore.Load();
+    Check(savedReflect.Count == 4 && savedReflect.Any(e => e.Show == "Example show" && e.Completed && e.Occurred == occurred), "Reflect backup preserves older dates and podcast metadata on disk");
+    var reimported = ReflectStore.Import(reflectBackup, savedReflect);
+    Check(reimported.Added == 0 && reimported.Events.Count == 4, "importing the same Reflect backup again leaves counts unchanged");
+    File.WriteAllText(reflectBackup, "[{}]");
+    try
+    {
+        ReflectStore.Import(reflectBackup, reimported.Events);
+        throw new Exception("Invalid Reflect history was accepted");
+    }
+    catch (System.Text.Json.JsonException)
+    {
+        Check(ReflectStore.Load().Count == 4, "invalid Reflect history leaves the saved history intact");
+    }
 
     if (args.Length == 1)
     {

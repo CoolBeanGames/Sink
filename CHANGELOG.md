@@ -1,3 +1,7 @@
+# Sink 1.0.63
+
+- Export and import listening history directly from Reflect. Imports merge with current history and accept older `reflect.json` files.
+
 # Sink 1.0.62
 
 - Reconnect podcasts recovered from a download folder to their feeds and restore show cover art when you open Podcasts. Use downloaded episode titles to distinguish shows with the same name.

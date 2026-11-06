@@ -1,5 +1,8 @@
+using System.IO;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Input;
+using Microsoft.Win32;
 using Sink.Models;
 using Sink.Services;
 
@@ -24,6 +27,54 @@ public partial class MainWindow
         _listenEvents.AddRange(ReflectStore.Load());
         if (BackfillListenSnapshots()) ReflectStore.Save(_listenEvents);
         RecomputePlayCounts();
+    }
+
+    private void ExportReflect_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Export Reflect history",
+            FileName = "sink-reflect.json",
+            Filter = "Reflect history (*.json)|*.json",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        try
+        {
+            BackfillListenSnapshots();
+            ReflectStore.Export(dialog.FileName, _listenEvents);
+            ReflectTransferStatus.Text = $"Exported {_listenEvents.Count} listening events";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            MessageBox.Show(this, ex.Message, "Reflect export failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void ImportReflect_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Import Reflect history",
+            Filter = "Reflect history (*.json)|*.json",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        try
+        {
+            var (events, added) = ReflectStore.Import(dialog.FileName, _listenEvents);
+            _listenEvents.Clear();
+            _listenEvents.AddRange(events);
+            RecomputePlayCounts();
+            _tagsView?.Refresh();
+            RenderReflect();
+            ReflectTransferStatus.Text = added == 0 ? "No new listening events in this file"
+                : $"Imported {added} listening event{(added == 1 ? "" : "s")}";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            MessageBox.Show(this, ex.Message, "Reflect import failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     /// <summary>

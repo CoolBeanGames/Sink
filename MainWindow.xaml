@@ -1035,7 +1035,15 @@
                 <StackPanel Margin="0,0,4,0">
                     <TextBlock Text="LISTENING HABITS" Style="{StaticResource EyebrowStyle}"/>
                     <TextBlock Text="Reflect" FontSize="34" FontWeight="SemiBold" Margin="0,4,0,2"/>
-                    <TextBlock x:Name="ReflectYearSubtitle" Foreground="#7D8493" FontSize="12" Margin="0,0,0,20"/>
+                    <TextBlock x:Name="ReflectYearSubtitle" Foreground="#7D8493" FontSize="12" Margin="0,0,0,12"/>
+                    <WrapPanel Margin="0,0,0,20">
+                        <Button Content="Export history…" Click="ExportReflect_Click" Padding="12,6" Margin="0,0,8,4"
+                                Background="#222632" Foreground="#DCE0EA" BorderThickness="0" Cursor="Hand"/>
+                        <Button Content="Import history…" Click="ImportReflect_Click" Padding="12,6" Margin="0,0,10,4"
+                                Background="#222632" Foreground="#DCE0EA" BorderThickness="0" Cursor="Hand"
+                                ToolTip="Merge a Reflect export or an older reflect.json file with your listening history."/>
+                        <TextBlock x:Name="ReflectTransferStatus" VerticalAlignment="Center" Foreground="#A5ABBA" FontSize="11"/>
+                    </WrapPanel>
 
                     <WrapPanel>
                         <Border Style="{StaticResource ReflectCard}" Width="220">
