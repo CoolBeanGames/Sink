@@ -98,25 +98,95 @@ public static class PodcastService
         return podcast;
     }
 
+    internal static async Task<Podcast?> FindRecoveredFeedAsync(Podcast recovered, CancellationToken token)
+    {
+        var candidates = (await SearchAsync(recovered.Title.Replace('_', ' '), token))
+            .Where(result => MatchesShowTitle(result.Title, recovered.Title)
+                && Uri.TryCreate(result.FeedUrl, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https")
+            .DistinctBy(result => result.FeedUrl)
+            .ToList();
+        var feeds = new List<Podcast>();
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                var feed = await LoadFeedAsync(candidate.FeedUrl, token);
+                if (string.IsNullOrWhiteSpace(feed.ArtworkUrl)) feed.ArtworkUrl = candidate.ArtworkUrl;
+                if (string.IsNullOrWhiteSpace(feed.Author)) feed.Author = candidate.Author;
+                feeds.Add(feed);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or System.Xml.XmlException or InvalidOperationException)
+            {
+                // The directory sometimes lists feeds that have moved or shut down.
+            }
+        }
+        return ChooseRecoveredFeed(recovered, feeds, candidates.Count);
+    }
+
+    internal static async Task<string?> FindDirectoryArtworkAsync(Podcast podcast, CancellationToken token)
+    {
+        var results = await SearchAsync(podcast.Title, token);
+        return results.FirstOrDefault(result => !string.IsNullOrWhiteSpace(result.ArtworkUrl)
+            && string.Equals(result.FeedUrl, podcast.FeedUrl, StringComparison.Ordinal))?.ArtworkUrl;
+    }
+
+    internal static Podcast? ChooseRecoveredFeed(Podcast recovered, IReadOnlyList<Podcast> feeds, int candidateCount)
+    {
+        var bestCount = 0;
+        Podcast? best = null;
+        foreach (var feed in feeds)
+        {
+            var matchingEpisodes = recovered.Episodes.Count(local => feed.Episodes.Any(remote => MatchesRecoveredEpisode(local, remote)));
+            if (matchingEpisodes == 0 && candidateCount == 1 && MatchesShowTitle(feed.Title, recovered.Title)) return feed;
+            if (matchingEpisodes == 0 || matchingEpisodes < bestCount) continue;
+            best = matchingEpisodes > bestCount ? feed : null;
+            bestCount = matchingEpisodes;
+        }
+        return best;
+    }
+
+    internal static bool MatchesShowTitle(string left, string right) =>
+        string.Equals(ShowFolderName(left), ShowFolderName(right), StringComparison.OrdinalIgnoreCase);
+
+    private static bool MatchesRecoveredEpisode(PodcastEpisode local, PodcastEpisode remote)
+    {
+        if (!local.EpisodeGuid.StartsWith("download:", StringComparison.Ordinal)) return false;
+        var fileStem = Path.GetFileNameWithoutExtension(local.EpisodeGuid["download:".Length..]);
+        return string.Equals(fileStem, DownloadFileStem(local.EpisodeNumber, remote.Title), StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>
     /// Merges a freshly fetched feed into an existing subscription, keeping play
     /// state and local downloads for episodes matched by guid.
     /// </summary>
-    public static void MergeFeed(Podcast existing, Podcast fresh)
+    public static void MergeFeed(Podcast existing, Podcast fresh, bool markNew = true)
     {
         existing.Title = fresh.Title;
         existing.FeedUrl = fresh.FeedUrl;
-        existing.Author = fresh.Author;
+        if (!string.IsNullOrWhiteSpace(fresh.Author)) existing.Author = fresh.Author;
         existing.Description = fresh.Description;
-        existing.ArtworkUrl = fresh.ArtworkUrl ?? existing.ArtworkUrl;
+        if (!string.IsNullOrWhiteSpace(fresh.ArtworkUrl)) existing.ArtworkUrl = fresh.ArtworkUrl;
 
-        var byGuid = existing.Episodes.ToDictionary(e => e.EpisodeGuid, e => e);
+        var byGuid = existing.Episodes.ToLookup(e => e.EpisodeGuid);
         var recovered = existing.Episodes.Where(e => e.EpisodeGuid.StartsWith("download:", StringComparison.Ordinal))
-            .ToLookup(e => Path.GetFileName(e.LocalPath), StringComparer.OrdinalIgnoreCase);
-        foreach (var episode in fresh.Episodes)
+            .ToList();
+        var feedEpisodes = fresh.Episodes.DistinctBy(e => e.EpisodeGuid).ToList();
+        var feedTitleCounts = recovered.Count > 0
+            ? feedEpisodes.ToLookup(e => DownloadFileStem(0, e.Title), StringComparer.OrdinalIgnoreCase) : null;
+        foreach (var episode in feedEpisodes)
         {
-            var have = byGuid.GetValueOrDefault(episode.EpisodeGuid)
-                ?? recovered[DownloadFileName(episode)].FirstOrDefault(e => e.EpisodeGuid.StartsWith("download:", StringComparison.Ordinal));
+            var have = byGuid[episode.EpisodeGuid].FirstOrDefault();
+            if (have is null && recovered.Count > 0)
+            {
+                var fileName = DownloadFileName(episode);
+                have = recovered.FirstOrDefault(e => string.Equals(Path.GetFileName(e.LocalPath), fileName, StringComparison.OrdinalIgnoreCase));
+                if (have is null && feedTitleCounts?[DownloadFileStem(0, episode.Title)].Count() == 1)
+                {
+                    var matches = recovered.Where(e => MatchesRecoveredEpisode(e, episode)).Take(2).ToList();
+                    if (matches.Count == 1) have = matches[0];
+                }
+                if (have is not null) recovered.Remove(have);
+            }
             if (have is not null)
             {
                 have.EpisodeGuid = episode.EpisodeGuid;
@@ -129,7 +199,7 @@ public static class PodcastService
             }
             else
             {
-                episode.IsNew = true;
+                episode.IsNew = markNew;
                 existing.Episodes.Add(episode);
             }
         }

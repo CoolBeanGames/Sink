@@ -1,3 +1,8 @@
+# Sink 1.0.62
+
+- Reconnect podcasts recovered from a download folder to their feeds and restore show cover art when you open Podcasts. Use downloaded episode titles to distinguish shows with the same name.
+- Keep the downloaded files, playback positions, and iPod preferences when reconnecting. The restored feed and artwork are saved with the portable podcast catalog.
+
 # Sink 1.0.61
 
 - Restore downloaded podcasts when moving the podcast folder to another computer. Sink saves the catalog beside the downloads, reattaches moved files, and recovers older downloads from their filenames.

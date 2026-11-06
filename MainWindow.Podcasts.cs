@@ -180,7 +180,8 @@ public partial class MainWindow
     private async void Subscribe_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not PodcastSearchResult result) return;
-        if (_podcasts.Any(p => string.Equals(p.FeedUrl, result.FeedUrl, StringComparison.OrdinalIgnoreCase)))
+        bool IsSubscribed() => _podcasts.Any(p => string.Equals(p.FeedUrl, result.FeedUrl, StringComparison.OrdinalIgnoreCase));
+        if (IsSubscribed())
         {
             PodcastStatus.Text = "Already subscribed";
             return;
@@ -189,11 +190,13 @@ public partial class MainWindow
         try
         {
             var podcast = await PodcastService.LoadFeedAsync(result.FeedUrl);
+            if (IsSubscribed()) { PodcastStatus.Text = "Already subscribed"; return; }
+            if (string.IsNullOrWhiteSpace(podcast.ArtworkUrl)) podcast.ArtworkUrl = result.ArtworkUrl;
             var recovered = _podcasts.FirstOrDefault(show => string.IsNullOrWhiteSpace(show.FeedUrl)
-                && string.Equals(PodcastService.ShowFolderName(podcast.Title), show.Title, StringComparison.OrdinalIgnoreCase));
+                && (PodcastService.MatchesShowTitle(podcast.Title, show.Title) || PodcastService.MatchesShowTitle(result.Title, show.Title)));
             if (recovered is not null)
             {
-                PodcastService.MergeFeed(recovered, podcast);
+                PodcastService.MergeFeed(recovered, podcast, markNew: false);
                 podcast = recovered;
             }
             else _podcasts.Add(podcast);
@@ -730,7 +733,11 @@ public partial class MainWindow
         {
             foreach (var podcast in _podcasts.ToList())
             {
-                if (string.IsNullOrWhiteSpace(podcast.FeedUrl)) continue;
+                if (string.IsNullOrWhiteSpace(podcast.FeedUrl))
+                {
+                    await RestorePodcastMetadataAsync(podcast);
+                    continue;
+                }
                 var knownGuids = podcast.Episodes.Select(e => e.EpisodeGuid).ToHashSet();
                 try
                 {
@@ -738,6 +745,7 @@ public partial class MainWindow
                     PodcastService.MergeFeed(podcast, fresh);
                 }
                 catch (Exception) { /* offline / bad feed — keep what we have */ }
+                if (string.IsNullOrWhiteSpace(podcast.ArtworkUrl)) await RestorePodcastMetadataAsync(podcast);
                 PodcastRules.Reconcile(podcast);
 
                 var newCount = podcast.Episodes.Count(e => !knownGuids.Contains(e.EpisodeGuid));
@@ -760,6 +768,35 @@ public partial class MainWindow
         finally
         {
             _podcastRefreshGate.Release();
+        }
+    }
+
+    private async Task RestorePodcastMetadataAsync(Podcast podcast)
+    {
+        // Give the directory and feed lookups a short deadline so offline
+        // shows remain usable and can be retried when Podcasts is reopened.
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        try
+        {
+            if (string.IsNullOrWhiteSpace(podcast.FeedUrl))
+            {
+                var feed = await PodcastService.FindRecoveredFeedAsync(podcast, timeout.Token);
+                if (feed is null || !string.IsNullOrWhiteSpace(podcast.FeedUrl) || _podcasts.Any(show =>
+                    string.Equals(show.FeedUrl, feed.FeedUrl, StringComparison.OrdinalIgnoreCase))) return;
+                PodcastService.MergeFeed(podcast, feed, markNew: false);
+            }
+            else
+            {
+                var artwork = await PodcastService.FindDirectoryArtworkAsync(podcast, timeout.Token);
+                if (string.IsNullOrWhiteSpace(artwork)) return;
+                podcast.ArtworkUrl = artwork;
+            }
+            PodcastStore.Save(_podcasts);
+            RenderPodcasts();
+        }
+        catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or OperationCanceledException or System.Text.Json.JsonException)
+        {
+            Log.Info($"Podcast directory lookup did not finish for {podcast.Title}: {ex.Message}");
         }
     }
 

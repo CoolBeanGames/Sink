@@ -20,7 +20,10 @@ public partial class MainWindow
         var previousPodcastFolder = PodcastStore.Folder;
         dialog.Result.Save();
         if (!string.Equals(previousPodcastFolder, PodcastStore.Folder, StringComparison.OrdinalIgnoreCase))
+        {
             LoadPodcastFolder();
+            if (_podcastViewActive) _ = RefreshAllFeedsAsync();
+        }
         PlaybackStatus.Text = "Settings saved";
     }
 

@@ -173,16 +173,24 @@ try
     var recoveredEpisode = recoveredShow.Episodes.Single();
     Check(recoveredShow.Title == "Example show" && recoveredEpisode.Title == "An episode" && recoveredEpisode.IsDownloaded, "recovery restores the show, episode title and downloaded state");
     Check(PodcastDownloads.TryRecover(podcastRoot, recovered, out discovered) && !discovered && recoveredShow.Episodes.Count == 1, "rescanning a podcast folder does not duplicate episodes");
-    var fresh = new Sink.Models.Podcast { Title = "Example show", FeedUrl = "https://example.test/feed", Episodes = [new() { Title = "An episode", EpisodeNumber = 1, AudioUrl = "https://example.test/episode.wav", EpisodeGuid = "rss-guid" }] };
-    PodcastService.MergeFeed(recoveredShow, fresh);
-    Check(recoveredShow.Episodes.Single() == recoveredEpisode && recoveredEpisode.EpisodeGuid == "rss-guid", "subscribing connects recovered audio to the feed without losing the episode identity");
     recoveredEpisode.PositionSeconds = 42;
     recoveredEpisode.ExcludeFromIpod = true;
+    var fresh = new Sink.Models.Podcast { Title = "Example show", FeedUrl = "https://example.test/feed", ArtworkUrl = "https://example.test/cover.png",
+        Episodes = [new() { Title = "An episode", EpisodeNumber = 7, AudioUrl = "https://example.test/episode.mp3", EpisodeGuid = "rss-guid" }] };
+    var unrelated = new Sink.Models.Podcast { Title = "Example show", FeedUrl = "https://example.test/other" };
+    Check(PodcastService.MatchesShowTitle("Example: show", "Example_ show"), "directory titles match the name sanitized for disk");
+    Check(PodcastService.ChooseRecoveredFeed(recoveredShow, [unrelated], 1) == unrelated, "a single matching show can restore art even if older episodes have left its feed");
+    Check(PodcastService.ChooseRecoveredFeed(recoveredShow, [unrelated], 2) is null, "same-name feeds need episode evidence when the directory is ambiguous");
+    Check(PodcastService.ChooseRecoveredFeed(recoveredShow, [unrelated, fresh], 2) == fresh, "downloaded episode titles distinguish shows with the same name");
+    PodcastService.MergeFeed(recoveredShow, fresh, markNew: false);
+    Check(recoveredShow.Episodes.Single() == recoveredEpisode && recoveredEpisode.EpisodeGuid == "rss-guid" && recoveredEpisode.LocalPath == audio,
+        "feed matching preserves the downloaded episode when its number and extension changed");
     PodcastStore.Save(recovered);
     File.Delete(Path.Combine(LibraryStore.Directory, "podcasts.json"));
     var restored = PodcastStore.Load(out var readable);
     var movedEpisode = restored.Single().Episodes.Single();
     Check(readable && movedEpisode.PositionSeconds == 42 && movedEpisode.ExcludeFromIpod && !PodcastRules.ShouldSyncToIpod(movedEpisode), "portable catalog preserves playback and manual removal preferences without AppData");
+    Check(restored.Single().ArtworkUrl == fresh.ArtworkUrl && restored.Single().FeedUrl == fresh.FeedUrl, "restored cover art and feed travel with the downloads");
     var newRoot = Path.Combine(workspace, "Another drive");
     Directory.Move(podcastRoot, newRoot);
     AppSettings.Current.PodcastLocation = newRoot;
