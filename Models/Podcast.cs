@@ -49,6 +49,7 @@ public sealed class PodcastEpisode
 
     public double PositionSeconds { get; set; }
     public bool IsPlayed { get; set; }
+    public bool ExcludeFromIpod { get; set; }
 
     /// <summary>Arrived on a feed refresh after the show was last opened; drives the "new content" dot.</summary>
     public bool IsNew { get; set; }

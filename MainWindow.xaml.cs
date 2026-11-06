@@ -518,7 +518,8 @@ public partial class MainWindow : Window
             var library = await Task.Run(() => Sink.Services.Ipod.IpodReader.Read(root));
             if (_ipodLibraryRoot != root) return (false, 0, 0); // device changed while loading
             _ipodLibrary = library;
-            var podcastsUpdated = repaired + await SyncPodcastStatusFromIpodAsync();
+            var playbackUpdates = await SyncPodcastStatusFromIpodAsync();
+            var podcastsUpdated = repaired + playbackUpdates;
             var podcastsRemoved = await ReconcilePodcastsOnIpodAsync(root);
             if (podcastsRemoved > 0)
             {
@@ -540,8 +541,11 @@ public partial class MainWindow : Window
             // A played episode may have freed an auto-download slot. Wait until
             // stale device entries are gone before downloading/pushing its
             // replacement so Clickwheel never sees concurrent DB writers.
-            if (podcastsUpdated > 0)
-                _ = AutoDownloadAndPushAllAsync();
+            if (playbackUpdates > 0)
+            {
+                if (_syncSessionActive) _replacePlayedPodcastsAfterSync = true;
+                else _ = AutoDownloadAndPushAllAsync();
+            }
             return (true, songsUpdated, podcastsUpdated);
         }
         catch (Exception ex)
@@ -1353,10 +1357,14 @@ public partial class MainWindow : Window
 
     private async void SyncIpod_Click(object sender, RoutedEventArgs e)
     {
+        if (_ipodWriting || _syncSessionActive) { PlaybackStatus.Text = "iPod is busy…"; return; }
         var header = (sender as MenuItem)?.Header as string ?? "";
         var syncMusic = header is "Sync all" or "Sync music";
         var syncPodcasts = header is "Sync all" or "Sync podcasts";
         var changesOnly = !syncMusic && !syncPodcasts;
+        var connectedRoot = _ipodDevice?.LibraryRoot;
+        var podcastFolder = PodcastStore.Folder;
+        var downloadsAvailable = syncPodcasts && RecoverPodcastDownloads();
         BeginSyncSession(1
             + (syncMusic ? _tracks.Count + _playlists.Count : 0)
             + (syncPodcasts ? PodcastEpisodesToSyncCount() : 0)
@@ -1371,7 +1379,7 @@ public partial class MainWindow : Window
             // Sync never picked up new listens (task 157).
             var (refreshed, songsUpdated, podcastsUpdated) = (false, 0, 0);
             BeginSyncPhase(1);
-            if (_ipodDevice?.LibraryRoot is string syncRoot && !_ipodWriting)
+            if (connectedRoot is string syncRoot && !_ipodWriting)
                 (refreshed, songsUpdated, podcastsUpdated) = await RefreshIpodLibraryFromDeviceAsync(syncRoot);
             EndSyncPhase();
             var songsAdded = 0;
@@ -1390,7 +1398,11 @@ public partial class MainWindow : Window
             if (syncPodcasts)
             {
                 BeginSyncPhase(PodcastEpisodesToSyncCount());
-                podcastsAdded = await SyncAllPodcastsToDevice();
+                if (!string.Equals(podcastFolder, PodcastStore.Folder, StringComparison.OrdinalIgnoreCase))
+                    downloadsAvailable = RecoverPodcastDownloads();
+                if (refreshed && _ipodDevice?.LibraryRoot == connectedRoot)
+                    podcastsAdded = await SyncAllPodcastsToDevice(downloadsAvailable && Directory.Exists(PodcastStore.Folder));
+                else PlaybackStatus.Text = "Couldn't read the iPod before syncing podcasts. Reconnect it and try again.";
                 EndSyncPhase();
             }
             if (changesOnly)
@@ -1442,6 +1454,7 @@ public partial class MainWindow : Window
     // selection) the percentage is just that operation's own.
 
     private bool _syncSessionActive;
+    private bool _replacePlayedPodcastsAfterSync;
     private double _syncSessionTotal = 1, _syncSessionDone, _syncPhaseBase, _syncPhaseUnits;
     private int _syncPhaseId;
 
@@ -1472,6 +1485,11 @@ public partial class MainWindow : Window
         _syncSessionActive = false;
         StopIpodSync();
         ResumePendingShuffleUpdates();
+        if (_replacePlayedPodcastsAfterSync)
+        {
+            _replacePlayedPodcastsAfterSync = false;
+            _ = AutoDownloadAndPushAllAsync();
+        }
     }
 
     /// <summary>Progress from whatever step is running (done of total), folded into the session when there is one.</summary>
@@ -1512,7 +1530,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Syncs tracks to the connected iPod — really writes the iTunesDB when the device is readable, otherwise stages them in the pending list. Returns how many tracks were actually added.</summary>
-    private async Task<int> SyncTracksToDevice(IReadOnlyList<Track> tracks, bool mirror = false)
+    private async Task<int> SyncTracksToDevice(IReadOnlyList<Track> tracks, bool mirror = false, bool mirrorPodcasts = false)
     {
         if (_ipodWriting) { PlaybackStatus.Text = "iPod is busy…"; return 0; }
         var root = _ipodDevice?.LibraryRoot;
@@ -1537,22 +1555,23 @@ public partial class MainWindow : Window
         _ipodSyncCts = new CancellationTokenSource();
         var token = _ipodSyncCts.Token;
         var added = 0;
+        var summary = "";
         try
         {
-            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.Sync(root, payload, progress, token, deviceId, mirror));
-            PlaybackStatus.Text = result.Summary;
+            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.Sync(root, payload, progress, token, deviceId, mirror, mirrorPodcasts));
+            summary = result.Summary;
             added = result.Added;
         }
         catch (OperationCanceledException)
         {
-            PlaybackStatus.Text = "Sync stopped";
+            summary = "Sync stopped";
         }
         catch (Exception ex)
         {
             // An async-void handler must never let an exception reach the
             // dispatcher — that takes the whole app down.
             Services.Log.Error("SyncTracksToDevice threw", ex);
-            PlaybackStatus.Text = $"iPod sync failed: {ex.Message}";
+            summary = $"iPod sync failed: {ex.Message}";
         }
         finally
         {
@@ -1565,7 +1584,11 @@ public partial class MainWindow : Window
             // saved again would hit the exact same cold-start duplicate on
             // its next sync as if the identity had never been recorded.
             SaveLibrary();
-            LoadIpodLibrary(root);
+            if (_ipodDevice?.LibraryRoot == root)
+            {
+                await LoadIpodLibraryAsync(root);
+                PlaybackStatus.Text = summary;
+            }
         }
         return added;
     }
@@ -1661,7 +1684,7 @@ public partial class MainWindow : Window
             _ipodSyncCts?.Dispose();
             _ipodSyncCts = null;
             SaveLibrary();
-            LoadIpodLibrary(root);
+            if (_ipodDevice?.LibraryRoot == root) await LoadIpodLibraryAsync(root);
         }
     }
 
@@ -1685,7 +1708,7 @@ public partial class MainWindow : Window
         return new Progress<(int done, int total, string message)>(Update);
     }
 
-    private async void UnsyncTracks(IReadOnlyList<Track> tracks)
+    private async void UnsyncTracks(IReadOnlyList<Track> tracks, bool podcastsOnly = false, Action? onRemoved = null)
     {
         var root = _ipodDevice?.LibraryRoot;
         if (root is null)
@@ -1700,25 +1723,31 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_ipodWriting) { PlaybackStatus.Text = "iPod is busy…"; return; }
+        if (_ipodWriting || _syncSessionActive) { PlaybackStatus.Text = "iPod is busy…"; return; }
         var paths = tracks.Select(t => t.FilePath).Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!).ToList();
         _ipodWriting = true;
         StartIpodSync(indefinite: true);
+        string summary;
         try
         {
-            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.Remove(root, paths));
-            PlaybackStatus.Text = result.Summary;
+            var result = await Task.Run(() => Sink.Services.Ipod.IpodWriteService.Remove(root, paths, podcastsOnly));
+            if (result.Error is null && result.Removed > 0) onRemoved?.Invoke();
+            summary = result.Summary;
         }
         catch (Exception ex)
         {
             Services.Log.Error("UnsyncTracks threw", ex);
-            PlaybackStatus.Text = $"iPod update failed: {ex.Message}";
+            summary = $"iPod update failed: {ex.Message}";
         }
         finally
         {
             _ipodWriting = false;
             StopIpodSync();
-            LoadIpodLibrary(root);
+        }
+        if (_ipodDevice?.LibraryRoot == root)
+        {
+            await LoadIpodLibraryAsync(root);
+            PlaybackStatus.Text = summary;
         }
     }
 

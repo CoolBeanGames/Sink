@@ -17,7 +17,10 @@ public partial class MainWindow
             () => DownloadHighQuality(_tracks.ToList()))
             { Owner = this };
         if (dialog.ShowDialog() != true || dialog.Result is null) return;
+        var previousPodcastFolder = PodcastStore.Folder;
         dialog.Result.Save();
+        if (!string.Equals(previousPodcastFolder, PodcastStore.Folder, StringComparison.OrdinalIgnoreCase))
+            LoadPodcastFolder();
         PlaybackStatus.Text = "Settings saved";
     }
 

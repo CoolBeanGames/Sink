@@ -21,6 +21,7 @@ public enum PodcastMode { Library, Search, Show }
 public partial class MainWindow
 {
     private readonly List<Podcast> _podcasts = [];
+    private bool _podcastCatalogReadable;
     private IReadOnlyList<PodcastSearchResult> _searchResults = [];
     private Podcast? _currentShow;
     private PodcastMode _podcastMode = PodcastMode.Library;
@@ -40,7 +41,7 @@ public partial class MainWindow
 
     private void InitPodcasts()
     {
-        _podcasts.AddRange(PodcastStore.Load());
+        LoadPodcastFolder();
         // Directory search autocompletes from shows you follow and the last
         // search's results (titles and hosts).
         PodcastSearchBox.SuggestionProvider = () =>
@@ -65,6 +66,26 @@ public partial class MainWindow
         _podcastPlayer.MediaEnded += (_, _) => StopPodcast(markPlayed: true);
         _podcastTimer.Tick += (_, _) => PodcastTimer_Tick();
         Loaded += (_, _) => UpdatePodcastSidebarDot();
+    }
+
+    private void LoadPodcastFolder()
+    {
+        foreach (var show in PodcastStore.Load(out _podcastCatalogReadable))
+        {
+            if (_podcasts.Any(existing => existing.Id == show.Id || (!string.IsNullOrWhiteSpace(show.FeedUrl)
+                && string.Equals(existing.FeedUrl, show.FeedUrl, StringComparison.OrdinalIgnoreCase)))) continue;
+            _podcasts.Add(show);
+        }
+        if (RecoverPodcastDownloads() && _podcasts.Count > 0) PodcastStore.Save(_podcasts);
+        RenderPodcasts();
+        UpdatePodcastSidebarDot();
+    }
+
+    private bool RecoverPodcastDownloads()
+    {
+        var readable = PodcastDownloads.TryRecover(PodcastStore.Folder, _podcasts, out var changed);
+        if (changed) PodcastStore.Save(_podcasts);
+        return readable && _podcastCatalogReadable;
     }
 
     // ---- View / mode switching ---------------------------------------------
@@ -94,6 +115,7 @@ public partial class MainWindow
         // always dump them back at the podcast library root, even mid
         // search or inside a show's episode list (task 162).
         SetPodcastNav();
+        RecoverPodcastDownloads();
         RenderPodcasts();
         UpdatePodcastSidebarDot();
         _ = RefreshAllFeedsAsync();
@@ -167,7 +189,14 @@ public partial class MainWindow
         try
         {
             var podcast = await PodcastService.LoadFeedAsync(result.FeedUrl);
-            _podcasts.Add(podcast);
+            var recovered = _podcasts.FirstOrDefault(show => string.IsNullOrWhiteSpace(show.FeedUrl)
+                && string.Equals(PodcastService.ShowFolderName(podcast.Title), show.Title, StringComparison.OrdinalIgnoreCase));
+            if (recovered is not null)
+            {
+                PodcastService.MergeFeed(recovered, podcast);
+                podcast = recovered;
+            }
+            else _podcasts.Add(podcast);
             PodcastStore.Save(_podcasts);
             PodcastStatus.Text = $"Subscribed to {podcast.Title}";
             _podcastMode = PodcastMode.Library;
@@ -257,7 +286,12 @@ public partial class MainWindow
             // request was queued.
             if (episode.IsDownloaded) return;
 
-            var dir = Path.Combine(PodcastFolder(), Sanitize(podcast.Title));
+            if (string.IsNullOrWhiteSpace(episode.AudioUrl))
+            {
+                PodcastStatus.Text = "This recovered episode has no download link. Subscribe to its show to look up the feed.";
+                return;
+            }
+            var dir = Path.Combine(PodcastStore.Folder, PodcastService.ShowFolderName(podcast.Title));
             PodcastStatus.Text = $"Downloading {episode.Title}…";
             if (_podcastDownloads++ == 0) SpinIndicator(PodcastSpinner, true);
             try
@@ -539,23 +573,46 @@ public partial class MainWindow
             PodcastStatus.Text = "Episode file is missing";
             return;
         }
+        if (episode.ExcludeFromIpod)
+        {
+            episode.ExcludeFromIpod = false;
+            PodcastStore.Save(_podcasts);
+        }
         _ = SyncTracksToDevice([EpisodeTrack(show, episode)]);
         PodcastStatus.Text = $"Syncing {episode.Title} to iPod";
     }
 
-    private static Track EpisodeTrack(Podcast show, PodcastEpisode episode) => new()
+    private Track EpisodeTrack(Podcast show, PodcastEpisode episode)
     {
-        Title = episode.Title,
-        Artist = show.Title,
-        Album = show.Title,
-        Genre = "Podcast",
-        FileName = Path.GetFileName(episode.LocalPath!),
-        FilePath = episode.LocalPath,
-        Duration = episode.Duration,
-    };
+        var deviceEpisode = FindRecoveredDeviceEpisode(show, episode);
+        return new Track
+        {
+            Title = deviceEpisode?.Title ?? episode.Title,
+            Artist = deviceEpisode?.Artist ?? show.Title,
+            Album = deviceEpisode?.Album ?? show.Title,
+            TrackNumber = deviceEpisode?.TrackNumber ?? 0,
+            Genre = "Podcast",
+            FileName = Path.GetFileName(episode.LocalPath!),
+            FilePath = episode.LocalPath,
+            Duration = episode.Duration,
+        };
+    }
 
-    private static string PodcastEpisodeKey(Podcast show, PodcastEpisode episode) =>
-        Services.Ipod.IpodDbTrack.MakeKey(episode.Title, show.Title, show.Title, 0);
+    private string PodcastEpisodeKey(Podcast show, PodcastEpisode episode) =>
+        FindRecoveredDeviceEpisode(show, episode)?.Key
+        ?? Services.Ipod.IpodDbTrack.MakeKey(episode.Title, show.Title, show.Title, 0);
+
+    private Services.Ipod.IpodDbTrack? FindRecoveredDeviceEpisode(Podcast show, PodcastEpisode episode)
+    {
+        if (_ipodLibrary is null || !episode.EpisodeGuid.StartsWith("download:", StringComparison.Ordinal)) return null;
+        // Older downloads only retain a sanitized, possibly truncated title on disk.
+        // Keep the original device identity and bookmark if its filename agrees.
+        var stem = Path.GetFileNameWithoutExtension(episode.EpisodeGuid["download:".Length..]);
+        var folder = PodcastService.ShowFolderName(show.Title);
+        return _ipodLibrary.Tracks.FirstOrDefault(t => t.IsPodcast
+            && string.Equals(PodcastService.ShowFolderName(t.Album), folder, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(PodcastService.DownloadFileStem(episode.EpisodeNumber, t.Title), stem, StringComparison.OrdinalIgnoreCase));
+    }
 
     private HashSet<string> PodcastKeysNeedingUnsync()
     {
@@ -568,7 +625,7 @@ public partial class MainWindow
 
         return _podcasts
             .SelectMany(show => show.Episodes
-                .Where(episode => !PodcastRules.ShouldSyncToIpod(episode))
+                .Where(episode => episode.IsPlayed || episode.ExcludeFromIpod)
                 .Select(episode => PodcastEpisodeKey(show, episode)))
             .Where(deviceKeys.Contains)
             .ToHashSet();
@@ -591,7 +648,7 @@ public partial class MainWindow
         if (keys.Count == 0) return 0;
         if (_ipodWriting)
         {
-            Log.Info($"Deferred removal of {keys.Count} podcast episode(s) because the iPod is busy; the next refresh will reconcile them");
+            Log.Info($"Deferred removal of {keys.Count} podcast episode(s) because the iPod is busy; the next podcast sync will reconcile them");
             return 0;
         }
 
@@ -599,7 +656,7 @@ public partial class MainWindow
         StartIpodSync(indefinite: true);
         try
         {
-            var result = await Task.Run(() => Services.Ipod.IpodWriteService.RemoveByKey(root, keys));
+            var result = await Task.Run(() => Services.Ipod.IpodWriteService.RemoveByKey(root, keys, podcastsOnly: true));
             if (result.Error is not null)
             {
                 PlaybackStatus.Text = result.Summary;
@@ -621,17 +678,19 @@ public partial class MainWindow
         _podcasts.Sum(show => show.Episodes.Count(PodcastRules.ShouldSyncToIpod));
 
     /// <summary>Pushes every downloaded episode across all subscribed shows onto the device (task 137 — "Sync podcasts" did nothing but spin the indicator). Returns how many episodes were actually added.</summary>
-    private async Task<int> SyncAllPodcastsToDevice()
+    private async Task<int> SyncAllPodcastsToDevice(bool downloadsAvailable)
     {
         if (!_ipodConnected) { PodcastStatus.Text = "Connect an iPod before syncing"; return 0; }
-        if (_ipodDevice?.LibraryRoot is string root)
-            await ReconcilePodcastsOnIpodAsync(root);
+        if (!downloadsAvailable)
+        {
+            PlaybackStatus.Text = "Couldn't read the podcast library. Check the podcast folder in Settings and sync again.";
+            return 0;
+        }
         var tracks = _podcasts
             .SelectMany(show => show.Episodes.Where(PodcastRules.ShouldSyncToIpod).Select(e => EpisodeTrack(show, e)))
             .ToList();
-        if (tracks.Count == 0) { PodcastStatus.Text = "No downloaded episodes to sync"; return 0; }
         PodcastStatus.Text = $"Syncing {tracks.Count} episode{(tracks.Count == 1 ? "" : "s")} to iPod";
-        return await SyncTracksToDevice(tracks);
+        return await SyncTracksToDevice(tracks, mirrorPodcasts: true);
     }
 
     // ---- Auto-download rules (task 62) ----------------------------------
@@ -671,6 +730,7 @@ public partial class MainWindow
         {
             foreach (var podcast in _podcasts.ToList())
             {
+                if (string.IsNullOrWhiteSpace(podcast.FeedUrl)) continue;
                 var knownGuids = podcast.Episodes.Select(e => e.EpisodeGuid).ToHashSet();
                 try
                 {
@@ -758,6 +818,11 @@ public partial class MainWindow
             var beforePlayed = episode.IsPlayed;
             var beforePos = episode.PositionSeconds;
             var episodeChanged = false;
+            if (episode.Duration <= TimeSpan.Zero && deviceTrack.Duration > TimeSpan.Zero)
+            {
+                episode.Duration = deviceTrack.Duration;
+                changed = true;
+            }
 
             // Pull: take the further-along position between library and device.
             if (deviceTrack.BookmarkMs > episode.PositionSeconds * 1000 + 1500)
@@ -806,9 +871,14 @@ public partial class MainWindow
 
         if (toPush.Count > 0 && !_ipodWriting)
         {
-            var positionsUpdated = await Task.Run(() => Services.Ipod.IpodWriteService.WritePodcastPositions(root, toPush));
-            if (positionsUpdated > 0)
-                PlaybackStatus.Text = $"Synced {positionsUpdated} podcast position{(positionsUpdated == 1 ? "" : "s")} to iPod";
+            _ipodWriting = true;
+            try
+            {
+                var positionsUpdated = await Task.Run(() => Services.Ipod.IpodWriteService.WritePodcastPositions(root, toPush));
+                if (positionsUpdated > 0)
+                    PlaybackStatus.Text = $"Synced {positionsUpdated} podcast position{(positionsUpdated == 1 ? "" : "s")} to iPod";
+            }
+            finally { _ipodWriting = false; }
         }
 
         if (!changed) return updated;
@@ -908,19 +978,6 @@ public partial class MainWindow
 
     // ---- helpers ----------------------------------------------------
 
-    private static string PodcastFolder()
-    {
-        var configured = AppSettings.Current.PodcastLocation;
-        return string.IsNullOrWhiteSpace(configured)
-            ? Path.Combine(LibraryStore.Directory, "Podcasts")
-            : configured;
-    }
-
     private static Uri? SafeUri(string url) => Uri.TryCreate(url, UriKind.Absolute, out var u) ? u : null;
 
-    private static string Sanitize(string name)
-    {
-        foreach (var c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
-        return name.Trim();
-    }
 }

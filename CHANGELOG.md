@@ -1,3 +1,9 @@
+# Sink 1.0.61
+
+- Restore downloaded podcasts when moving the podcast folder to another computer. Sink saves the catalog beside the downloads, reattaches moved files, and recovers older downloads from their filenames.
+- Sync Podcasts and Sync All remove iPod episodes that are no longer selected by the local podcast library. Sink checks that the podcast folder and device library are readable before reconciling them.
+- Open a show under iPod Podcasts with View episodes and remove individual or selected episodes. Manually removed episodes stay off during future syncs until explicitly added back.
+
 # Sink 1.0.60
 
 - Fix Deezer downloads on fresh installs that saved Settings before downloading. Sink now initializes Streamrip's full configuration and repairs older incomplete files while preserving the saved Deezer login.

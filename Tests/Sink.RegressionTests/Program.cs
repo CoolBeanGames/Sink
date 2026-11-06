@@ -147,6 +147,50 @@ try
     queue.Enqueue(root, [deviceSong, duplicatePath], true, matchDevicePaths: true);
     Check(queue.Count == 2, "device tracks with identical metadata retain separate path-based updates");
 
+    var podcastMirror = IpodWriteService.Sync(root, [episode], mirrorPodcasts: true);
+    Check(podcastMirror.Error is null && podcastMirror.Removed == 2, "full podcast sync removes episodes missing from the local selection");
+    var afterMirror = IpodReader.Read(root);
+    Check(afterMirror.Tracks.Where(t => t.IsPodcast).Select(t => t.Title).SequenceEqual([episode.Title]), "podcast mirror leaves only the selected episode in the saved database");
+    Check(afterMirror.Tracks.Any(t => t.Title == song.Title && !t.IsPodcast), "podcast mirror preserves music");
+    var removeEpisode = IpodWriteService.Remove(root, afterMirror.Tracks.Select(t => t.FilePath).ToArray(), podcastsOnly: true);
+    Check(removeEpisode.Error is null && removeEpisode.Removed == 1 && IpodReader.Read(root).Tracks.All(t => !t.IsPodcast), "manual path removal deletes a podcast without deleting music in the selection");
+    Check(!File.Exists(afterMirror.Tracks.Single(t => t.IsPodcast).FilePath), "manual removal also frees the episode's media file");
+    Check(IpodWriteService.Sync(root, [episode]).Error is null, "an explicitly selected episode can be added back");
+    var emptyMirror = IpodWriteService.Sync(root, [], mirrorPodcasts: true);
+    Check(emptyMirror.Error is null && emptyMirror.Removed == 1 && IpodReader.Read(root).Tracks.All(t => !t.IsPodcast), "an empty podcast library removes all device episodes during explicit sync");
+
+    var podcastRoot = Path.Combine(workspace, "Moved podcasts");
+    var showRoot = Path.Combine(podcastRoot, "Example show");
+    Directory.CreateDirectory(showRoot);
+    AppSettings.Current.PodcastLocation = podcastRoot;
+    var audio = Path.Combine(showRoot, "0001 - An episode.wav");
+    WriteWave(audio);
+    File.WriteAllText(Path.Combine(showRoot, "notes.txt"), "unrelated");
+    File.WriteAllText(Path.Combine(showRoot, "0002 - Still downloading.mp3.part"), "incomplete");
+    var recovered = new List<Sink.Models.Podcast>();
+    Check(PodcastDownloads.TryRecover(podcastRoot, recovered, out var discovered) && discovered, "recover downloaded podcasts from media alone on a new computer");
+    var recoveredShow = recovered.Single();
+    var recoveredEpisode = recoveredShow.Episodes.Single();
+    Check(recoveredShow.Title == "Example show" && recoveredEpisode.Title == "An episode" && recoveredEpisode.IsDownloaded, "recovery restores the show, episode title and downloaded state");
+    Check(PodcastDownloads.TryRecover(podcastRoot, recovered, out discovered) && !discovered && recoveredShow.Episodes.Count == 1, "rescanning a podcast folder does not duplicate episodes");
+    var fresh = new Sink.Models.Podcast { Title = "Example show", FeedUrl = "https://example.test/feed", Episodes = [new() { Title = "An episode", EpisodeNumber = 1, AudioUrl = "https://example.test/episode.wav", EpisodeGuid = "rss-guid" }] };
+    PodcastService.MergeFeed(recoveredShow, fresh);
+    Check(recoveredShow.Episodes.Single() == recoveredEpisode && recoveredEpisode.EpisodeGuid == "rss-guid", "subscribing connects recovered audio to the feed without losing the episode identity");
+    recoveredEpisode.PositionSeconds = 42;
+    recoveredEpisode.ExcludeFromIpod = true;
+    PodcastStore.Save(recovered);
+    File.Delete(Path.Combine(LibraryStore.Directory, "podcasts.json"));
+    var restored = PodcastStore.Load(out var readable);
+    var movedEpisode = restored.Single().Episodes.Single();
+    Check(readable && movedEpisode.PositionSeconds == 42 && movedEpisode.ExcludeFromIpod && !PodcastRules.ShouldSyncToIpod(movedEpisode), "portable catalog preserves playback and manual removal preferences without AppData");
+    var newRoot = Path.Combine(workspace, "Another drive");
+    Directory.Move(podcastRoot, newRoot);
+    AppSettings.Current.PodcastLocation = newRoot;
+    restored = PodcastStore.Load(out readable);
+    Check(readable && PodcastDownloads.TryRecover(newRoot, restored, out discovered) && discovered && restored.Single().Episodes.Single().IsDownloaded,
+        "portable catalog reattaches stale absolute paths after moving the folder");
+    Check(!PodcastDownloads.TryRecover(Path.Combine(workspace, "Offline drive"), restored, out _), "an unavailable podcast folder cannot be mistaken for an empty library");
+
     if (args.Length == 1)
     {
         // Optional replay against a COPY of a real existing backup. Never

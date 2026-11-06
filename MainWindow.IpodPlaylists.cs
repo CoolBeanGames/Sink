@@ -13,6 +13,11 @@ namespace Sink;
 /// </summary>
 public partial class MainWindow
 {
+    private void IpodPlaylistTrackUnsync_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is Track track) UnsyncTracks([track]);
+    }
+
     private bool _ipodPlaylistsActive;
     private string? _ipodPlaylistName;
 

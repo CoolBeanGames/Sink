@@ -570,21 +570,27 @@
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <Grid>
-                                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <StackPanel>
                                         <TextBlock Text="{Binding Title}" Foreground="#E7E9EE" FontSize="13"/>
                                         <TextBlock Text="{Binding Artist}" Foreground="#7D8493" FontSize="11" Margin="0,2,0,0"/>
                                     </StackPanel>
                                     <TextBlock Grid.Column="1" Text="{Binding Count}" Foreground="#7D8493" FontSize="11" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="2" Content="View episodes" Click="IpodPodcastShow_Click" Margin="14,0,0,0"
+                                            Padding="9,4" Background="#272243" Foreground="#CBC5FF" BorderThickness="0" Cursor="Hand"/>
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
                     <Grid x:Name="IpodPodcastEpisodesList" Visibility="Collapsed">
                         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                        <Button x:Name="IpodPodcastBackButton" Content="← Back to shows" Click="IpodPodcastBack_Click" HorizontalAlignment="Left"
-                                Margin="14,12,0,0" Background="Transparent" Foreground="#9D91FF" BorderThickness="0" Cursor="Hand"/>
-                        <ListBox Grid.Row="1" x:Name="IpodPodcastEpisodesGrid" Background="Transparent" BorderThickness="0" VirtualizingPanel.ScrollUnit="Pixel" Margin="0,6,0,0">
+                        <DockPanel Margin="14,12,14,0" LastChildFill="False">
+                            <Button x:Name="IpodPodcastBackButton" Content="← Back to shows" Click="IpodPodcastBack_Click"
+                                    Background="Transparent" Foreground="#9D91FF" BorderThickness="0" Cursor="Hand"/>
+                            <Button DockPanel.Dock="Right" Content="Remove selected from iPod" Click="IpodPodcastUnsyncSelected_Click"
+                                    Padding="9,4" Background="#31202C" Foreground="#F2A8C6" BorderThickness="0" Cursor="Hand"/>
+                        </DockPanel>
+                        <ListBox Grid.Row="1" x:Name="IpodPodcastEpisodesGrid" SelectionMode="Extended" Background="Transparent" BorderThickness="0" VirtualizingPanel.ScrollUnit="Pixel" Margin="0,6,0,0">
                             <ListBox.ItemContainerStyle>
                                 <Style TargetType="ListBoxItem">
                                     <Setter Property="Padding" Value="16,10"/>
@@ -597,7 +603,8 @@
                                 <DataTemplate>
                                     <DockPanel>
                                         <Path DockPanel.Dock="Left" Style="{StaticResource TrackShuffleIcon}" Margin="0,0,10,0"/>
-                                        <Button DockPanel.Dock="Right" Content="Unsync" Click="IpodPodcastUnsync_Click"
+                                        <Button DockPanel.Dock="Right" Content="Remove from iPod" Click="IpodPodcastUnsync_Click"
+                                                ToolTip="Remove the device copy and skip it on future syncs. Drag the episode to the iPod from Podcasts to sync it again."
                                                 Background="Transparent" Foreground="#E0679B" BorderThickness="0" Cursor="Hand"/>
                                         <TextBlock Text="{Binding Title}" Foreground="#E7E9EE" FontSize="12.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                                     </DockPanel>
@@ -646,7 +653,7 @@
                                 <DataTemplate>
                                     <DockPanel>
                                         <Path DockPanel.Dock="Left" Style="{StaticResource TrackShuffleIcon}" Margin="0,0,10,0"/>
-                                        <Button DockPanel.Dock="Right" Content="Unsync" Click="IpodPodcastUnsync_Click"
+                                        <Button DockPanel.Dock="Right" Content="Unsync" Click="IpodPlaylistTrackUnsync_Click"
                                                 Background="Transparent" Foreground="#E0679B" BorderThickness="0" Cursor="Hand"/>
                                         <TextBlock Text="{Binding Title}" Foreground="#E7E9EE" FontSize="12.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                                         <TextBlock Text="{Binding Artist}" Foreground="#7D8493" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>

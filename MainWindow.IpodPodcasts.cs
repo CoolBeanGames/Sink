@@ -1,6 +1,8 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using Sink.Models;
+using Sink.Services;
 
 namespace Sink;
 
@@ -15,7 +17,7 @@ namespace Sink;
 public partial class MainWindow
 {
     private bool _ipodPodcastsActive;
-    private string? _ipodPodcastShow;
+    private (string Title, string Artist)? _ipodPodcastShow;
 
     private sealed record IpodPodcastShowRow(string Title, string Artist, int Count);
 
@@ -55,7 +57,7 @@ public partial class MainWindow
     private void RenderIpodPodcasts()
     {
         LibraryHub.Visibility = Visibility.Collapsed;
-        LibrarySearchBorder.Visibility = Visibility.Visible;
+        LibrarySearchBorder.Visibility = Visibility.Collapsed;
         GroupsScroller.Visibility = Visibility.Collapsed;
         TracksBorder.Visibility = Visibility.Collapsed;
         IpodPlaylistsArea.Visibility = Visibility.Collapsed;
@@ -79,8 +81,15 @@ public partial class MainWindow
         {
             IpodPodcastShowsList.Visibility = Visibility.Collapsed;
             IpodPodcastEpisodesList.Visibility = Visibility.Visible;
-            var showEpisodes = episodes.Where(t => t.Album == _ipodPodcastShow).OrderBy(t => t.Title).ToList();
-            ViewTitle.Text = _ipodPodcastShow;
+            var show = _ipodPodcastShow.Value;
+            var showEpisodes = episodes.Where(t => (t.Album, t.Artist) == show).OrderBy(t => t.Title).ToList();
+            if (showEpisodes.Count == 0)
+            {
+                _ipodPodcastShow = null;
+                RenderIpodPodcasts();
+                return;
+            }
+            ViewTitle.Text = show.Title;
             ViewSubtitle.Text = $"{showEpisodes.Count} episode{(showEpisodes.Count == 1 ? "" : "s")}";
             IpodPodcastEpisodesGrid.ItemsSource = showEpisodes;
         }
@@ -88,8 +97,18 @@ public partial class MainWindow
 
     private void IpodPodcastShow_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is not IpodPodcastShowRow row) return;
-        _ipodPodcastShow = row.Title;
+        if (ItemsControl.ContainerFromElement(IpodPodcastShowsList, e.OriginalSource as DependencyObject) is ListBoxItem
+            { DataContext: IpodPodcastShowRow show }) OpenIpodPodcastShow(show);
+    }
+
+    private void IpodPodcastShow_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is IpodPodcastShowRow show) OpenIpodPodcastShow(show);
+    }
+
+    private void OpenIpodPodcastShow(IpodPodcastShowRow show)
+    {
+        _ipodPodcastShow = (show.Title, show.Artist);
         RenderIpodPodcasts();
     }
 
@@ -102,6 +121,24 @@ public partial class MainWindow
     private void IpodPodcastUnsync_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not Track track) return;
-        UnsyncTracks([track]);
+        RemoveIpodPodcastEpisodes([track]);
+    }
+
+    private void IpodPodcastUnsyncSelected_Click(object sender, RoutedEventArgs e) =>
+        RemoveIpodPodcastEpisodes(IpodPodcastEpisodesGrid.SelectedItems.OfType<Track>().ToList());
+
+    private void RemoveIpodPodcastEpisodes(IReadOnlyList<Track> tracks)
+    {
+        if (tracks.Count == 0) { PlaybackStatus.Text = "Select episodes to remove from the iPod"; return; }
+        if (_ipodLibrary is null || _ipodDevice?.LibraryRoot is null) return;
+        var paths = tracks.Select(t => t.FilePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var keys = _ipodLibrary.Tracks.Where(t => t.IsPodcast && paths.Contains(t.FilePath)).Select(t => t.Key).ToHashSet();
+        UnsyncTracks(tracks, podcastsOnly: true, onRemoved: () =>
+        {
+            foreach (var show in _podcasts)
+                foreach (var episode in show.Episodes)
+                    if (keys.Contains(PodcastEpisodeKey(show, episode))) episode.ExcludeFromIpod = true;
+            PodcastStore.Save(_podcasts);
+        });
     }
 }

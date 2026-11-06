@@ -54,12 +54,13 @@ public static class IpodWriteService
         IProgress<(int done, int total, string message)>? progress = null,
         CancellationToken token = default,
         string? deviceId = null,
-        bool mirror = false)
+        bool mirror = false,
+        bool mirrorPodcasts = false)
     {
         var eligible = tracks.Where(t => IsSyncable(t.FilePath) || IpodTranscoder.CanTranscode(t.FilePath)).ToList();
         var skipped = tracks.Count - eligible.Count;
-        if (eligible.Count == 0 && !mirror) return new IpodSyncResult(0, 0, skipped, null);
-        Log.Info($"iPod sync: {eligible.Count} eligible track(s), {skipped} skipped, mirror {mirror}, root {root}");
+        if (eligible.Count == 0 && !mirror && !mirrorPodcasts) return new IpodSyncResult(0, 0, skipped, null);
+        Log.Info($"iPod sync: {eligible.Count} eligible track(s), {skipped} skipped, mirror music {mirror}, mirror podcasts {mirrorPodcasts}, root {root}");
 
         IPod ipod;
         try { ipod = IpodReader.Open(root); ipod.AssertIsWritable(); }
@@ -79,20 +80,22 @@ public static class IpodWriteService
 
             // Remove first, so space freed by songs deleted from the library
             // is available for the ones being added.
-            if (mirror)
+            if (mirror || mirrorPodcasts)
             {
-                progress?.Report((0, Math.Max(1, eligible.Count), "Removing songs no longer in the library"));
+                progress?.Report((0, Math.Max(1, eligible.Count), "Removing items no longer in the library"));
                 var keep = LibraryKeys(tracks);
                 var orphans = new List<CwTrack>();
                 foreach (var t in ipod.Tracks)
-                    if (!IsPodcast(t) && !keep.Contains(DeviceKey(t))) orphans.Add(t);
+                    if ((IsPodcast(t) ? mirrorPodcasts : mirror) && !keep.Contains(DeviceKey(t))) orphans.Add(t);
+                if (orphans.Count > 0 && string.IsNullOrEmpty(backup))
+                    throw new IOException("Could not back up the iPod database before removing tracks.");
                 foreach (var orphan in orphans)
                 {
                     token.ThrowIfCancellationRequested();
                     if (ipod.Tracks.Remove(orphan)) removed++;
                 }
                 if (removed > 0) changedDb = true;
-                Log.Info($"iPod sync: mirror removed {removed} of {orphans.Count} on-device song(s) not in the library");
+                Log.Info($"iPod sync: mirror removed {removed} of {orphans.Count} on-device track(s) not in the library");
             }
 
             var byKey = BuildKeyIndex(ipod);
@@ -418,7 +421,7 @@ public static class IpodWriteService
         }
     }
 
-    public static IpodSyncResult Remove(string root, IReadOnlyCollection<string> absoluteFilePaths)
+    public static IpodSyncResult Remove(string root, IReadOnlyCollection<string> absoluteFilePaths, bool podcastsOnly = false)
     {
         var targets = absoluteFilePaths
             .Where(p => !string.IsNullOrWhiteSpace(p))
@@ -443,8 +446,10 @@ public static class IpodWriteService
 
             var toRemove = new List<CwTrack>();
             foreach (var track in ipod.Tracks)
-                if (targets.Contains(Path.GetFullPath(IpodReader.ResolvePath(root, track.FilePath))))
+                if ((!podcastsOnly || IsPodcast(track)) && targets.Contains(Path.GetFullPath(IpodReader.ResolvePath(root, track.FilePath))))
                     toRemove.Add(track);
+            if (podcastsOnly && toRemove.Count > 0 && string.IsNullOrEmpty(backup))
+                throw new IOException("Could not back up the iPod database before removing episodes.");
             foreach (var track in toRemove)
                 if (ipod.Tracks.Remove(track)) removed++;
             if (removed > 0) { ipod.SaveChanges(); DriveEject.Flush(root); }
@@ -471,7 +476,7 @@ public static class IpodWriteService
     /// needs a live local track to resolve a device path the way "Unsync
     /// from iPod" does — has nothing to compare against.
     /// </summary>
-    public static IpodSyncResult RemoveByKey(string root, IReadOnlyCollection<string> keys)
+    public static IpodSyncResult RemoveByKey(string root, IReadOnlyCollection<string> keys, bool podcastsOnly = false)
     {
         var targets = keys.Where(k => !string.IsNullOrWhiteSpace(k)).ToHashSet();
         if (targets.Count == 0) return new IpodSyncResult(0, 0, 0, null);
@@ -495,8 +500,10 @@ public static class IpodWriteService
             foreach (var track in ipod.Tracks)
             {
                 var key = IpodDbTrack.MakeKey(track.Title, track.Artist, track.Album, IpodReader.SafeInt(track.TrackNumber));
-                if (targets.Contains(key)) toRemove.Add(track);
+                if ((!podcastsOnly || IsPodcast(track)) && targets.Contains(key)) toRemove.Add(track);
             }
+            if (podcastsOnly && toRemove.Count > 0 && string.IsNullOrEmpty(backup))
+                throw new IOException("Could not back up the iPod database before removing episodes.");
             foreach (var track in toRemove)
                 if (ipod.Tracks.Remove(track)) removed++;
             if (removed > 0) { ipod.SaveChanges(); DriveEject.Flush(root); }

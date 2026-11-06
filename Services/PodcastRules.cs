@@ -18,7 +18,7 @@ public static class PodcastRules
     /// <c>LocalPath</c>, so files removed outside Sink are reconciled too.
     /// </summary>
     public static bool ShouldSyncToIpod(PodcastEpisode episode) =>
-        !episode.IsPlayed && episode.IsDownloaded;
+        !episode.IsPlayed && !episode.ExcludeFromIpod && episode.IsDownloaded;
 
     public static bool ShouldMarkPlayed(PodcastEpisode e)
     {

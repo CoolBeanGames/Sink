@@ -13,5 +13,8 @@
     <Compile Include="../../Services/Ipod/*.cs" Link="Ipod/%(Filename)%(Extension)" />
     <Compile Include="../../Models/Track.cs" Link="Models/Track.cs" />
     <Compile Include="../../Models/ITitleTrimmable.cs" Link="Models/ITitleTrimmable.cs" />
+    <Compile Include="../../Models/Podcast.cs" Link="Models/Podcast.cs" />
+    <Compile Include="../../Services/AppSettings.cs" Link="AppSettings.cs" />
+    <Compile Include="../../Services/Podcast*.cs" Link="Podcasts/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

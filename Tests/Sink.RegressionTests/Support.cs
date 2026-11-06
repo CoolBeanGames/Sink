@@ -11,7 +11,7 @@ namespace Sink.Services
     {
         public static void Info(string message) { }
         public static void Warn(string message) { }
-        public static void Error(string message, Exception? exception = null) { }
+        public static void Error(string message, Exception? exception = null) => Console.Error.WriteLine($"{message} {exception}");
     }
     public static class DriveEject
     {

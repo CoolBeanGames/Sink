@@ -105,15 +105,21 @@ public static class PodcastService
     public static void MergeFeed(Podcast existing, Podcast fresh)
     {
         existing.Title = fresh.Title;
+        existing.FeedUrl = fresh.FeedUrl;
         existing.Author = fresh.Author;
         existing.Description = fresh.Description;
         existing.ArtworkUrl = fresh.ArtworkUrl ?? existing.ArtworkUrl;
 
         var byGuid = existing.Episodes.ToDictionary(e => e.EpisodeGuid, e => e);
+        var recovered = existing.Episodes.Where(e => e.EpisodeGuid.StartsWith("download:", StringComparison.Ordinal))
+            .ToLookup(e => Path.GetFileName(e.LocalPath), StringComparer.OrdinalIgnoreCase);
         foreach (var episode in fresh.Episodes)
         {
-            if (byGuid.TryGetValue(episode.EpisodeGuid, out var have))
+            var have = byGuid.GetValueOrDefault(episode.EpisodeGuid)
+                ?? recovered[DownloadFileName(episode)].FirstOrDefault(e => e.EpisodeGuid.StartsWith("download:", StringComparison.Ordinal));
+            if (have is not null)
             {
+                have.EpisodeGuid = episode.EpisodeGuid;
                 have.Title = episode.Title;
                 have.Description = episode.Description;
                 have.Published = episode.Published;
@@ -134,8 +140,7 @@ public static class PodcastService
         PodcastEpisode episode, string directory, IProgress<double>? progress, CancellationToken token = default)
     {
         Directory.CreateDirectory(directory);
-        var ext = SafeExtension(episode.AudioUrl);
-        var path = System.IO.Path.Combine(directory, Sanitize($"{episode.EpisodeNumber:D4} - {episode.Title}") + ext);
+        var path = Path.Combine(directory, DownloadFileName(episode));
         if (File.Exists(path))
         {
             progress?.Report(1);
@@ -147,43 +152,65 @@ public static class PodcastService
         var total = response.Content.Headers.ContentLength ?? -1;
 
         await using var source = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
-        await using var dest = File.Create(path);
+        // A folder scan must not pick up an episode whose transfer is still running.
+        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".part";
         var buffer = new byte[81920];
         long read = 0;
         int n;
         var lastReported = 0d;
         var lastReportAt = Stopwatch.GetTimestamp();
-        while ((n = await source.ReadAsync(buffer, token).ConfigureAwait(false)) > 0)
+        try
         {
-            await dest.WriteAsync(buffer.AsMemory(0, n), token).ConfigureAwait(false);
-            read += n;
-            if (total > 0)
+            await using (var dest = File.Create(temporary))
             {
-                var value = Math.Clamp((double)read / total, 0, 1);
-                // Large episodes can produce thousands of 80 KB reads. Posting
-                // every one to WPF's dispatcher makes the app feel frozen even
-                // though the transfer itself is healthy, so cap UI reports at
-                // roughly eight per second (while still reporting meaningful
-                // one-percent jumps immediately).
-                if (value - lastReported >= 0.01
-                    || Stopwatch.GetElapsedTime(lastReportAt) >= TimeSpan.FromMilliseconds(125))
+                while ((n = await source.ReadAsync(buffer, token).ConfigureAwait(false)) > 0)
                 {
-                    progress?.Report(value);
-                    lastReported = value;
-                    lastReportAt = Stopwatch.GetTimestamp();
+                    await dest.WriteAsync(buffer.AsMemory(0, n), token).ConfigureAwait(false);
+                    read += n;
+                    if (total <= 0) continue;
+                    var value = Math.Clamp((double)read / total, 0, 1);
+                    // Limit UI reports during large transfers.
+                    if (value - lastReported >= 0.01
+                        || Stopwatch.GetElapsedTime(lastReportAt) >= TimeSpan.FromMilliseconds(125))
+                    {
+                        progress?.Report(value);
+                        lastReported = value;
+                        lastReportAt = Stopwatch.GetTimestamp();
+                    }
                 }
             }
+            if (read == 0) throw new IOException("The podcast download was empty.");
+            File.Move(temporary, path);
+        }
+        finally
+        {
+            try { File.Delete(temporary); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         }
         progress?.Report(1);
         return path;
     }
+
+    internal static string DownloadFileName(PodcastEpisode episode) =>
+        DownloadFileStem(episode.EpisodeNumber, episode.Title) + SafeExtension(episode.AudioUrl);
+
+    internal static string DownloadFileStem(int number, string title) => Sanitize($"{number:D4} - {title}");
+
+    internal static string ShowFolderName(string title)
+    {
+        foreach (var c in Path.GetInvalidFileNameChars()) title = title.Replace(c, '_');
+        return title.Trim();
+    }
+
+    internal static bool IsAudioExtension(string extension) =>
+        extension.ToLowerInvariant() is ".mp3" or ".m4a" or ".aac" or ".ogg" or ".opus" or ".wav";
 
     private static string SafeExtension(string url)
     {
         try
         {
             var ext = System.IO.Path.GetExtension(new Uri(url).AbsolutePath);
-            return ext is ".mp3" or ".m4a" or ".aac" or ".ogg" or ".opus" or ".wav" ? ext : ".mp3";
+            return IsAudioExtension(ext) ? ext : ".mp3";
         }
         catch { return ".mp3"; }
     }
