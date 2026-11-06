@@ -24,6 +24,7 @@ public static class StreamripToolManager
 
     private const string UvLatestApi = "https://api.github.com/repos/astral-sh/uv/releases/latest";
     private static readonly SemaphoreSlim Gate = new(1, 1);
+    private static readonly object ConfigLock = new();
     private static readonly HttpClient Http = CreateClient();
 
     private static HttpClient CreateClient()
@@ -35,40 +36,87 @@ public static class StreamripToolManager
 
     public static async Task EnsureAsync(IProgress<string> status, CancellationToken token = default)
     {
-        if (Present) { PatchDeezerCdn(); status.Report("Streamrip is ready"); return; }
-
         await Gate.WaitAsync(token).ConfigureAwait(false);
         try
         {
-            if (Present) { PatchDeezerCdn(); status.Report("Streamrip is ready"); return; }
-            Directory.CreateDirectory(Root);
-
-            if (!File.Exists(UvPath))
-                await InstallUvAsync(status, token).ConfigureAwait(false);
-
-            status.Report("Installing Streamrip and its managed Python runtime…");
-            var (exit, stdout, stderr) = await RunUvAsync(
-                ["--no-progress", "tool", "install", "--python", "3.12", "streamrip"], token).ConfigureAwait(false);
-            if (exit != 0 || !File.Exists(RipPath))
+            if (!Present)
             {
-                var reason = FirstLine(stderr) ?? FirstLine(stdout) ?? "uv did not create rip.exe";
-                throw new InvalidOperationException($"Could not install Streamrip: {reason}");
+                Directory.CreateDirectory(Root);
+                if (!File.Exists(UvPath))
+                    await InstallUvAsync(status, token).ConfigureAwait(false);
+
+                status.Report("Installing Streamrip and its managed Python runtime…");
+                var (exit, stdout, stderr) = await RunToolAsync(UvPath,
+                    ["--no-progress", "tool", "install", "--python", "3.12", "streamrip"], token).ConfigureAwait(false);
+                if (exit != 0 || !File.Exists(RipPath))
+                {
+                    var reason = FirstLine(stderr) ?? FirstLine(stdout) ?? "uv did not create rip.exe";
+                    throw new InvalidOperationException($"Could not install Streamrip: {reason}");
+                }
             }
+            await EnsureConfigAsync(ConfigPath, token).ConfigureAwait(false);
+            PatchDeezerCdn();
             status.Report("Streamrip ready");
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException or IOException
                                   or InvalidDataException or JsonException or InvalidOperationException)
         {
             status.Report($"Could not set up Streamrip: {e.Message}");
-            try { Directory.Delete(Root, true); } catch { }
             throw;
         }
         finally
         {
             Gate.Release();
         }
+    }
 
-        PatchDeezerCdn();
+    private static async Task EnsureConfigAsync(string path, CancellationToken token)
+    {
+        lock (ConfigLock)
+        {
+            if (ReadIncompleteConfig(path) is null) return;
+        }
+
+        var temporaryPath = path + "." + Guid.NewGuid().ToString("N") + ".toml";
+        try
+        {
+            // Streamrip generates defaults for the installed version when the path is new.
+            var (exit, stdout, stderr) = await RunToolAsync(RipPath,
+                ["--config-path", temporaryPath, "config", "path"], token).ConfigureAwait(false);
+            if (exit != 0 || !File.Exists(temporaryPath)
+                || stdout.Contains("Error loading config from", StringComparison.OrdinalIgnoreCase)
+                || stderr.Contains("Error loading config from", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Streamrip could not create its Deezer configuration.");
+
+            lock (ConfigLock)
+            {
+                token.ThrowIfCancellationRequested();
+                // Settings may have saved a new login while the tool was running.
+                var legacy = ReadIncompleteConfig(path);
+                if (legacy is null) return;
+                if (legacy.Length == 2)
+                {
+                    var lines = File.ReadAllLines(temporaryPath).ToList();
+                    UpdateArlLine(lines, legacy[1]);
+                    File.WriteAllLines(temporaryPath, lines);
+                }
+                File.Move(temporaryPath, path, overwrite: true);
+            }
+        }
+        finally
+        {
+            try { File.Delete(temporaryPath); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+    }
+
+    // Older Sink builds wrote just this two-line config when saving Settings before the first download.
+    private static string[]? ReadIncompleteConfig(string path)
+    {
+        if (!File.Exists(path)) return [];
+        var lines = File.ReadLines(path).Select(line => line.Trim()).Where(line => line.Length > 0).ToArray();
+        if (lines.Length == 0) return lines;
+        return lines.Length == 2 && lines[0] == "[deezer]" && IsArlLine(lines[1]) ? lines : null;
     }
 
     private static void PatchDeezerCdn()
@@ -218,11 +266,12 @@ public static class StreamripToolManager
         return null;
     }
 
-    private static async Task<(int Exit, string Stdout, string Stderr)> RunUvAsync(
-        IReadOnlyList<string> arguments, CancellationToken token)
+    internal static async Task<(int Exit, string Stdout, string Stderr)> RunToolAsync(
+        string executable, IReadOnlyList<string> arguments, CancellationToken token)
     {
-        var psi = new ProcessStartInfo(UvPath)
+        var psi = new ProcessStartInfo(executable)
         {
+            RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -233,7 +282,8 @@ public static class StreamripToolManager
         ApplyManagedEnvironment(psi);
         foreach (var argument in arguments) psi.ArgumentList.Add(argument);
 
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Could not start the Streamrip installer");
+        using var process = Process.Start(psi) ?? throw new InvalidOperationException($"Could not start {Path.GetFileName(executable)}");
+        process.StandardInput.Close();
         var stdout = process.StandardOutput.ReadToEndAsync(token);
         var stderr = process.StandardError.ReadToEndAsync(token);
         try
@@ -252,7 +302,7 @@ public static class StreamripToolManager
         if (!File.Exists(ConfigPath)) return "";
         foreach (var line in File.ReadLines(ConfigPath))
         {
-            if (line.TrimStart().StartsWith("arl", StringComparison.OrdinalIgnoreCase))
+            if (IsArlLine(line))
             {
                 var parts = line.Split('=', 2);
                 if (parts.Length == 2)
@@ -266,49 +316,50 @@ public static class StreamripToolManager
 
     public static void SetDeezerArl(string arl)
     {
-        if (!File.Exists(ConfigPath))
+        lock (ConfigLock)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
-            File.WriteAllText(ConfigPath, "[deezer]\narl = \"" + arl + "\"\n");
+            var exists = File.Exists(ConfigPath);
+            if (!exists && string.IsNullOrWhiteSpace(arl)) return;
+            Directory.CreateDirectory(Root);
+            var lines = exists ? File.ReadAllLines(ConfigPath).ToList() : new List<string>();
+            UpdateArlLine(lines, "arl = \"" + arl + "\"");
+            var temporaryPath = ConfigPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllLines(temporaryPath, lines);
+                File.Move(temporaryPath, ConfigPath, overwrite: true);
+            }
+            finally
+            {
+                try { File.Delete(temporaryPath); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            }
+        }
+    }
+
+    private static void UpdateArlLine(List<string> lines, string arlLine)
+    {
+        var section = lines.FindIndex(line => line.Trim() == "[deezer]");
+        if (section < 0)
+        {
+            if (lines.Count > 0) lines.Add("");
+            lines.Add("[deezer]");
+            lines.Add(arlLine);
             return;
         }
+        for (var i = section + 1; i < lines.Count && !lines[i].TrimStart().StartsWith('['); i++)
+        {
+            if (!IsArlLine(lines[i])) continue;
+            lines[i] = arlLine;
+            return;
+        }
+        lines.Insert(section + 1, arlLine);
+    }
 
-        var lines = File.ReadAllLines(ConfigPath).ToList();
-        var deezerSectionIdx = -1;
-        var arlLineIdx = -1;
-        for (var i = 0; i < lines.Count; i++)
-        {
-            var trimmed = lines[i].Trim();
-            if (trimmed.Equals("[deezer]", StringComparison.OrdinalIgnoreCase))
-                deezerSectionIdx = i;
-            else if (deezerSectionIdx != -1 && trimmed.StartsWith("[") && trimmed.EndsWith("]"))
-            {
-                if (arlLineIdx == -1) deezerSectionIdx = -1;
-            }
-            else if (deezerSectionIdx != -1 && trimmed.StartsWith("arl", StringComparison.OrdinalIgnoreCase))
-            {
-                var beforeEq = lines[i].Split('=')[0];
-                if (beforeEq.Trim().Equals("arl", StringComparison.OrdinalIgnoreCase))
-                    arlLineIdx = i;
-            }
-        }
-
-        if (arlLineIdx != -1)
-        {
-            lines[arlLineIdx] = "arl = \"" + arl + "\"";
-        }
-        else if (deezerSectionIdx != -1)
-        {
-            lines.Insert(deezerSectionIdx + 1, "arl = \"" + arl + "\"");
-        }
-        else
-        {
-            lines.Add("");
-            lines.Add("[deezer]");
-            lines.Add("arl = \"" + arl + "\"");
-        }
-
-        File.WriteAllLines(ConfigPath, lines);
+    private static bool IsArlLine(string line)
+    {
+        var equals = line.IndexOf('=');
+        return equals >= 0 && line.AsSpan(0, equals).Trim().SequenceEqual("arl");
     }
     private static string? FirstLine(string text) =>
         text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();

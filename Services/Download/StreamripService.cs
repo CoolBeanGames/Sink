@@ -71,7 +71,8 @@ public static partial class StreamripService
                         "--no-progress",
                         "url", track.Url,
                     };
-                    var (exit, stdout, stderr) = await RunRipAsync(args, token).ConfigureAwait(false);
+                    var (exit, stdout, stderr) = await StreamripToolManager.RunToolAsync(
+                        StreamripToolManager.RipPath, args, token).ConfigureAwait(false);
                     var source = Directory.EnumerateFiles(itemDirectory, "*", SearchOption.AllDirectories)
                         .Where(path => DownloadService.AudioExtensions.Contains(Path.GetExtension(path)))
                         .OrderByDescending(File.GetLastWriteTimeUtc)
@@ -282,40 +283,6 @@ public static partial class StreamripService
             AudioFormat.Wav => ["-c:a", "pcm_s16le"],
             _ => ["-c:a", "libmp3lame", "-b:a", bitrate],
         };
-    }
-
-    private static async Task<(int Exit, string Stdout, string Stderr)> RunRipAsync(
-        IReadOnlyList<string> arguments, CancellationToken token)
-    {
-        if (!File.Exists(StreamripToolManager.RipPath))
-            throw new InvalidOperationException("Streamrip is not installed yet");
-        var psi = new ProcessStartInfo(StreamripToolManager.RipPath)
-        {
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
-        StreamripToolManager.ApplyManagedEnvironment(psi);
-        foreach (var argument in arguments) psi.ArgumentList.Add(argument);
-
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("Could not start Streamrip");
-        process.StandardInput.Close();
-        var stdout = process.StandardOutput.ReadToEndAsync(token);
-        var stderr = process.StandardError.ReadToEndAsync(token);
-        try
-        {
-            await process.WaitForExitAsync(token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { }
-            throw;
-        }
-        return (process.ExitCode, await stdout.ConfigureAwait(false), await stderr.ConfigureAwait(false));
     }
 
     private static string? StreamripError(string stderr, string stdout)

@@ -1,3 +1,7 @@
+# Sink 1.0.60
+
+- Fix Deezer downloads on fresh installs that saved Settings before downloading. Sink now initializes Streamrip's full configuration and repairs older incomplete files while preserving the saved Deezer login.
+
 # Sink 1.0.59
 
 - Right-click an album in download search to open its full track list, with individual include checkboxes and Download selected.
