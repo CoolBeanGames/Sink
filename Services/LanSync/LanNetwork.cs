@@ -32,8 +32,9 @@ internal sealed class LanNetwork : IDisposable
     private readonly UdpClient _discovery = new(AddressFamily.InterNetwork);
     private readonly (uint Address, uint Mask)[] _networks;
     public LanPeer Self { get; }
+    internal int DiscoveryListenPort => ((IPEndPoint)_discovery.Client.LocalEndPoint!).Port;
 
-    public LanNetwork(Guid id, string name)
+    public LanNetwork(Guid id, string name, int discoveryPort = DiscoveryPort)
     {
         _networks = NetworkInterface.GetAllNetworkInterfaces()
             .Where(nic => nic.OperationalStatus == OperationalStatus.Up && nic.NetworkInterfaceType != NetworkInterfaceType.Loopback)
@@ -44,7 +45,7 @@ internal sealed class LanNetwork : IDisposable
         {
             _listener.Start(4);
             Self = new(id, name, ((IPEndPoint)_listener.LocalEndpoint).Port);
-            _discovery.Client.Bind(new IPEndPoint(IPAddress.Any, DiscoveryPort));
+            _discovery.Client.Bind(new IPEndPoint(IPAddress.Any, discoveryPort));
         }
         catch
         {

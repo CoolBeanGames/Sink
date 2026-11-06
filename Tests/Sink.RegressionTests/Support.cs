@@ -23,5 +23,6 @@ namespace Sink.Services.Download
     public static class ToolManager
     {
         public static string FfmpegPath => Path.Combine(Sink.Services.LibraryStore.Directory, "unused-ffmpeg.exe");
+        public static string YtDlpPath => Path.Combine(Sink.Services.LibraryStore.Directory, "unused-yt-dlp.exe");
     }
 }

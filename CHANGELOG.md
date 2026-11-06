@@ -1,3 +1,8 @@
+# Sink 1.0.65
+
+- Rank Download Search by relevance. Put the exact song on the requested artist's album first, followed by the rest of that album, exact song-title matches, other results from the requested artist, and partial matches.
+- Expand the matching album into its tracks, and keep album editions distinct when combining catalog and video results.
+
 # Sink 1.0.64
 
 - Added **Sync with another PC** in Settings. Open it on both PCs to discover Sink installs on the local network and pair them over an encrypted connection.

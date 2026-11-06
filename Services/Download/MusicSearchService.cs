@@ -30,7 +30,6 @@ public sealed class MusicSearchResult : INotifyPropertyChanged
     public string DeezerUrl { get; internal set; } = "";
     public int TrackCount { get; internal set; }
     internal long DeezerId { get; init; }
-    internal int MatchBonus { get; set; }
 
     /// <summary>
     /// Spotify's anonymous search endpoint is no longer available. Sink's
@@ -76,8 +75,6 @@ public sealed class MusicSearchResult : INotifyPropertyChanged
         HasYouTube ? "YOUTUBE" : null,
     }.Where(s => s is not null));
 
-    internal int ProviderCount => (HasDeezer ? 1 : 0) + (HasSpotify ? 1 : 0) + (HasYouTube ? 1 : 0);
-
     internal void MergeFrom(MusicSearchResult other)
     {
         if (string.IsNullOrWhiteSpace(Artist)) Artist = other.Artist;
@@ -121,7 +118,8 @@ public static class MusicSearchService
     private static readonly Regex Noise = new(
         @"\s*[\[(](?:official\s+(?:music\s+)?video|audio|lyrics?|visuali[sz]er)[^\])]*[\])]\s*",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex KeyChars = new(@"[^a-z0-9]+", RegexOptions.Compiled);
+    private static readonly Regex KeyChars = new(@"[^\p{L}\p{Nd}]+", RegexOptions.Compiled);
+    private static readonly Regex TrackSubtitle = new(@"\s+[\[(][^\])]+[\])]\s*$", RegexOptions.Compiled);
 
     private sealed record ProviderResult<T>(T Value, string? Error = null);
     private sealed record YouTubeChannel(string Name, string Url);
@@ -139,76 +137,70 @@ public static class MusicSearchService
     public static async Task<MusicSearchResponse> SearchAsync(
         string trackName, string albumName, string artistName, CancellationToken token = default)
     {
-        var combinedQuery = string.Join(" ", new[] { trackName, albumName, artistName }.Where(s => !string.IsNullOrWhiteSpace(s)));
-        
-        var deezerQuery = combinedQuery;
+        trackName = trackName.Trim();
+        albumName = albumName.Trim();
+        artistName = artistName.Trim();
+        var combinedQuery = JoinTerms(trackName, albumName, artistName);
+        if (combinedQuery.Length == 0) return Response([], [], "Enter a song, album, or artist to search.");
 
-        var ytParts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(trackName)) ytParts.Add(trackName.Trim());
-        if (!string.IsNullOrWhiteSpace(albumName)) ytParts.Add(albumName.Trim());
-        if (!string.IsNullOrWhiteSpace(artistName)) ytParts.Add(artistName.Trim());
-        var ytQuery = string.Join(" ", ytParts);
+        Task<ProviderResult<T>> Find<T>(string name, Func<Task<T>> search, T fallback, bool enabled = true) =>
+            enabled ? SafeProviderAsync(name, search, fallback, token) : Task.FromResult(new ProviderResult<T>(fallback));
+        IReadOnlyList<MusicSearchResult> empty = [];
+        var emptyAlbums = (Albums: new List<MusicSearchResult>(), Artists: new List<MusicSearchResult>());
+        var emptyTracks = (Tracks: new List<MusicSearchResult>(), Artists: new List<MusicSearchResult>(), Albums: new List<MusicSearchResult>());
+        var emptyYouTube = new YouTubeSearchData([], []);
+        var titleSearch = trackName.Length > 0 && combinedQuery != trackName;
+        var artistQuery = artistName.Length > 0 ? artistName : combinedQuery;
+        var albumQuery = albumName.Length > 0 ? JoinTerms(albumName, artistName) : combinedQuery;
 
-        if (string.IsNullOrWhiteSpace(deezerQuery)) deezerQuery = " ";
-        if (string.IsNullOrWhiteSpace(ytQuery)) ytQuery = " ";
+        var artistsTask = Find("Deezer artists", () => SearchDeezerArtistsAsync(artistQuery, token), empty);
+        var albumsTask = Find("Deezer albums", () => SearchDeezerAlbumsAsync(albumQuery, token), emptyAlbums);
+        var tracksTask = Find("Deezer tracks", () => SearchDeezerTracksAsync(combinedQuery, token), emptyTracks);
+        var sameTitleTask = Find("Deezer song titles", () => SearchDeezerTracksAsync(trackName, token), emptyTracks, titleSearch);
+        var youtubeTask = Find("YouTube", () => SearchYouTubeAsync(combinedQuery, trackName, token), emptyYouTube);
+        var youtubeTitleTask = Find("YouTube", () => SearchYouTubeAsync(trackName, trackName, token), emptyYouTube, titleSearch);
 
-        var artistsTask = SafeProviderAsync(
-            "Deezer artists", () => SearchDeezerArtistsAsync(deezerQuery, token),
-            (IReadOnlyList<MusicSearchResult>)[]);
-        var albumsTask = SafeProviderAsync(
-            "Deezer albums", () => SearchDeezerAlbumsAsync(deezerQuery, albumName, token),
-            (Albums: new List<MusicSearchResult>(), Artists: new List<MusicSearchResult>()));
-        var tracksTask = SafeProviderAsync(
-            "Deezer tracks", () => SearchDeezerTracksAsync(deezerQuery, trackName, token),
-            (Tracks: new List<MusicSearchResult>(), Artists: new List<MusicSearchResult>(), Albums: new List<MusicSearchResult>()));
-        var youtubeTask = SafeProviderAsync(
-            "YouTube", () => SearchYouTubeAsync(ytQuery, token), new YouTubeSearchData([], []));
-
-        await Task.WhenAll(artistsTask, albumsTask, tracksTask, youtubeTask).ConfigureAwait(false);
+        await Task.WhenAll(artistsTask, albumsTask, tracksTask, sameTitleTask, youtubeTask, youtubeTitleTask).ConfigureAwait(false);
         token.ThrowIfCancellationRequested();
 
         var artistsResult = await artistsTask.ConfigureAwait(false);
         var albumsResult = await albumsTask.ConfigureAwait(false);
         var tracksResult = await tracksTask.ConfigureAwait(false);
+        var sameTitleResult = await sameTitleTask.ConfigureAwait(false);
         var youtubeResult = await youtubeTask.ConfigureAwait(false);
-        var artists = artistsResult.Value.ToList();
-        var albums = albumsResult.Value.Albums;
-        var tracks = tracksResult.Value.Tracks;
-        var youtube = youtubeResult.Value;
-        var errors = new List<string?>
-        {
-            artistsResult.Error, albumsResult.Error, tracksResult.Error, youtubeResult.Error,
-        };
+        var youtubeTitleResult = await youtubeTitleTask.ConfigureAwait(false);
+        var artists = artistsResult.Value.Concat(albumsResult.Value.Artists)
+            .Concat(tracksResult.Value.Artists).Concat(sameTitleResult.Value.Artists).DistinctBy(a => a.DeezerId).ToList();
+        var albums = albumsResult.Value.Albums.Concat(tracksResult.Value.Albums)
+            .Concat(sameTitleResult.Value.Albums).DistinctBy(a => a.DeezerId).ToList();
 
-        foreach (var a in albumsResult.Value.Artists)
-        {
-            if (!artists.Any(x => x.DeezerId == a.DeezerId)) artists.Add(a);
-        }
-        foreach (var a in tracksResult.Value.Artists)
-        {
-            if (!artists.Any(x => x.DeezerId == a.DeezerId)) artists.Add(a);
-        }
-        foreach (var a in tracksResult.Value.Albums)
-        {
-            if (!albums.Any(x => x.DeezerId == a.DeezerId)) albums.Add(a);
-        }
+        var exactArtist = artists.FirstOrDefault(a => Equivalent(artistName, a.Title));
+        var discographyTask = Find("Deezer discography", () => GetArtistAlbumsAsync(exactArtist!.DeezerId, exactArtist.Title, token),
+            empty, exactArtist is not null);
+        bool IsTargetAlbum(MusicSearchResult a) => Equivalent(albumName, a.Title)
+            && (artistName.Length == 0 || Equivalent(artistName, a.Artist));
+        var exactAlbum = albums.FirstOrDefault(IsTargetAlbum);
+        if (exactAlbum is null && albumName.Length > 0)
+            exactAlbum = (await discographyTask.ConfigureAwait(false)).Value.FirstOrDefault(IsTargetAlbum);
+        var albumTracksTask = Find("Deezer album tracks", () => GetAlbumTracksAsync(exactAlbum!, token), empty, exactAlbum is not null);
+        var discography = await discographyTask.ConfigureAwait(false);
+        var albumTracks = await albumTracksTask.ConfigureAwait(false);
+        token.ThrowIfCancellationRequested();
 
-        foreach (var artist in artists) AttachMatchingChannel(artist, youtube.Channels);
+        var channels = youtubeResult.Value.Channels.Concat(youtubeTitleResult.Value.Channels).ToList();
+        foreach (var artist in artists) AttachMatchingChannel(artist, channels);
 
-        var generic = new List<MusicSearchResult>();
-        generic.AddRange(artists);
-        generic.AddRange(albums);
-        generic.AddRange(MergeTracks(tracks, youtube.Tracks, includeUnmatchedYouTube: true));
-
-        generic = generic
-            .OrderByDescending(x => CalculateMatchScore(trackName, albumName, artistName, combinedQuery, x))
-            .ThenBy(x => (int)x.Kind)
-            .Take(150)
-            .ToList();
-
-        return Response(generic, errors,
-            $"{generic.Count} catalog result{(generic.Count == 1 ? "" : "s")} across artists, albums, and tracks.");
+        var songs = MergeTracks(albumTracks.Value.Concat(tracksResult.Value.Tracks).Concat(sameTitleResult.Value.Tracks),
+            youtubeResult.Value.Tracks.Concat(youtubeTitleResult.Value.Tracks));
+        var ranked = RankResults(artists.Concat(albums.Concat(discography.Value).DistinctBy(a => a.DeezerId)).Concat(songs),
+            trackName, albumName, artistName).Take(150).ToList();
+        return Response(ranked,
+            [artistsResult.Error, albumsResult.Error, tracksResult.Error, sameTitleResult.Error,
+             youtubeResult.Error, youtubeTitleResult.Error, discography.Error, albumTracks.Error],
+            $"{ranked.Count} catalog result{(ranked.Count == 1 ? "" : "s")} across artists, albums, and tracks.");
     }
+
+    private static string JoinTerms(params string[] terms) => string.Join(" ", terms.Where(term => term.Length > 0));
 
     public static string SpotifyMatchUrl(MusicSearchResult result) =>
         "ytsearch1:" + string.Join(' ', new[] { result.Artist, result.Title }.Where(s => !string.IsNullOrWhiteSpace(s)));
@@ -243,10 +235,10 @@ public static class MusicSearchService
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList(), summary);
 
     private static async Task<ProviderResult<T>> SafeProviderAsync<T>(
-        string name, Func<Task<T>> search, T fallback)
+        string name, Func<Task<T>> search, T fallback, CancellationToken token)
     {
         try { return new ProviderResult<T>(await search().ConfigureAwait(false)); }
-        catch (OperationCanceledException) { throw; }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
             Log.Warn($"{name} music search failed: {ex.Message}");
@@ -276,7 +268,7 @@ public static class MusicSearchService
     }
 
     private static async Task<(List<MusicSearchResult> Albums, List<MusicSearchResult> Artists)> SearchDeezerAlbumsAsync(
-        string query, string targetQuery, CancellationToken token)
+        string query, CancellationToken token)
     {
         var albums = new List<MusicSearchResult>();
         var artists = new List<MusicSearchResult>();
@@ -284,15 +276,10 @@ public static class MusicSearchService
         using var doc = await GetJsonAsync(
             $"{DeezerApi}/search/album?limit=100&q={Uri.EscapeDataString(query)}", token).ConfigureAwait(false);
         
-        var matchTarget = string.IsNullOrWhiteSpace(targetQuery) ? query : targetQuery;
-        var hasExplicitTarget = !string.IsNullOrWhiteSpace(targetQuery);
-
         foreach (var item in ReadData(doc.RootElement))
         {
             var alb = AlbumResult(item);
             if (alb.DeezerId > 0) albums.Add(alb);
-
-            bool isExact = alb.Title.Equals(matchTarget, StringComparison.OrdinalIgnoreCase);
 
             if (item.TryGetProperty("artist", out var artToken))
             {
@@ -308,7 +295,6 @@ public static class MusicSearchService
                         Artist = name,
                         Artwork = Text(artToken, "picture_xl", Text(artToken, "picture_medium", "")),
                         DeezerUrl = $"https://www.deezer.com/artist/{aId}",
-                        MatchBonus = (isExact && hasExplicitTarget) ? 1100 : 0
                     });
                 }
             }
@@ -317,7 +303,7 @@ public static class MusicSearchService
     }
 
     private static async Task<(List<MusicSearchResult> Tracks, List<MusicSearchResult> Artists, List<MusicSearchResult> Albums)> SearchDeezerTracksAsync(
-        string query, string targetQuery, CancellationToken token)
+        string query, CancellationToken token)
     {
         var tracks = new List<MusicSearchResult>();
         var artists = new List<MusicSearchResult>();
@@ -326,15 +312,10 @@ public static class MusicSearchService
         using var doc = await GetJsonAsync(
             $"{DeezerApi}/search/track?limit=100&q={Uri.EscapeDataString(query)}", token).ConfigureAwait(false);
         
-        var matchTarget = string.IsNullOrWhiteSpace(targetQuery) ? query : targetQuery;
-        var hasExplicitTarget = !string.IsNullOrWhiteSpace(targetQuery);
-
         foreach (var item in ReadData(doc.RootElement))
         {
             var trk = TrackResult(item, "", "", "");
             if (trk.DeezerId > 0) tracks.Add(trk);
-
-            bool isExact = trk.Title.Equals(matchTarget, StringComparison.OrdinalIgnoreCase);
 
             if (item.TryGetProperty("artist", out var artToken))
             {
@@ -350,7 +331,6 @@ public static class MusicSearchService
                         Artist = name,
                         Artwork = Text(artToken, "picture_xl", Text(artToken, "picture_medium", "")),
                         DeezerUrl = $"https://www.deezer.com/artist/{aId}",
-                        MatchBonus = (isExact && hasExplicitTarget) ? 1100 : 0
                     });
                 }
             }
@@ -367,7 +347,6 @@ public static class MusicSearchService
                         Artist = trk.Artist,
                         Artwork = Text(albToken, "cover_xl", Text(albToken, "cover_medium", "")),
                         DeezerUrl = $"https://www.deezer.com/album/{aId}",
-                        MatchBonus = (isExact && hasExplicitTarget) ? 1050 : 0
                     });
                 }
             }
@@ -466,7 +445,7 @@ public static class MusicSearchService
     }
 
     private static async Task<YouTubeSearchData> SearchYouTubeAsync(
-        string query, CancellationToken token)
+        string query, string trackQuery, CancellationToken token)
     {
         if (!File.Exists(ToolManager.YtDlpPath))
             throw new InvalidOperationException("yt-dlp is still being installed");
@@ -513,7 +492,7 @@ public static class MusicSearchService
                 channelUrl = $"https://www.youtube.com/channel/{channelId}";
             if (channelUrl.Length > 0) channels.Add(new YouTubeChannel(channel, channelUrl));
 
-            var (artist, title) = ParseYouTubeTitle(Text(item, "title", "Untitled"), channel);
+            var (artist, title) = ParseYouTubeTitle(Text(item, "title", "Untitled"), channel, trackQuery);
             var url = Text(item, "url", "");
             if (!Uri.TryCreate(url, UriKind.Absolute, out _)) url = $"https://www.youtube.com/watch?v={id}";
             tracks.Add(new MusicSearchResult
@@ -531,25 +510,25 @@ public static class MusicSearchService
             channels.DistinctBy(c => c.Url, StringComparer.OrdinalIgnoreCase).ToList());
     }
 
-    private static IReadOnlyList<MusicSearchResult> MergeTracks(
+    internal static IReadOnlyList<MusicSearchResult> MergeTracks(
         IEnumerable<MusicSearchResult> deezer,
-        IEnumerable<MusicSearchResult> youtube,
-        bool includeUnmatchedYouTube)
+        IEnumerable<MusicSearchResult> youtube)
     {
-        var merged = new Dictionary<string, MusicSearchResult>(StringComparer.Ordinal);
-        foreach (var result in deezer) merged.TryAdd(ResultKey(result), result);
+        // Keep versions on different albums. Prefer the expanded target
+        // album when attaching a video with the same song and artist.
+        var merged = deezer.DistinctBy(result => (SongKey(result), Normalize(result.Album))).ToList();
+        var bySong = merged.ToLookup(SongKey);
+        var seenVideos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenSongs = new HashSet<(string Artist, string Title)>();
         foreach (var result in youtube)
         {
-            var key = ResultKey(result);
-            if (merged.TryGetValue(key, out var existing)) existing.MergeFrom(result);
-            else if (includeUnmatchedYouTube) merged[key] = result;
+            var key = SongKey(result);
+            if (!seenVideos.Add(result.YouTubeUrl) || !seenSongs.Add(key)) continue;
+            var match = bySong[key].FirstOrDefault();
+            if (match is not null) match.MergeFrom(result);
+            else merged.Add(result);
         }
-        return merged.Values
-            .OrderByDescending(r => r.ProviderCount)
-            .ThenByDescending(r => r.HasDeezer)
-            .ThenBy(r => r.Artist, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(r => r.Title, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        return merged;
     }
 
     private static void AttachMatchingChannel(
@@ -563,7 +542,7 @@ public static class MusicSearchService
         if (match is not null) artist.YouTubeUrl = match.Url;
     }
 
-    private static (string artist, string title) ParseYouTubeTitle(string raw, string channel)
+    internal static (string artist, string title) ParseYouTubeTitle(string raw, string channel, string trackQuery)
     {
         var title = Noise.Replace(raw, "").Trim();
         foreach (var separator in new[] { " - ", " – ", " — " })
@@ -575,94 +554,73 @@ public static class MusicSearchService
             var channelKey = Normalize(channel);
             if (Normalize(left) == channelKey) return (left, right);
             if (Normalize(right) == channelKey) return (right, left);
+            // A cover may credit the original artist in the video title.
+            // Keep the uploader as the artist when that credit doesn't match.
+            if (ExactTrackTitle(trackQuery, right)) return (channel, right);
+            if (ExactTrackTitle(trackQuery, left)) return (channel, left);
         }
         return (channel, title);
     }
 
-    private static int CalculateMatchScore(string trackQuery, string albumQuery, string artistQuery, string combinedQuery, MusicSearchResult result)
+    internal static IEnumerable<MusicSearchResult> RankResults(IEnumerable<MusicSearchResult> results,
+        string trackQuery, string albumQuery, string artistQuery)
     {
-        var title = result.Title.Trim();
-        var artist = result.Artist.Trim();
-        var combined = $"{result.Artist} {result.Title}".Trim();
-        var q = combinedQuery.Trim();
-
-        static int EvaluateField(string fieldValue, string targetQuery)
+        var hasTrack = !string.IsNullOrWhiteSpace(trackQuery);
+        var hasAlbum = !string.IsNullOrWhiteSpace(albumQuery);
+        var hasArtist = !string.IsNullOrWhiteSpace(artistQuery);
+        var words = KeyChars.Replace(JoinTerms(trackQuery, albumQuery, artistQuery).ToLowerInvariant(), " ")
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries).Distinct().ToArray();
+        return results.OrderBy(result =>
         {
-            if (string.IsNullOrWhiteSpace(targetQuery) || string.IsNullOrWhiteSpace(fieldValue)) return 0;
-            var t = fieldValue.Trim();
-            var qTarget = targetQuery.Trim();
-            if (t.Equals(qTarget, StringComparison.OrdinalIgnoreCase)) return 1000;
-            if (t.StartsWith(qTarget, StringComparison.OrdinalIgnoreCase)) return 900;
-            if (t.EndsWith(qTarget, StringComparison.OrdinalIgnoreCase)) return 800;
-            if (t.Contains(qTarget, StringComparison.OrdinalIgnoreCase)) return 700;
-            return 0;
-        }
+            var title = result.Kind == MusicSearchResultKind.Track ? result.Title : "";
+            var album = result.Kind == MusicSearchResultKind.Album ? result.Title : result.Album;
+            var artist = result.Kind == MusicSearchResultKind.Artist ? result.Title : result.Artist;
+            var exactTitle = ExactTrackTitle(trackQuery, title);
+            var exactAlbum = Equivalent(albumQuery, album);
+            var exactArtist = Equivalent(artistQuery, artist);
 
-        int baseScore = 0;
-        bool scoredFields = false;
+            // A score can break ties inside a tier, never lift a partial
+            // match above an exact match on the requested song or album.
+            var tier = 4;
+            if (exactTitle && (!hasAlbum || exactAlbum) && (!hasArtist || exactArtist)) tier = 0;
+            else if (exactAlbum && (!hasArtist || exactArtist)) tier = 1;
+            else if (exactTitle) tier = 2;
+            else if (exactArtist) tier = 3;
 
-        if (result.Kind == MusicSearchResultKind.Track && !string.IsNullOrWhiteSpace(trackQuery))
-        {
-            baseScore += EvaluateField(title, trackQuery);
-            scoredFields = true;
-        }
-        else if (result.Kind == MusicSearchResultKind.Album && !string.IsNullOrWhiteSpace(albumQuery))
-        {
-            baseScore += EvaluateField(title, albumQuery);
-            scoredFields = true;
-        }
-
-        if (!string.IsNullOrWhiteSpace(artistQuery))
-        {
-            int artistScore = EvaluateField(artist, artistQuery);
-            if (result.Kind == MusicSearchResultKind.Artist)
+            var kindOrder = 0;
+            if (tier == 1)
             {
-                var titleArtistScore = EvaluateField(title, artistQuery);
-                if (titleArtistScore > artistScore) artistScore = titleArtistScore;
+                var prefer = hasTrack ? MusicSearchResultKind.Track : MusicSearchResultKind.Album;
+                kindOrder = result.Kind == prefer ? 0 : 1;
             }
-            baseScore += artistScore;
-            scoredFields = true;
-        }
+            else if (tier == 3 && !hasTrack && !hasAlbum)
+                kindOrder = result.Kind == MusicSearchResultKind.Artist ? 0 : 1;
 
-        if (!scoredFields)
-        {
-            bool Matches(Func<string, string, bool> condition) =>
-                condition(title, q) || condition(combined, q);
-
-            if (Matches((t, s) => t.Equals(s, StringComparison.OrdinalIgnoreCase))) baseScore = 1000;
-            else if (Matches((t, s) => t.StartsWith(s, StringComparison.OrdinalIgnoreCase))) baseScore = 900;
-            else if (Matches((t, s) => t.EndsWith(s, StringComparison.OrdinalIgnoreCase))) baseScore = 800;
-            else if (Matches((t, s) => t.Contains(s, StringComparison.OrdinalIgnoreCase))) baseScore = 700;
-        }
-
-        var words = KeyChars.Replace(q.ToLowerInvariant(), " ")
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        
-        int wordBonus = 0;
-        if (words.Length > 0)
-        {
-            var searchableTitle = title.ToLowerInvariant();
-            var searchableArtist = artist.ToLowerInvariant();
-            foreach (var word in words)
-            {
-                if (searchableTitle.Contains(word) || searchableArtist.Contains(word)) wordBonus++;
-            }
-        }
-
-        if (result.MatchBonus > baseScore)
-            baseScore = result.MatchBonus;
-
-        // This used to synchronously append one detailed log line for every
-        // candidate. Broad searches can score hundreds of candidates, turning
-        // ranking into hundreds of serialized disk writes. Provider failures
-        // remain logged; routine ranking stays in memory.
-        return baseScore + wordBonus;
+            var fieldScore = FieldScore(trackQuery, title) + FieldScore(albumQuery, album) + FieldScore(artistQuery, artist);
+            var searchable = $"{result.Title} {album} {artist}";
+            var wordCount = words.Count(word => searchable.Contains(word, StringComparison.OrdinalIgnoreCase));
+            return (tier, kindOrder, -fieldScore, -wordCount, !result.HasDeezer);
+        });
     }
 
-    private static bool Equivalent(string left, string right) => Normalize(left) == Normalize(right);
+    private static int FieldScore(string query, string field)
+    {
+        var target = Normalize(query);
+        if (target.Length == 0) return 0;
+        var value = Normalize(field);
+        if (value == target) return 4;
+        if (value.StartsWith(target, StringComparison.Ordinal)) return 3;
+        return value.Contains(target, StringComparison.Ordinal) ? 2 : 0;
+    }
 
-    private static string ResultKey(MusicSearchResult result) =>
-        result.Kind + "|" + Normalize(result.Artist) + "|" + Normalize(result.Title);
+    private static bool ExactTrackTitle(string query, string title) => Equivalent(query, title)
+        || Equivalent(query, TrackSubtitle.Replace(title, ""));
+
+    private static bool Equivalent(string left, string right) =>
+        Normalize(left) is { Length: > 0 } key && key == Normalize(right);
+
+    private static (string Artist, string Title) SongKey(MusicSearchResult result) =>
+        (Normalize(result.Artist), Normalize(result.Title));
 
     private static string Normalize(string value) =>
         KeyChars.Replace(CleanChannel(value).ToLowerInvariant(), "");

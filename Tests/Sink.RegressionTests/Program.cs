@@ -225,6 +225,7 @@ try
         Check(ReflectStore.Load().Count == 4, "invalid Reflect history leaves the saved history intact");
     }
 
+    MusicSearchChecks.Run(Check);
     await LanSyncChecks.RunAsync(workspace, Check);
 
     if (args.Length == 1)

@@ -20,5 +20,6 @@
     <Compile Include="../../Services/ReflectStore.cs" Link="ReflectStore.cs" />
     <Compile Include="../../Services/LibraryData.cs" Link="LibraryData.cs" />
     <Compile Include="../../Services/LanSync/*.cs" Link="LanSync/%(Filename)%(Extension)" />
+    <Compile Include="../../Services/Download/MusicSearchService.cs" Link="Download/MusicSearchService.cs" />
   </ItemGroup>
 </Project>

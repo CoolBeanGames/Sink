@@ -141,11 +141,11 @@ internal static class LanSyncChecks
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         var token = timeout.Token;
-        using var network = new LanNetwork(store.Id, "Loopback Sink");
+        using var network = new LanNetwork(store.Id, "Loopback Sink", discoveryPort: 0);
         var advertisement = network.AdvertiseAsync(token);
         using (var discover = new UdpClient(AddressFamily.InterNetwork))
         {
-            await discover.SendAsync("Sink PC sync 1"u8.ToArray(), new IPEndPoint(IPAddress.Loopback, 45873), token);
+            await discover.SendAsync("Sink PC sync 1"u8.ToArray(), new IPEndPoint(IPAddress.Loopback, network.DiscoveryListenPort), token);
             var answer = await discover.ReceiveAsync(token);
             check(JsonSerializer.Deserialize<LanPeer>(answer.Buffer) == network.Self, "LAN discovery returns the running install and its sync port");
         }

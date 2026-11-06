@@ -296,7 +296,11 @@ public partial class MainWindow
             var response = await MusicSearchService.SearchAsync(track, album, artist, cts.Token);
             if (cts.IsCancellationRequested) return;
             foreach (var result in response.Results) _musicSearchResults.Add(result);
-            if (_musicSearchResults.Count > 0) MusicSearchResults.SelectedIndex = 0;
+            if (_musicSearchResults.Count > 0)
+            {
+                MusicSearchResults.SelectedIndex = 0;
+                if (MusicSearchResults.SelectedItem is { } first) MusicSearchResults.ScrollIntoView(first);
+            }
             SetMusicSearchEmptyState(
                 _musicSearchResults.Count == 0,
                 "No matches found",
