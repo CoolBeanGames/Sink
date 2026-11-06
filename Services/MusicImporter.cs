@@ -12,15 +12,15 @@ public static partial class MusicImporter
     };
 
     public static IReadOnlyList<Track> Import(IEnumerable<string> droppedPaths)
-        => Import(droppedPaths, AppSettings.Current.ImportMode, AppSettings.Current.LibraryLocation);
+        => Import(droppedPaths, AppSettings.Current.ImportMode, AppSettings.Current.LibraryLocation, AppSettings.Current.HighQualityRoot);
 
     /// <summary>
     /// Imports audio files, optionally relocating them into <paramref name="libraryDir"/>
     /// first when <paramref name="mode"/> is Copy or Move.
     /// </summary>
-    public static IReadOnlyList<Track> Import(IEnumerable<string> droppedPaths, ImportMode mode, string libraryDir)
+    public static IReadOnlyList<Track> Import(IEnumerable<string> droppedPaths, ImportMode mode, string libraryDir, string? originals = null)
     {
-        var files = ExpandPaths(droppedPaths).Distinct(StringComparer.OrdinalIgnoreCase);
+        var files = ExpandPaths(droppedPaths, ProtectedOriginals(libraryDir, originals)).Distinct(StringComparer.OrdinalIgnoreCase);
         if (mode is ImportMode.Copy or ImportMode.Move)
             files = files.Select(path => Relocate(path, mode, libraryDir)).ToList();
         return files.Select(CreateTrack).ToList();
@@ -96,7 +96,7 @@ public static partial class MusicImporter
     /// </summary>
     public static OrganizeResult Organize(
         string libraryDir, IReadOnlyList<Track> tracks,
-        IProgress<LibraryMaintenanceProgress>? progress = null)
+        IProgress<LibraryMaintenanceProgress>? progress = null, string? originals = null)
     {
         if (!Directory.Exists(libraryDir)) return new OrganizeResult(0, 0);
         progress?.Report(new LibraryMaintenanceProgress("Scanning the library folder…"));
@@ -105,17 +105,8 @@ public static partial class MusicImporter
             if (!string.IsNullOrWhiteSpace(t.FilePath))
                 byPath[Path.GetFullPath(t.FilePath)] = t;
 
-        List<string> files;
-        try
-        {
-            files = Directory.EnumerateFiles(libraryDir, "*", SearchOption.AllDirectories)
-                .Where(file => AudioExtensions.Contains(Path.GetExtension(file)))
-                .ToList();
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            return new OrganizeResult(0, 0);
-        }
+        var protectedFolder = ProtectedOriginals(libraryDir, originals);
+        var files = ExpandPaths([libraryDir], protectedFolder).ToList();
 
         var moved = 0;
         var reportEvery = Math.Max(1, files.Count / 100);
@@ -146,13 +137,13 @@ public static partial class MusicImporter
         }
 
         progress?.Report(new LibraryMaintenanceProgress("Removing empty folders…"));
-        var removed = RemoveEmptyFolders(libraryDir);
+        var removed = RemoveEmptyFolders(libraryDir, protectedFolder);
         progress?.Report(new LibraryMaintenanceProgress("Organization complete", files.Count, files.Count));
         return new OrganizeResult(moved, removed);
     }
 
     /// <summary>Deletes every folder under (but not including) <paramref name="root"/> left with nothing in it, deepest first.</summary>
-    private static int RemoveEmptyFolders(string root)
+    private static int RemoveEmptyFolders(string root, string? protectedFolder)
     {
         var removed = 0;
         List<string> dirs;
@@ -168,6 +159,7 @@ public static partial class MusicImporter
         }
         foreach (var dir in dirs)
         {
+            if (IsUnder(dir, protectedFolder)) continue;
             try
             {
                 if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
@@ -184,12 +176,28 @@ public static partial class MusicImporter
     private static bool PathsEqual(string a, string b) =>
         string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
 
-    private static IEnumerable<string> ExpandPaths(IEnumerable<string> droppedPaths)
+    internal static bool IsAudioFile(string path) => AudioExtensions.Contains(Path.GetExtension(path));
+
+    internal static bool IsUnder(string path, string? root)
+    {
+        if (string.IsNullOrWhiteSpace(root)) return false;
+        var fullRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        var fullPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        return fullPath.Equals(fullRoot, StringComparison.OrdinalIgnoreCase)
+            || fullPath.StartsWith(Path.EndsInDirectorySeparator(fullRoot) ? fullRoot : fullRoot + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? ProtectedOriginals(string libraryDir, string? originals) =>
+        string.IsNullOrWhiteSpace(libraryDir) || !IsUnder(libraryDir, originals) ? originals : null;
+
+    private static IEnumerable<string> ExpandPaths(IEnumerable<string> droppedPaths, string? protectedFolder)
     {
         var directories = new Stack<string>();
         foreach (var path in droppedPaths)
         {
-            if (File.Exists(path) && AudioExtensions.Contains(Path.GetExtension(path))) yield return path;
+            if (IsUnder(path, protectedFolder)) continue;
+            if (File.Exists(path) && IsAudioFile(path)) yield return path;
             else if (Directory.Exists(path)) directories.Push(path);
         }
 
@@ -206,8 +214,9 @@ public static partial class MusicImporter
             catch (UnauthorizedAccessException) { continue; }
             catch (IOException) { continue; }
 
-            foreach (var file in files.Where(file => AudioExtensions.Contains(Path.GetExtension(file)))) yield return file;
-            foreach (var child in children) directories.Push(child);
+            foreach (var file in files.Where(IsAudioFile)) yield return file;
+            foreach (var child in children)
+                if (!IsUnder(child, protectedFolder)) directories.Push(child);
         }
     }
 

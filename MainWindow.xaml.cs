@@ -329,8 +329,9 @@ public partial class MainWindow : Window
     /// The per-file stat runs off the UI thread (the library can live on a
     /// slow or network drive) and only for files not already measured.
     /// </summary>
-    private void ScheduleLibrarySizeUpdate()
+    private void ScheduleLibrarySizeUpdate(bool rescan = false)
     {
+        if (rescan) _librarySizeCache = new(StringComparer.OrdinalIgnoreCase);
         _librarySizeDirty = true;
         if (_librarySizeTimer is null)
         {
@@ -359,8 +360,11 @@ public partial class MainWindow : Window
                         }
                         return (sum, next);
                     });
+                    if (!ReferenceEquals(previous, _librarySizeCache)) return;
                     _librarySizeCache = cache;
-                    LibrarySizeText.Text = $"Library · {Bytes(total)} · {paths.Count} file{(paths.Count == 1 ? "" : "s")}";
+                    var unavailable = paths.Count - cache.Count;
+                    LibrarySizeText.Text = $"Library · {Bytes(total)} · {cache.Count} file{(cache.Count == 1 ? "" : "s")}";
+                    LibrarySizeText.ToolTip = unavailable > 0 ? $"{unavailable:N0} library file paths are unavailable" : null;
                 }
                 finally { _librarySizeRunning = false; }
             };
@@ -563,9 +567,8 @@ public partial class MainWindow : Window
         var lines = new List<string> { name };
         if (!string.IsNullOrWhiteSpace(library.ModelNumber)) lines.Add($"Model {library.ModelNumber}");
         if (library.CapacityBytes > 0)
-            lines.Add($"{Bytes(library.CapacityBytes)} · {Bytes(library.CapacityBytes - used)} free");
-        else if (used > 0)
-            lines.Add($"{Bytes(used)} of music");
+            lines.Add($"{Bytes(library.CapacityBytes)} · {Bytes(library.FreeBytes)} free");
+        if (used > 0) lines.Add($"{Bytes(used)} of catalog media");
         var pl = library.Playlists.Count(p => !p.IsMaster);
         lines.Add($"{library.Tracks.Count} tracks · {pl} playlist{(pl == 1 ? "" : "s")}");
         if (!string.IsNullOrWhiteSpace(library.SerialNumber)) lines.Add($"Serial {library.SerialNumber}");

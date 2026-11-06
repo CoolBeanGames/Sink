@@ -1,3 +1,8 @@
+# Sink 1.0.66
+
+- Added **Storage breakdown** in Settings to compare library files, everything in Music, kept originals, and the connected iPod catalog.
+- Folder imports and organization leave the configured Originals folder in place. The library size label counts files it could actually read, and the iPod tooltip shows device free space separately from catalog media.
+
 # Sink 1.0.65
 
 - Rank Download Search by relevance. Put the exact song on the requested artist's album first, followed by the rest of that album, exact song-title matches, other results from the requested artist, and partial matches.

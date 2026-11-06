@@ -57,6 +57,7 @@ public sealed class SettingsWindow : SinkDialog
         Action importLibrary,
         Func<IProgress<LibraryMaintenanceProgress>, Task<string>> organizeLibrary,
         Action<Window> syncComputers,
+        Func<IProgress<LibraryMaintenanceProgress>, Task<string>> describeStorage,
         Action? upgradeLibrary = null)
     {
         _upgradeLibrary = upgradeLibrary;
@@ -214,6 +215,8 @@ public sealed class SettingsWindow : SinkDialog
         actions.Children.Add(SecondaryButton("Export library…", (_, _) => _export()));
         actions.Children.Add(SecondaryButton("Import library…", (_, _) => _import()));
         actions.Children.Add(SecondaryButton("Sync with another PC…", (_, _) => syncComputers(this)));
+        actions.Children.Add(SecondaryButton("Storage breakdown…", async (_, _) =>
+            await RunMaintenanceAsync("Reading file sizes…", "Storage breakdown", describeStorage, "Storage check complete.")));
         var organizeButton = SecondaryButton("Organize library…", async (_, _) =>
         {
             await RunMaintenanceAsync("Organizing library…", "Organize library", _organize);
@@ -264,7 +267,8 @@ public sealed class SettingsWindow : SinkDialog
     private async Task RunMaintenanceAsync(
         string startingMessage,
         string dialogTitle,
-        Func<IProgress<LibraryMaintenanceProgress>, Task<string>> work)
+        Func<IProgress<LibraryMaintenanceProgress>, Task<string>> work,
+        string? completionMessage = null)
     {
         if (_maintenanceRunning) return;
         _maintenanceRunning = true;
@@ -287,7 +291,7 @@ public sealed class SettingsWindow : SinkDialog
         try
         {
             var summary = await work(progress);
-            _maintenanceStatus.Text = summary;
+            _maintenanceStatus.Text = completionMessage ?? summary;
             _maintenanceStatus.Foreground = Hex("#8FD69A");
             _maintenanceProgress.IsIndeterminate = false;
             _maintenanceProgress.Value = 100;

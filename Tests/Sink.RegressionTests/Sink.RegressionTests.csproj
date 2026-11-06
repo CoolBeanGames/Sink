@@ -21,5 +21,8 @@
     <Compile Include="../../Services/LibraryData.cs" Link="LibraryData.cs" />
     <Compile Include="../../Services/LanSync/*.cs" Link="LanSync/%(Filename)%(Extension)" />
     <Compile Include="../../Services/Download/MusicSearchService.cs" Link="Download/MusicSearchService.cs" />
+    <Compile Include="../../Models/LibraryMaintenanceProgress.cs" Link="Models/LibraryMaintenanceProgress.cs" />
+    <Compile Include="../../Services/MusicImporter.cs" Link="MusicImporter.cs" />
+    <Compile Include="../../Services/LibraryStorage.cs" Link="LibraryStorage.cs" />
   </ItemGroup>
 </Project>

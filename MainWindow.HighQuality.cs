@@ -209,6 +209,7 @@ public partial class MainWindow
             track.OriginalPath = null;
         }
         Log.Info($"High quality: replaced \"{track.Title}\" — {oldFile} → {destination}" + (newOriginal is null ? "" : $" (original {newOriginal})"));
+        ScheduleLibrarySizeUpdate(rescan: true);
         SaveLibrary();
     }
 }

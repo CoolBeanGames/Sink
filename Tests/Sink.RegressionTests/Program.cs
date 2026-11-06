@@ -225,6 +225,32 @@ try
         Check(ReflectStore.Load().Count == 4, "invalid Reflect history leaves the saved history intact");
     }
 
+    var storageRoot = Path.Combine(workspace, "Storage");
+    var musicRoot = Path.Combine(storageRoot, "Music");
+    var originalsRoot = Path.Combine(storageRoot, "Original");
+    Directory.CreateDirectory(musicRoot);
+    Directory.CreateDirectory(originalsRoot);
+    var playable = Path.Combine(musicRoot, "Playable.mp3");
+    var protectedFlac = Path.Combine(originalsRoot, "Kept.flac");
+    File.WriteAllText(playable, "audio");
+    File.WriteAllText(protectedFlac, "original audio");
+    var importedMusic = MusicImporter.Import([storageRoot], ImportMode.Move, musicRoot, originalsRoot);
+    Check(importedMusic.Count == 1 && File.Exists(protectedFlac), "moving a folder into the library leaves kept FLAC originals in place");
+    var otherCopy = Path.Combine(musicRoot, "Misplaced.flac");
+    File.WriteAllText(otherCopy, "another copy");
+    importedMusic[0].OriginalPath = Path.Combine(originalsRoot, "Misplaced.flac");
+    var storage = LibraryStorage.Describe(musicRoot, originalsRoot, importedMusic);
+    Check(storage.Contains("Library files available · 1 file") && storage.Contains("Music folder · 2 files")
+        && storage.Contains("Audio in Music outside the library database · 1 file"), "storage breakdown separates indexed audio from the other files under Music");
+    Check(storage.Contains("Originals folder · 1 file") && storage.Contains("Original file references unavailable · 1 of 1")
+        && storage.Contains("Missing originals with the same relative filename under Music · 1"), "storage breakdown identifies missing original references and plausible files in Music");
+    var nestedOriginals = Path.Combine(musicRoot, "Kept Originals");
+    Directory.CreateDirectory(nestedOriginals);
+    var nestedFlac = Path.Combine(nestedOriginals, "Original.flac");
+    File.WriteAllText(nestedFlac, "original audio");
+    MusicImporter.Organize(musicRoot, importedMusic, originals: nestedOriginals);
+    Check(File.Exists(nestedFlac), "organizing Music leaves a separately configured Originals subfolder alone");
+
     MusicSearchChecks.Run(Check);
     await LanSyncChecks.RunAsync(workspace, Check);
 

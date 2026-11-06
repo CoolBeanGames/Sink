@@ -14,7 +14,7 @@ public partial class MainWindow
     {
         var dialog = new SettingsWindow(
             AppSettings.Current.Clone(), RefreshLibraryAsync, ExportLibrary, ImportLibrary, OrganizeLibraryAsync,
-            SyncComputers,
+            SyncComputers, DescribeStorageAsync,
             () => DownloadHighQuality(_tracks.ToList()))
             { Owner = this };
         if (dialog.ShowDialog() != true || dialog.Result is null) return;
@@ -26,6 +26,22 @@ public partial class MainWindow
             if (_podcastViewActive) _ = RefreshAllFeedsAsync();
         }
         PlaybackStatus.Text = "Settings saved";
+    }
+
+    private async Task<string> DescribeStorageAsync(IProgress<LibraryMaintenanceProgress> _)
+    {
+        var tracks = _tracks.Select(t => new Track
+        {
+            Title = "", Artist = "", Album = "", Genre = "", FileName = "",
+            FilePath = t.FilePath, OriginalPath = t.OriginalPath,
+        }).ToList();
+        var settings = AppSettings.Current;
+        var device = _ipodLibrary;
+        var description = await Task.Run(() => LibraryStorage.Describe(settings.LibraryLocation, settings.HighQualityRoot, tracks));
+        if (device is not null)
+            description += $"\n\niPod catalog · {device.Tracks.Count:N0} tracks, {Bytes(device.Tracks.Sum(t => t.SizeBytes))} of media";
+        ScheduleLibrarySizeUpdate(rescan: true);
+        return description;
     }
 
     /// <summary>
@@ -41,7 +57,8 @@ public partial class MainWindow
         // then apply only those path changes after await returns to the UI.
         var snapshots = _tracks.Select(MaintenanceCopy).ToList();
         var location = AppSettings.Current.LibraryLocation;
-        var result = await Task.Run(() => MusicImporter.Organize(location, snapshots, progress));
+        var originals = AppSettings.Current.HighQualityRoot;
+        var result = await Task.Run(() => MusicImporter.Organize(location, snapshots, progress, originals));
 
         progress.Report(new LibraryMaintenanceProgress("Applying organized paths…"));
         var byId = _tracks.ToDictionary(track => track.Id);

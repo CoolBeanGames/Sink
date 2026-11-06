@@ -17,6 +17,10 @@ namespace Sink.Services
     {
         public static void Flush(string root) { }
     }
+    public static class Artwork
+    {
+        public static string? Save(string key, byte[] bytes, string? mime) => null;
+    }
 }
 namespace Sink.Services.Download
 {
